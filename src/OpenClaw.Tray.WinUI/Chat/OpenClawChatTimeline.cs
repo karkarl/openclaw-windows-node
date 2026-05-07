@@ -145,6 +145,12 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
         var loadMoreHistoryRef = UseRef<Action?>(Props.OnLoadMoreHistory);
         var loadMoreRequestedForCountRef = UseRef(-1);
 
+        // Per-entry expand state for tool chips. Tokens are
+        // "{entryId}:call" and "{entryId}:out" so call and output
+        // toggle independently. HashSet so the empty default is "all
+        // collapsed" — matches the web's default-collapsed look.
+        var expandedToolChips = UseState<HashSet<string>>(new HashSet<string>(), threadSafe: true);
+
         hasMoreHistoryRef.Current = Props.HasMoreHistory;
         loadMoreHistoryRef.Current = Props.OnLoadMoreHistory;
 
@@ -392,10 +398,15 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 .AutomationName(entry.Text ?? "");
         }
 
-        // Tool call: prominent rounded card with status glyph, tool name in
-        // monospace, truncated args, and a small footer line for the time.
+        // Tool entry: rendered as TWO compact collapsible chips matching the
+        // web Control UI's `chat-tool-card` blocks — a "Tool call" chip with
+        // the args, and a "Tool output" chip with the result. Each chip is a
+        // clickable button: collapsed shows just `▸ ⚡ Tool call <kind>`;
+        // expanded reveals a monospace content panel below the header.
         Element RenderToolEntry(ChatTimelineItem entry)
         {
+            var kindLabel = entry.ToolName ?? "tool";
+
             var statusGlyph = entry.ToolResult switch
             {
                 ChatToolCallStatus.Success => "✓",
@@ -409,67 +420,128 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 _ => TertiaryText
             };
 
-            var headerRow = (FlexRow(
-                Caption(statusGlyph).Foreground(statusFg)
-                    .Set(t => { t.FontSize = 14; })
-                    .VAlign(VerticalAlignment.Center),
-                Caption(entry.ToolName ?? "tool").Foreground(SecondaryText)
-                    .Set(t =>
-                    {
-                        t.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas");
-                        t.FontSize = 13;
-                        t.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-                    })
-                    .VAlign(VerticalAlignment.Center),
-                When(entry.Text is { Length: > 0 } && entry.Text != entry.ToolName,
-                    () => Caption(FormatToolLabel(entry)).Foreground(TertiaryText)
+            // Tone matches dash-light --bg-muted/--border for visual parity
+            // with the web's `chat-tool-card`.
+            Element BuildChip(string token, string label, string contentText, bool hasContent)
+            {
+                var isExpanded = expandedToolChips.Value.Contains(token);
+                var chevron = isExpanded ? "▾" : "▸";
+
+                var headerRow = (FlexRow(
+                    Caption(chevron).Foreground(TertiaryText)
+                        .Set(t => { t.FontSize = 11; })
+                        .VAlign(VerticalAlignment.Center),
+                    Caption("⚡").Foreground(statusFg)
+                        .Set(t => { t.FontSize = 12; })
+                        .VAlign(VerticalAlignment.Center),
+                    Caption(label).Foreground(SecondaryText)
                         .Set(t =>
                         {
+                            t.FontSize = 12;
+                            t.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+                        })
+                        .VAlign(VerticalAlignment.Center),
+                    Caption(kindLabel).Foreground(TertiaryText)
+                        .Set(t =>
+                        {
+                            t.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas");
+                            t.FontSize = 12;
                             t.TextTrimming = TextTrimming.CharacterEllipsis;
                             t.MaxLines = 1;
-                            t.IsTextSelectionEnabled = true;
-                            t.FontSize = 12;
                         })
-                        .VAlign(VerticalAlignment.Center).Flex(grow: 1))
-            ) with { ColumnGap = 8 }).Padding(12, 8, 12, 8);
+                        .VAlign(VerticalAlignment.Center).Flex(grow: 1),
+                    When(token.EndsWith(":out"),
+                        () => Caption(statusGlyph).Foreground(statusFg)
+                            .Set(t => { t.FontSize = 12; })
+                            .VAlign(VerticalAlignment.Center))
+                ) with { ColumnGap = 6 }).Padding(10, 6, 10, 6);
 
-            // Truncated tool output preview (8 lines max, scrolls beyond).
+                Element body;
+                if (isExpanded && hasContent)
+                {
+                    body = Border(
+                        ScrollView(
+                            TextBlock(contentText)
+                                .Set(t =>
+                                {
+                                    t.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas");
+                                    t.FontSize = 11;
+                                    t.TextWrapping = TextWrapping.Wrap;
+                                    t.IsTextSelectionEnabled = true;
+                                })
+                                .Foreground(SecondaryText)
+                                .Padding(10, 6, 10, 8)
+                        ).Set(sv =>
+                        {
+                            sv.MaxHeight = 240;
+                            sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                            sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                        })
+                    ).Background(toolCardBgBrush);
+                }
+                else
+                {
+                    body = Empty();
+                }
+
+                // Whole chip is one Button so the entire card surface toggles
+                // expansion (matches the web `.chat-tool-card--clickable`).
+                Action toggle = () =>
+                {
+                    var next = new HashSet<string>(expandedToolChips.Value);
+                    if (!next.Add(token)) next.Remove(token);
+                    expandedToolChips.Set(next);
+                };
+                return Button(
+                    VStack(0, headerRow, body),
+                    toggle
+                ).Set(b =>
+                {
+                    b.HorizontalAlignment = HorizontalAlignment.Stretch;
+                    b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                    b.Padding = new Thickness(0);
+                    b.CornerRadius = new CornerRadius(8);
+                })
+                .Resources(r => r
+                    .Set("ButtonBackground", toolCardBgBrush)
+                    .Set("ButtonBackgroundPointerOver", new SolidColorBrush(Color.FromArgb(0xFF, 0xE3, 0xD6, 0xC8)))
+                    .Set("ButtonBackgroundPressed", new SolidColorBrush(Color.FromArgb(0xFF, 0xDA, 0xCB, 0xBB)))
+                    .Set("ButtonBorderBrush", toolCardBorderBrush)
+                    .Set("ButtonBorderBrushPointerOver", toolCardBorderBrush)
+                    .Set("ButtonBorderBrushPressed", toolCardBorderBrush));
+            }
+
+            // "Tool call" chip is always shown; args/intent come from
+            // `entry.Text` (built by ExtractToolLabel from data.args).
+            var callContent = !string.IsNullOrEmpty(entry.Text) && entry.Text != entry.ToolName
+                ? entry.Text!
+                : kindLabel;
+            var callChip = BuildChip(
+                token: $"{entry.Id}:call",
+                label: "Tool call",
+                contentText: callContent,
+                hasContent: !string.IsNullOrEmpty(callContent));
+
+            // "Tool output" chip only shown once result/error has arrived.
             var hasOutput = !string.IsNullOrEmpty(entry.ToolOutput);
-            Element outputBlock = hasOutput
-                ? (Element)Border(
-                    ScrollView(
-                        TextBlock(entry.ToolOutput!)
-                            .Set(t =>
-                            {
-                                t.FontFamily = new FontFamily("Cascadia Code, Cascadia Mono, Consolas");
-                                t.FontSize = 12;
-                                t.TextWrapping = TextWrapping.Wrap;
-                                t.IsTextSelectionEnabled = true;
-                            })
-                            .Foreground(SecondaryText)
-                            .Padding(12, 6, 12, 8)
-                    ).Set(sv =>
-                    {
-                        sv.MaxHeight = 160; // ~8 lines; scroll beyond
-                        sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-                        sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-                    })
-                ).WithBorder(toolCardBorderBrush, 0).Padding(0)
+            Element outputChip = hasOutput
+                ? BuildChip(
+                    token: $"{entry.Id}:out",
+                    label: entry.ToolResult == ChatToolCallStatus.Error ? "Tool error" : "Tool output",
+                    contentText: entry.ToolOutput!,
+                    hasContent: true)
                 : Empty();
-
-            var card = Border(
-                VStack(0, headerRow, outputBlock)
-            ).Background(toolCardBgBrush)
-             .CornerRadius(8)
-             .WithBorder(toolCardBorderBrush, 1);
 
             var entryMeta = MetaFor(entry.Id);
             var timeStr = FormatTime(entryMeta?.Timestamp);
             var footerText = string.IsNullOrEmpty(timeStr) ? "Tool" : $"Tool · {timeStr}";
 
-            return VStack(2, card, FooterCaption(footerText, HorizontalAlignment.Left).Margin(0, 2, 0, 0))
-                .HAlign(HorizontalAlignment.Stretch)
-                .Margin(36, 6, 24, 6);
+            return VStack(4,
+                callChip,
+                outputChip,
+                FooterCaption(footerText, HorizontalAlignment.Left).Margin(0, 2, 0, 0)
+            ).HAlign(HorizontalAlignment.Stretch)
+             .Margin(36, 6, 24, 6);
         }
 
         Element RenderEntry(ChatTimelineItem entry, bool startsBurst, bool endsBurst) => entry.Kind switch
