@@ -25,6 +25,11 @@ namespace OpenClawTray.Chat;
 /// <param name="UserSenderLabel">Sender label shown below user bubbles.</param>
 /// <param name="AssistantSenderLabel">Sender label shown below assistant cards.</param>
 /// <param name="DefaultModel">Fallback model name when an entry's metadata doesn't carry one.</param>
+/// <param name="ShowThinkingIndicator">
+/// When true, renders an inline "<c>&lt;agent&gt; is thinking…</c>" placeholder
+/// at the bottom of the timeline. Used by callers to bridge the gap between
+/// turn-start and the first assistant delta arriving.
+/// </param>
 public record OpenClawChatTimelineProps(
     string? SessionId,
     IReadOnlyList<ChatTimelineItem> Entries,
@@ -33,7 +38,8 @@ public record OpenClawChatTimelineProps(
     IReadOnlyDictionary<string, ChatEntryMetadata>? EntryMetadata = null,
     string UserSenderLabel = "OpenClaw Windows Tray (cli)",
     string AssistantSenderLabel = "Field",
-    string? DefaultModel = null);
+    string? DefaultModel = null,
+    bool ShowThinkingIndicator = false);
 
 /// <summary>
 /// OpenClaw-skinned variant of <see cref="ChatTimeline"/> from the vendored
@@ -518,9 +524,25 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             renderedEntries[i] = RenderEntry(entry, startsBurst, endsBurst).WithKey(entry.Id);
         }
 
+        // Inline "thinking" indicator rendered just below the last entry
+        // when caller signals we're between turn-start and the first byte.
+        Element thinkingIndicator = Empty();
+        if (Props.ShowThinkingIndicator)
+        {
+            thinkingIndicator = Border(
+                (FlexRow(
+                    AvatarCircle("★", assistantAvatarBrush).VAlign(VerticalAlignment.Center),
+                    Caption($"{assistantSender} is thinking…")
+                        .Foreground(SecondaryText)
+                        .Set(t => { t.FontStyle = global::Windows.UI.Text.FontStyle.Italic; t.FontSize = 13; })
+                        .VAlign(VerticalAlignment.Center)
+                ) with { ColumnGap = 8 })
+            ).Margin(24, 4, 60, 4);
+        }
+
         return Grid([GridSize.Star()], [GridSize.Star()],
             ScrollView(
-                Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto],
+                Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto],
                     loadMoreButton.Grid(row: 0, column: 0),
                     VStack(2, renderedEntries).Set(sp =>
                     {
@@ -534,7 +556,8 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                             };
                         }
                     }).Grid(row: 1, column: 0),
-                    Border(Empty()).Height(24).Grid(row: 2, column: 0)
+                    thinkingIndicator.Grid(row: 2, column: 0),
+                    Border(Empty()).Height(24).Grid(row: 3, column: 0)
                 )
             ).Set(sv =>
             {

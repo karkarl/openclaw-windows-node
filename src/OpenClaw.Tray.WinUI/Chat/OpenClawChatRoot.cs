@@ -95,6 +95,13 @@ public sealed class OpenClawChatRoot : Component
             ? selectedThread!.Title
             : "Field";
 
+        // Show inline "thinking" indicator when the turn is active but the
+        // last visible entry is NOT an assistant block yet — i.e. we're between
+        // the user's send and the first assistant delta arriving.
+        var showThinking = timeline.TurnActive
+            && (timeline.Entries.Count == 0
+                || timeline.Entries[timeline.Entries.Count - 1].Kind != ChatTimelineItemKind.Assistant);
+
         Element body = selectedThread is null
             ? PlaceholderEmptyState(connectedRaw)
             : Component<OpenClawChatTimeline, OpenClawChatTimelineProps>(new(
@@ -105,7 +112,8 @@ public sealed class OpenClawChatRoot : Component
                 EntryMetadata: entryMeta,
                 UserSenderLabel: "OpenClaw Windows Tray (cli)",
                 AssistantSenderLabel: assistantSenderLabel,
-                DefaultModel: selectedThread.Model));
+                DefaultModel: selectedThread.Model,
+                ShowThinkingIndicator: showThinking));
 
         Element inputBar = selectedThread is not null
             ? Component<InputBar, InputBarProps>(new(
