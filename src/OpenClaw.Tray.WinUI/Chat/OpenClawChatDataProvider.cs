@@ -1,5 +1,6 @@
 using ChatSample.Chat.Model;
 using OpenClaw.Shared;
+using OpenClawTray.Services;
 
 namespace OpenClawTray.Chat;
 
@@ -272,6 +273,8 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     return nextState;
                 }
 
+                Logger.Info($"[ChatHistory] Loading thread '{threadId}' — {ordered.Count} messages from gateway");
+
                 foreach (var msg in ordered)
                 {
                     if (string.IsNullOrEmpty(msg.Text)) continue;
@@ -282,9 +285,30 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     var msgMeta = new ChatEntryMetadata(ts, modelAtLoad);
 
                     var roleLower = msg.Role?.ToLowerInvariant() ?? "";
+
+                    // Diagnostic: log every history message so we can see why
+                    // a particular item didn't get routed to a tool chip.
+                    var preview = msg.Text.Length > 120 ? msg.Text[..120].Replace("\n", "\\n") + "…" : msg.Text.Replace("\n", "\\n");
+                    var isFlat = LooksLikeFlattenedToolOutput(msg.Text);
+                    var isSys  = LooksLikeSystemControlNote(msg.Text);
+                    Logger.Debug($"[ChatHistory] role='{roleLower}' len={msg.Text.Length} flat={isFlat} sys={isSys} preview='{preview}'");
+
                     switch (roleLower)
                     {
                         case "user":
+                            // System-injected notes (the gateway sometimes wraps
+                            // exec result reports in ``System (untrusted): ...``
+                            // and sends them as role=user) — render dim instead
+                            // of as a giant user bubble. See the ChatHistory log.
+                            if (LooksLikeSystemControlNote(msg.Text))
+                            {
+                                Logger.Debug($"[ChatHistory]   → routed: SYSTEM (dim status, role=user with control prefix)");
+                                rebuilt = ApplyAndCaptureMeta(
+                                    rebuilt,
+                                    new ChatStatusEvent(msg.Text, ChatTone.Dim),
+                                    msgMeta);
+                                break;
+                            }
                             // ApplyUserMessage will set TurnActive=true; if the previous
                             // assistant turn never received a turn-end (because the
                             // gateway transcript doesn't emit one explicitly), clear
@@ -303,6 +327,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                             // the chip pipeline so historic turns look like live ones.
                             if (LooksLikeSystemControlNote(msg.Text))
                             {
+                                Logger.Debug($"[ChatHistory]   → routed: SYSTEM (dim status)");
                                 rebuilt = ApplyAndCaptureMeta(
                                     rebuilt,
                                     new ChatStatusEvent(msg.Text, ChatTone.Dim),
@@ -312,8 +337,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                             if (LooksLikeFlattenedToolOutput(msg.Text))
                             {
                                 var kind = ClassifyFlattenedToolOutput(msg.Text);
-                                // Produce a synthetic chip pair so it renders the
-                                // same way live tool events do.
+                                Logger.Debug($"[ChatHistory]   → routed: TOOL chip kind='{kind}'");
                                 rebuilt = ApplyAndCaptureMeta(
                                     rebuilt,
                                     new ChatToolStartEvent(kind, kind),
@@ -324,6 +348,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                                     msgMeta);
                                 break;
                             }
+                            Logger.Debug($"[ChatHistory]   → routed: ASSISTANT bubble (no flatten/system match)");
                             rebuilt = ApplyAndCaptureMeta(rebuilt, new ChatMessageEvent(msg.Text), msgMeta);
                             // End the turn so the next assistant message starts a new
                             // entry rather than replacing this one (UpsertAssistant
@@ -331,11 +356,34 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                             rebuilt = ChatTimelineReducer.Apply(rebuilt, new ChatTurnEndEvent());
                             break;
 
+                        case "toolresult":
+                        case "tool_result":
+                            // Verified empirically — gateway 2026.4.x emits
+                            // ``role: "toolresult"`` for shell/exec tool output
+                            // in chat.history (not the spec's ``"tool"``).
+                            // Always route to a chip pair regardless of whether
+                            // the heuristic fires, since the role itself confirms
+                            // it's tool output.
+                            {
+                                var kind = ClassifyFlattenedToolOutput(msg.Text);
+                                Logger.Debug($"[ChatHistory]   → routed: TOOL chip (role=toolresult, kind='{kind}')");
+                                rebuilt = ApplyAndCaptureMeta(
+                                    rebuilt,
+                                    new ChatToolStartEvent(kind, kind),
+                                    msgMeta);
+                                rebuilt = ApplyAndCaptureMeta(
+                                    rebuilt,
+                                    new ChatToolOutputEvent(msg.Text),
+                                    msgMeta);
+                            }
+                            break;
+
                         case "system":
                         case "tool":
                             // Render system / tool transcript notes as muted Status
                             // entries so they're visible but de-emphasized vs. the
                             // user/assistant turn flow.
+                            Logger.Debug($"[ChatHistory]   → routed: STATUS (role={roleLower})");
                             rebuilt = ApplyAndCaptureMeta(
                                 rebuilt,
                                 new ChatStatusEvent(msg.Text, ChatTone.Dim),
@@ -346,6 +394,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                             // Unknown role — fall back to assistant rendering so it's
                             // at least visible. Bracket with TurnEnd to avoid
                             // collapsing into adjacent assistant entries.
+                            Logger.Debug($"[ChatHistory]   → routed: ASSISTANT (unknown role '{roleLower}', fallback)");
                             rebuilt = ApplyAndCaptureMeta(rebuilt, new ChatMessageEvent(msg.Text), msgMeta);
                             rebuilt = ChatTimelineReducer.Apply(rebuilt, new ChatTurnEndEvent());
                             break;

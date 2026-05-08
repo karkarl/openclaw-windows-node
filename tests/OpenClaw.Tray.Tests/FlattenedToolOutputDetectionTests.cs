@@ -113,4 +113,18 @@ public class FlattenedToolOutputDetectionTests
     {
         Assert.Equal(expected, OpenClawChatDataProvider.ClassifyFlattenedToolOutput(text));
     }
+
+    [Theory]
+    [InlineData("(no output)")]
+    [InlineData("At line:1 char:128\nSomething PowerShell error happened")]
+    [InlineData("{\n  \"providers\": [\n    { \"id\": \"elevenlabs\" }\n  ]\n}")]
+    public void ToolresultRoleAlwaysClassified(string text)
+    {
+        // ``toolresult`` role sidesteps the heuristic — but the kind label
+        // must still come out as either "exec" or "process" so the chip
+        // header reads sensibly. Default fallthrough is "exec".
+        var kind = OpenClawChatDataProvider.ClassifyFlattenedToolOutput(text);
+        Assert.True(kind == "exec" || kind == "process",
+            $"Unexpected kind '{kind}' for: {text}");
+    }
 }
