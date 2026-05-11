@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-10T12:37:16Z",
-  "last_run_id": "25628892354",
+  "last_run": "2026-05-11T01:17:00Z",
+  "last_run_id": "25645245943",
   "monthly_summary_issue": 254,
   "monthly_summary_month": "2026-05",
   "backlog_cursor": {
@@ -8,11 +8,9 @@
     "prs": 302
   },
   "open_repo_assist_prs": [
-    {"number": 294, "title": "[Repo Assist] fix(security): stop leaking ex.Message in CanvasCapability and BrowserProxyCapability", "branch": "repo-assist/fix-canvas-proxy-exception-message-leaks-2026-05-08"},
     {"number": 296, "title": "[Repo Assist] feat: add ExecApprovalsEvaluator policy evaluation step", "branch": "repo-assist/feat-exec-approvals-evaluator", "note": "Based on PR #295 (ExecApprovalsStore). Merge #295 first."},
-    {"number": 300, "title": "[Repo Assist] fix(security): apply TokenSanitizer to WSL diagnostic output", "branch": "repo-assist/fix-diagnostic-token-sanitization-2026-05-09", "note": "Addresses issue #281 item #4. 24 new tests."},
     {"number": 301, "title": "[Repo Assist] fix(wsl): add mountFsTab=false + [time] section to wsl.conf; make IsAlreadyConfigured probe section-aware", "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "note": "Addresses issue #281 items #5 and #6. 3 new tests."},
-    {"number": null, "title": "[Repo Assist] fix(wsl): terminate process tree on caller cancellation in WslExeCommandRunner", "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "note": "Addresses issue #281 item #7. Created this run."}
+    {"number": null, "title": "[Repo Assist] fix(security): stop leaking ex.Message in WindowsNodeClient, DeviceCapability, approval prompts", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "note": "Created this run (2026-05-11). Fixes 4 remaining ex.Message leaks not covered by merged #294."}
   ],
   "comments_made": {
     "246": {"comment_id": "4357284092", "date": "2026-05-01"},
@@ -25,12 +23,13 @@
     "99": {"date": "2026-05-10", "note": "Voice mode architecture context: STT/TTS provider structure from PR #288, WebView bridge status, WinRT built-in STT suggestion"}
   },
   "fix_attempts": {
-    "wsl-cancellation-kill": {"status": "pr_created", "pr": "TBD", "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block without 'when' guard to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. Addresses issue #281 item #7."},
+    "wsl-cancellation-kill": {"status": "merged", "pr": 303, "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block without 'when' guard to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. Addresses issue #281 item #7. MERGED 2026-05-10."},
+    "ex-message-leaks-remaining": {"status": "pr_created", "pr": "TBD", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "date": "2026-05-11", "description": "WindowsNodeClient (x2), DeviceCapability SafeCollect/SafeCollectAsync (x2), ExecApprovalPromptService, UrlNavigationApprovalService. These 4 files still leaked ex.Message after merged PR #294."},
     "nuget-cache-key": {"status": "issue_filed", "issue": 302, "branch": "repo-assist/eng-nuget-cache-key-fix-2026-05-10", "date": "2026-05-10", "description": "Filed as issue #302 because CI lacks workflow permission to push ci.yml. Issue documents the fix and patch for human PR creation."},
     "wsl-conf-section-probe": {"status": "pr_created", "pr": 301, "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "date": "2026-05-09", "description": "Added mountFsTab=false and [time] useWindowsTimezone=true to wsl.conf template. Made IsAlreadyConfiguredAsync probe section-aware with awk. 3 new tests."},
-    "diagnostic-token-sanitization": {"status": "pr_created", "pr": 300, "branch": "repo-assist/fix-diagnostic-token-sanitization-2026-05-09", "date": "2026-05-09", "description": "TokenSanitizer.Sanitize added to DiagnosticFormatter.SanitizeForDiagnostic. 24 new tests."},
+    "diagnostic-token-sanitization": {"status": "merged", "pr": 300, "branch": "repo-assist/fix-diagnostic-token-sanitization-2026-05-09", "date": "2026-05-09", "description": "TokenSanitizer.Sanitize added to DiagnosticFormatter.SanitizeForDiagnostic. 24 new tests. MERGED 2026-05-10."},
     "exec-approvals-evaluator": {"status": "pr_created", "pr": 296, "branch": "repo-assist/feat-exec-approvals-evaluator", "date": "2026-05-08", "description": "ExecApprovalsEvaluator (policy evaluation phase), ExecApprovalsAllowlistMatcher, ExecApprovalV2EvaluationOutcome. 33 new tests. Based on PR #295."},
-    "canvas-proxy-exception-message-leaks": {"status": "pr_created", "pr": 294, "branch": "repo-assist/fix-canvas-proxy-exception-message-leaks-2026-05-08", "date": "2026-05-08", "description": "CanvasCapability and BrowserProxyCapability ex.Message leaks fixed."},
+    "canvas-proxy-exception-message-leaks": {"status": "merged", "pr": 294, "branch": "repo-assist/fix-canvas-proxy-exception-message-leaks-2026-05-08", "date": "2026-05-08", "description": "CanvasCapability and BrowserProxyCapability ex.Message leaks fixed. MERGED 2026-05-10."},
     "capability-ex-message-leaks": {"status": "merged", "pr": 291, "branch": "repo-assist/fix-capability-exception-message-leaks-2026-05-07", "date": "2026-05-07"},
     "perf-env-sanitizer-vectorize": {"status": "merged", "pr": 289, "date": "2026-05-07"},
     "improve-ssh-constant-options": {"status": "merged", "pr": 290, "date": "2026-05-07"},
@@ -41,23 +40,23 @@
     "mcp-input-schemas": {"status": "closed_not_merged", "pr": 262, "date": "2026-05-02"}
   },
   "notes": [
-    "PR #274 (indierawk2k2) WSL local gateway setup — MERGED on 2026-05-08",
     "PR #295 (AlexAlves87) ExecApprovalsStore read path — open, needs review/merge before PR #296",
     "PR #297 (AlexAlves87) refactor: extract CommandCenterStateBuilder from App.xaml.cs — open, labelled refactor",
     "PR #298 (MythiliMur) Add MXC Sandbox example — open, labelled enhancement+documentation",
-    "PR #299 (ranjeshj) feat: gateway registry (multi-gateway support) — open draft, labelled enhancement",
-    "PR #294 (Repo Assist) CanvasCapability/BrowserProxyCapability security fix — open, needs review/merge",
+    "PR #304 (ranjeshj) feat: gateway/connection registry architecture — MERGED 2026-05-10",
+    "PR #305 (ranjeshj) fix: setup flow, connection page, and chat token bugs — open, needs review",
     "PR #296 (Repo Assist) ExecApprovalsEvaluator — open draft, depends on PR #295",
-    "PR #300 (Repo Assist) fix: TokenSanitizer in DiagnosticFormatter — open draft",
     "PR #301 (Repo Assist) fix(wsl): wsl.conf missing settings + section-aware probe — open draft",
-    "PR TBD (Repo Assist) fix(wsl): terminate process tree on caller cancellation — created this run, branch repo-assist/fix-wsl-cancellation-kill-process-2026-05-10",
+    "PR TBD (Repo Assist) fix(security): remaining ex.Message leaks — created 2026-05-11, branch repo-assist/fix-ex-message-leaks-remaining-2026-05-11",
     "Issue #302 (Repo Assist): NuGet cache key — filed as issue because CI lacks workflow permission; needs human to create PR from patch",
-    "Issue #281 remaining items: #3 (operator pairing auth), #8 (DeviceToken vs NodeDeviceToken) — items #4,#5,#6,#7 addressed by PRs #300,#301,new PR",
+    "Issue #281 remaining items: #3 (operator pairing auth), #8 (DeviceToken vs NodeDeviceToken) — items #4,#5,#6,#7 all now addressed by merged PRs #300,#303 and open PR #301",
     "Issue #191 open as tracker for remaining bridge integration (gateway SPA listener, openclaw/openclaw#69633)",
     "Issue #235 (Dependabot bundle) still open — suggest closing",
     "ExecApprovals pipeline progress: input validation (master), normalization (master), store read path (PR #295), evaluator (PR #296), coordinator/handler (future)",
-    "PR #288 (RBrid) audio: Whisper STT + Piper TTS as MCP-callable node capabilities — MERGED 2026-05-07. Providers: Piper (default), Windows SAPI, ElevenLabs. Commands: stt.transcribe, stt.listen, stt.status, tts.speak.",
-    "WindowsAppRuntime version mismatch: CI installs 1.8.260101001 but csproj references Microsoft.WindowsAppSDK 2.0.1. Tray uses WindowsAppSDKSelfContained=true so may not matter at runtime."
+    "PR #288 (RBrid) audio: Whisper STT + Piper TTS — MERGED 2026-05-07",
+    "PR #294 (Repo Assist) CanvasCapability/BrowserProxyCapability security fix — MERGED 2026-05-10",
+    "PR #300 (Repo Assist) TokenSanitizer in DiagnosticFormatter — MERGED 2026-05-10",
+    "PR #303 (Repo Assist) WslExeCommandRunner cancellation kill — MERGED 2026-05-10"
   ],
   "checked_off_by_maintainer": [],
   "test_baseline": {
