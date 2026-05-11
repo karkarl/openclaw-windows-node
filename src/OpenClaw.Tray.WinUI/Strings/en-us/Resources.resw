@@ -2407,7 +2407,7 @@ On your gateway host (Mac/Linux), run:
     <value>📊 Usage &amp; Cost</value>
   </data>
   <data name="ChatWindowOpenInBrowserToolTip.Content" xml:space="preserve">
-    <value>Open in Browser</value>
+    <value>Open in Companion app</value>
   </data>
   <data name="ChatWindowCloseToolTip.Content" xml:space="preserve">
     <value>Close</value>
@@ -2869,6 +2869,15 @@ On your gateway host (Mac/Linux), run:
   </data>
   <data name="Chat_Composer_AssistantWorking" xml:space="preserve">
     <value>Assistant is working…</value>
+  </data>
+  <data name="Chat_Assistant_Action_Copy" xml:space="preserve">
+    <value>Copy message</value>
+  </data>
+  <data name="Chat_Assistant_Action_ReadAloud" xml:space="preserve">
+    <value>Read aloud</value>
+  </data>
+  <data name="Chat_User_Action_Delete" xml:space="preserve">
+    <value>Delete message</value>
   </data>
   <data name="Chat_Permission_Allow" xml:space="preserve">
     <value>Allow</value>

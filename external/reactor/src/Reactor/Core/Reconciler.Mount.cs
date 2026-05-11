@@ -1902,6 +1902,8 @@ public sealed partial class Reconciler
                     WinUI.ToolTipService.SetToolTip(flyoutItem, mfi.Description);
                     Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(flyoutItem, mfi.Description);
                 }
+                if (mfi.Padding is { } pad) flyoutItem.Padding = pad;
+                if (mfi.FontWeight is { } fw) flyoutItem.FontWeight = fw;
                 flyoutItem.Tag = mfi;
                 flyoutItem.Click += (s, _) => ((MenuFlyoutItemData)((WinUI.MenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
                 return flyoutItem;

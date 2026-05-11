@@ -10,8 +10,10 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Toolbar — Home/Refresh/DevTools only meaningful when WebView2 mode is active. -->
-        <Border Grid.Row="0"
+        <!-- Toolbar — Home/Refresh/DevTools only meaningful when WebView2 mode is active.
+             Collapsed by default in Reactor mode so the chat surface starts at the very top. -->
+        <Border x:Name="ToolbarBorder" Grid.Row="0"
+                Visibility="Collapsed"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="0,0,0,1" Padding="8">
@@ -36,6 +38,7 @@
                 </Button>
                 <Button x:Name="OpenInBrowserButton" AutomationProperties.AutomationId="ChatOpenInBrowserButton"
                         Width="36" Height="36" Padding="0"
+                        Visibility="Collapsed"
                         Click="OnPopout">
                     <ToolTipService.ToolTip>
                         <ToolTip x:Uid="ChatPageOpenInBrowserToolTip" Content="Open in Browser"/>

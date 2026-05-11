@@ -162,6 +162,8 @@
                     <Button x:Uid="DebugPage_Button_114" Content="📋 Copy Support Context" Click="OnCopySupportContext"
                             Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Stretch"/>
                     <Button Content="🔄 Relaunch First-Run Setup" Click="OnRelaunchOnboarding" HorizontalAlignment="Stretch"/>
+                    <Button Content="🎨 Open Chat Explorations" Click="OnOpenChatExplorations" HorizontalAlignment="Stretch"
+                            AutomationProperties.AutomationId="DebugPageOpenChatExplorations"/>
                 </StackPanel>
             </Expander>
 

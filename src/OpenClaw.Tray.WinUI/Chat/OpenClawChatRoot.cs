@@ -5,6 +5,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using OpenClawTray.Chat.Explorations;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
@@ -29,6 +30,18 @@ public sealed class OpenClawChatRoot : Component
 
     public override Element Render()
     {
+        // Subscribe to ChatExplorationState — without this, Reactor may skip
+        // re-rendering child Components (Composer/Timeline) because the props
+        // they receive don't change. Bumping this Root's state invalidates
+        // the whole tree so toggles always show in the live preview.
+        var explorationRev = UseState(0, threadSafe: true);
+        UseEffect((Func<Action>)(() =>
+        {
+            EventHandler h = (_, _) => explorationRev.Set(explorationRev.Value + 1);
+            ChatExplorationState.Changed += h;
+            return () => ChatExplorationState.Changed -= h;
+        }));
+
         var snapshotState = UseState<ChatDataSnapshot?>(null, threadSafe: true);
         var selectedIdState = UseState<string?>(_initialThreadId, threadSafe: true);
 
@@ -52,12 +65,17 @@ public sealed class OpenClawChatRoot : Component
         var snapshot = snapshotState.Value;
         if (snapshot is null)
         {
+            // Loading state — same backdrop logic as the timeline so acrylic /
+            // mica show through when the host paints a SystemBackdrop.
+            var loadingBg = ChatExplorationState.BackdropMode == ChatBackdropMode.Solid
+                ? (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["LayerFillColorDefaultBrush"]
+                : (Microsoft.UI.Xaml.Media.Brush)new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
             return Border(
                 VStack(8,
                     ProgressRing().Size(28, 28).HAlign(HorizontalAlignment.Center),
                     Caption(LocalizationHelper.GetString("Chat_Root_ConnectingToGateway")).Foreground(SecondaryText).HAlign(HorizontalAlignment.Center)
                 ).VAlign(VerticalAlignment.Center).HAlign(HorizontalAlignment.Center)
-            ).Background(LayerFill);
+            ).Background(loadingBg);
         }
 
         var selectedId = selectedIdState.Value ?? snapshot.DefaultThreadId;
@@ -85,7 +103,10 @@ public sealed class OpenClawChatRoot : Component
                 ? "connecting"
                 : "disconnected";
 
-        Element header = Component<SessionHeader, SessionHeaderProps>(new(selectedThread, timeline));
+        // Header & divider intentionally hidden — the surrounding chrome
+        // (NavigationView page or tray popup TitleBar) already shows the
+        // session title; the in-chat header just duplicates it.
+        Element header = Empty();
 
         // Per-entry metadata for the OpenClaw timeline footer (sender · time · model).
         IReadOnlyDictionary<string, ChatEntryMetadata>? entryMeta = null;
@@ -149,7 +170,7 @@ public sealed class OpenClawChatRoot : Component
                 OnPermissionsChanged: allowAll => RunFireAndForget(ct => _provider.SetPermissionModeAsync(selectedThread.Id, allowAll, ct))))
             : Empty();
 
-        var divider = Border(Empty()).Height(1).Background(DividerStroke);
+        var divider = Empty();
 
         // Three rows now (composer absorbs the old StatusBar).
         return Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],

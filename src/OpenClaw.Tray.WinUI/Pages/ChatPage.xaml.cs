@@ -123,6 +123,7 @@ public sealed partial class ChatPage : Page
         LoadingRing.IsActive = false;
         LoadingRing.Visibility = Visibility.Collapsed;
         ErrorPanel.Visibility = Visibility.Collapsed;
+        ToolbarBorder.Visibility = Visibility.Collapsed;
         HomeButton.Visibility = Visibility.Collapsed;
         RefreshButton.Visibility = Visibility.Collapsed;
         DevToolsButton.Visibility = Visibility.Collapsed;
@@ -157,6 +158,7 @@ public sealed partial class ChatPage : Page
 
         ChatHost.Visibility = Visibility.Collapsed;
         PlaceholderPanel.Visibility = Visibility.Collapsed;
+        ToolbarBorder.Visibility = Visibility.Visible;
         HomeButton.Visibility = Visibility.Visible;
         RefreshButton.Visibility = Visibility.Visible;
         DevToolsButton.Visibility = Visibility.Visible;

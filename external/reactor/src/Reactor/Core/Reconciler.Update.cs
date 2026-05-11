@@ -2721,6 +2721,8 @@ public sealed partial class Reconciler
                         WinUI.ToolTipService.SetToolTip(existing, mfi.Description);
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(existing, mfi.Description);
                     }
+                    if (mfi.Padding is { } pad2) existing.Padding = pad2;
+                    if (mfi.FontWeight is { } fw2) existing.FontWeight = fw2;
                     existing.Tag = mfi;
                     break;
 

@@ -899,22 +899,12 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 return new ChatMessageDeltaEvent(delta);
         }
 
-        // Block content: data.content / data.text — final or chunked block.
-        if (evt.Data.TryGetProperty("content", out var contentProp) &&
-            contentProp.ValueKind == System.Text.Json.JsonValueKind.String)
-        {
-            var content = contentProp.GetString();
-            if (!string.IsNullOrEmpty(content))
-                return new ChatMessageEvent(content);
-        }
-        if (evt.Data.TryGetProperty("text", out var textProp) &&
-            textProp.ValueKind == System.Text.Json.JsonValueKind.String)
-        {
-            var text = textProp.GetString();
-            if (!string.IsNullOrEmpty(text))
-                return new ChatMessageEvent(text);
-        }
-
+        // NOTE: Cumulative `content`/`text` blocks are intentionally ignored
+        // here — the gateway also fires a `chat.message` (role=assistant)
+        // event carrying the same cumulative text, which OnChatMessageReceived
+        // already maps to ChatMessageEvent. Honoring both paths produced two
+        // identical assistant bubbles per turn (delta-bubble sealed by
+        // lifecycle.end, then a fresh bubble from the chat.message arrival).
         return null;
     }
 

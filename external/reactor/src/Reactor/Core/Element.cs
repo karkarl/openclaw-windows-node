@@ -1560,6 +1560,11 @@ public record MenuFlyoutItemData(string Text, Action? OnClick = null, string? Ic
     public KeyboardAcceleratorData[]? KeyboardAccelerators { get; init; }
     public string? AccessKey { get; init; }
     public string? Description { get; init; }
+    /// <summary>Optional override for the WinUI MenuFlyoutItem.Padding. Lets callers
+    /// shift e.g. disabled section headers further toward the menu's left edge.</summary>
+    public global::Microsoft.UI.Xaml.Thickness? Padding { get; init; }
+    /// <summary>Optional override for FontWeight (e.g. SemiBold for headers).</summary>
+    public global::Windows.UI.Text.FontWeight? FontWeight { get; init; }
 }
 public record MenuFlyoutSeparatorData() : MenuFlyoutItemBase;
 public record MenuFlyoutSubItemData(string Text, MenuFlyoutItemBase[] Items, string? Icon = null) : MenuFlyoutItemBase

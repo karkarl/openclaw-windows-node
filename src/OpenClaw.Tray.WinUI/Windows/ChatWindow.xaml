@@ -6,9 +6,9 @@
     xmlns:winex="using:WinUIEx"
     Title="OpenClaw Chat">
 
-    <Window.SystemBackdrop>
-        <MicaBackdrop/>
-    </Window.SystemBackdrop>
+    <!-- SystemBackdrop is set in code-behind from ChatExplorationState.BackdropMode
+         so it tracks the active preset. Do NOT set it here in XAML — the XAML
+         value would override the code-behind set on first paint. -->
 
     <Grid>
         <Grid.RowDefinitions>
@@ -25,24 +25,27 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="🦞" FontSize="14"/>
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-256_altform-unplated.png"
+                       Width="18" Height="18" VerticalAlignment="Center"/>
                 <TextBlock x:Uid="ChatWindow_TextBlock_29" Text="Chat" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                <Button Click="OnPopout"
+                <Button x:Name="PopoutButton" Click="OnPopout"
+                        AutomationProperties.Name="Open in Companion app"
                         Width="28" Height="28" Padding="0" Background="Transparent" BorderThickness="0">
                     <ToolTipService.ToolTip>
-                        <ToolTip x:Uid="ChatWindowOpenInBrowserToolTip" Content="Open in Browser"/>
+                        <ToolTip x:Uid="ChatWindowOpenInBrowserToolTip" Content="Open in Companion app"/>
                     </ToolTipService.ToolTip>
-                    <FontIcon Glyph="&#xE8A7;" FontSize="12"/>
+                    <FontIcon Glyph="&#xE8A7;" FontSize="14"/>
                 </Button>
-                <Button Click="OnCloseClick"
+                <Button x:Name="CloseButton" Click="OnCloseClick"
+                        AutomationProperties.Name="Close"
                         Width="28" Height="28" Padding="0" Background="Transparent" BorderThickness="0">
                     <ToolTipService.ToolTip>
                         <ToolTip x:Uid="ChatWindowCloseToolTip" Content="Close"/>
                     </ToolTipService.ToolTip>
-                    <FontIcon Glyph="&#xE8BB;" FontSize="12"/>
+                    <FontIcon Glyph="&#xE8BB;" FontSize="11"/>
                 </Button>
             </StackPanel>
         </Grid>

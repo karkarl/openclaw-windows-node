@@ -418,6 +418,9 @@ public partial class App : Application
         // propagate through `await ShowOnboardingAsync()` and abort OnLaunched
         // before the tray ever initializes.
         InitializeTrayIcon();
+        // Apply the user's saved default chat preset (if any) before any chat
+        // surface mounts so initial render uses their preferred styling.
+        OpenClawTray.Chat.Explorations.ChatExplorationPresetStore.ApplyDefaultIfPresent();
         ShowSurfaceImprovementsTipIfNeeded();
 
         // First-run check (also supports forced onboarding for testing).
@@ -496,7 +499,7 @@ public partial class App : Application
         // Pre-create tray menu window at startup to avoid creation crashes later
         InitializeTrayMenuWindow();
         
-        var iconPath = IconHelper.GetStatusIconPath(ConnectionStatus.Disconnected);
+        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "openclaw.ico");
         _trayIcon = new TrayIcon(1, iconPath, "OpenClaw Tray — Disconnected");
         _trayIcon.IsVisible = true;
         _trayIcon.Selected += OnTrayIconSelected;
@@ -2779,13 +2782,10 @@ public partial class App : Application
     {
         if (_trayIcon == null) return;
 
-        var status = _currentStatus;
-        if (_currentActivity != null && _currentActivity.Kind != OpenClaw.Shared.ActivityKind.Idle)
-        {
-            status = ConnectionStatus.Connecting; // Use connecting icon for activity
-        }
-
-        var iconPath = IconHelper.GetStatusIconPath(status);
+        // Tray icon is pinned to the app icon so it visually matches the agent
+        // avatar and chat-window title bar. Status is communicated via the
+        // tooltip text below rather than swapping the icon image.
+        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "openclaw.ico");
         var tooltip = BuildTrayTooltip();
 
         try

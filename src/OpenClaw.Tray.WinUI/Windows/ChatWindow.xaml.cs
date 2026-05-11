@@ -1,8 +1,11 @@
 using OpenClaw.Chat;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using OpenClaw.Shared;
 using OpenClawTray.Chat;
+using OpenClawTray.Chat.Explorations;
 using OpenClawTray.Helpers;
 using OpenClawTray.Services;
 using System;
@@ -60,7 +63,7 @@ public sealed partial class ChatWindow : WindowEx
         InitializeComponent();
 
         this.SetWindowSize(480, 640);
-        this.SetIcon(IconHelper.GetStatusIconPath(ConnectionStatus.Connected));
+        this.SetIcon("Assets\\openclaw.ico");
 
         // Set as tool window (hidden from taskbar) + remove system caption
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -79,6 +82,23 @@ public sealed partial class ChatWindow : WindowEx
         // Hide instead of close — preserves Reactor state for instant reopen
         Closed += OnWindowClosing;
 
+        // a11y: Esc to hide the popup + try to focus composer on first show.
+        // KeyboardAccelerator on the root content gets first-class keyboard
+        // handling without needing a focus host.
+        if (this.Content is FrameworkElement contentRoot)
+        {
+            var escAccel = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
+            {
+                Key = global::Windows.System.VirtualKey.Escape,
+            };
+            escAccel.Invoked += (_, args) =>
+            {
+                args.Handled = true;
+                this.Hide();
+            };
+            contentRoot.KeyboardAccelerators.Add(escAccel);
+        }
+
         // Subscribe to global SettingsChanged so the surface swaps when the
         // user toggles "Use standard Gateway Chat interface" while the
         // pre-warmed window is alive.
@@ -89,12 +109,53 @@ public sealed partial class ChatWindow : WindowEx
         OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed -= OnDebugOverrideChanged;
         OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed += OnDebugOverrideChanged;
 
+        // ChatExploration backdrop / theme — re-apply when toggled live.
+        ChatExplorationState.Changed -= OnExplorationChanged;
+        ChatExplorationState.Changed += OnExplorationChanged;
+
         ApplyChatSurface();
+        ApplySystemBackdrop();
+        ApplyPreviewTheme();
     }
 
     private void OnAppSettingsChanged(object? sender, EventArgs e) => ApplyChatSurface();
 
     private void OnDebugOverrideChanged(object? sender, EventArgs e) => ApplyChatSurface();
+
+    private void OnExplorationChanged(object? sender, EventArgs e)
+    {
+        // Marshal back to UI thread — Changed may fire from anywhere.
+        DispatcherQueue?.TryEnqueue(() =>
+        {
+            ApplySystemBackdrop();
+            ApplyPreviewTheme();
+        });
+    }
+
+    /// <summary>
+    /// Swap <see cref="Window.SystemBackdrop"/> based on
+    /// <see cref="ChatExplorationState.BackdropMode"/>. When
+    /// <see cref="ChatExplorationState.UsesHostBackdrop"/> is true (embedded
+    /// chat scenarios), leave whatever the host already set in place.
+    /// </summary>
+    private void ApplySystemBackdrop()
+    {
+        if (ChatExplorationState.UsesHostBackdrop) return;
+
+        SystemBackdrop = ChatExplorationState.BackdropMode switch
+        {
+            ChatBackdropMode.Mica     => new MicaBackdrop { Kind = MicaKind.Base },
+            ChatBackdropMode.MicaAlt  => new MicaBackdrop { Kind = MicaKind.BaseAlt },
+            ChatBackdropMode.Acrylic  => new DesktopAcrylicBackdrop(),
+            _ /* Solid */             => null!,
+        };
+    }
+
+    private void ApplyPreviewTheme()
+    {
+        if (Content is FrameworkElement root)
+            root.RequestedTheme = ChatVisualResolver.ResolvePreviewTheme();
+    }
 
     private void ApplyChatSurface()
     {
@@ -302,12 +363,50 @@ public sealed partial class ChatWindow : WindowEx
             : $"http://127.0.0.1:19001?token={Uri.EscapeDataString(token)}";
     }
 
+    private bool _backdropAppliedOnce;
+
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
-            this.Hide();
+            // First time the window actually becomes visible/active — re-apply the
+            // system backdrop. Setting SystemBackdrop on a pre-warmed (never shown)
+            // window doesn't always attach the controller, which is why acrylic
+            // appeared blank until the user toggled it from the exploration panel.
+            if (!_backdropAppliedOnce)
+            {
+                _backdropAppliedOnce = true;
+                ApplySystemBackdrop();
+            }
+
+            // a11y: place keyboard focus on the composer text box so the user
+            // can start typing immediately. Defer to next dispatcher pass so
+            // Reactor has finished mounting the composer.
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                if (this.Content is FrameworkElement root && FindFirstFocusableTextBox(root) is { } tb)
+                    tb.Focus(FocusState.Programmatic);
+            });
+            return;
         }
+
+        // Pinned via Chat exploration panel — keep open so the user can
+        // preview backdrop/composer changes side-by-side.
+        if (ChatWindowPinState.IsPinned) return;
+        this.Hide();
+    }
+
+    private static Microsoft.UI.Xaml.Controls.TextBox? FindFirstFocusableTextBox(DependencyObject root)
+    {
+        if (root is Microsoft.UI.Xaml.Controls.TextBox tb && tb.IsEnabled && tb.Visibility == Visibility.Visible)
+            return tb;
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (FindFirstFocusableTextBox(child) is { } found) return found;
+        }
+        return null;
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e)
@@ -366,6 +465,7 @@ public sealed partial class ChatWindow : WindowEx
         if (App.Current is App app)
             app.SettingsChanged -= OnAppSettingsChanged;
         OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed -= OnDebugOverrideChanged;
+        ChatExplorationState.Changed -= OnExplorationChanged;
         IsClosed = true;
         try { _reactorHost?.Dispose(); } catch { }
         _reactorHost = null;
@@ -374,8 +474,14 @@ public sealed partial class ChatWindow : WindowEx
 
     private void OnPopout(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(_chatUrl)) return;
-        try { Process.Start(new ProcessStartInfo(_chatUrl) { UseShellExecute = true }); } catch { }
+        // Open in Companion app — route to the Hub window's chat tab so the
+        // full companion experience is available, then dismiss the tray popup.
+        try
+        {
+            (App.Current as App)?.ShowHub("chat");
+            this.Hide();
+        }
+        catch { }
     }
 
     private void RequestChatInputFocus()
