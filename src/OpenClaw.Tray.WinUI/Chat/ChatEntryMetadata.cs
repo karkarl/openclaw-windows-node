@@ -2,7 +2,7 @@ namespace OpenClawTray.Chat;
 
 /// <summary>
 /// Per-entry metadata maintained by <see cref="OpenClawChatDataProvider"/>
-/// in parallel to the vendored <see cref="ChatSample.Chat.Model.ChatTimelineItem"/>.
+/// in parallel to the vendored <see cref="OpenClaw.Chat.ChatTimelineItem"/>.
 /// Tracks values that the upstream <c>ChatTimelineItem</c> record doesn't
 /// carry — specifically the wall-clock timestamp of when the entry was
 /// created, the model active at that moment, and gateway-reported usage

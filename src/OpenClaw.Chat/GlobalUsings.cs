@@ -1,4 +1,5 @@
-global using ChatSample.Chat.Model;
+global using System.Text.Json.Nodes;
+global using OpenClaw.Chat;
 global using Microsoft.UI.Reactor;
 global using Microsoft.UI.Reactor.Core;
 global using Microsoft.UI.Xaml;

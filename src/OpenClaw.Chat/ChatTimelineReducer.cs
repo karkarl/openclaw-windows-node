@@ -1,4 +1,4 @@
-namespace ChatSample.Chat.Model;
+namespace OpenClaw.Chat;
 
 public static class ChatTimelineReducer
 {
@@ -34,9 +34,13 @@ public static class ChatTimelineReducer
     public static ChatTimelineState AddLocalUser(ChatTimelineState state, string text, string nonce)
     {
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, ChatTimelineItemKind.User, text));
-        state.LocalNonces.Add(nonce);
-        return state with { NextId = state.NextId + 1, TurnActive = true };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, ChatTimelineItemKind.User, text)),
+            LocalNonces = state.LocalNonces.Add(nonce),
+            NextId = state.NextId + 1,
+            TurnActive = true
+        };
     }
 
     public static ChatTimelineState AddSystem(ChatTimelineState state, string text, ChatTone tone = ChatTone.Info)
@@ -49,52 +53,65 @@ public static class ChatTimelineReducer
     {
         if (e.Nonce is { } nonce && state.LocalNonces.Contains(nonce))
         {
-            state.LocalNonces.Remove(nonce);
-            return state;
+            return state with { LocalNonces = state.LocalNonces.Remove(nonce) };
         }
 
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, ChatTimelineItemKind.User, e.Text));
-        return state with { NextId = state.NextId + 1, TurnActive = true };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, ChatTimelineItemKind.User, e.Text)),
+            NextId = state.NextId + 1,
+            TurnActive = true
+        };
     }
 
     static ChatTimelineState ApplyToolStart(ChatTimelineState state, ChatToolStartEvent e)
     {
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, ChatTimelineItemKind.ToolCall, e.Text,
-            ToolName: e.ToolName, ToolResult: ChatToolCallStatus.InProgress,
-            IntentSummary: e.Text, ToolArgs: e.ToolArgs));
-        return state with { NextId = state.NextId + 1, ActiveToolCallId = id };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, ChatTimelineItemKind.ToolCall, e.Text,
+                ToolName: e.ToolName, ToolResult: ChatToolCallStatus.InProgress,
+                IntentSummary: e.Text, ToolArgs: e.ToolArgs)),
+            NextId = state.NextId + 1,
+            ActiveToolCallId = id
+        };
     }
 
     static ChatTimelineState ApplyToolOutput(ChatTimelineState state, ChatToolOutputEvent e)
     {
+        var entries = state.Entries;
         if (state.ActiveToolCallId is { } tid)
         {
-            var idx = state.Entries.FindIndex(en => en.Id == tid);
+            var idx = entries.FindIndex(en => en.Id == tid);
             if (idx >= 0)
-                state.Entries[idx] = state.Entries[idx] with
+            {
+                entries = entries.SetItem(idx, entries[idx] with
                 {
                     ToolResult = ChatToolCallStatus.Success,
                     ToolOutput = e.Text
-                };
+                });
+            }
         }
-        return state with { ActiveToolCallId = null, PendingPermission = null };
+        return state with { Entries = entries, ActiveToolCallId = null, PendingPermission = null };
     }
 
     static ChatTimelineState ApplyToolError(ChatTimelineState state, ChatToolErrorEvent e)
     {
+        var entries = state.Entries;
         if (state.ActiveToolCallId is { } tid)
         {
-            var idx = state.Entries.FindIndex(en => en.Id == tid);
+            var idx = entries.FindIndex(en => en.Id == tid);
             if (idx >= 0)
-                state.Entries[idx] = state.Entries[idx] with
+            {
+                entries = entries.SetItem(idx, entries[idx] with
                 {
                     ToolResult = ChatToolCallStatus.Error,
                     ToolOutput = e.Text
-                };
+                });
+            }
         }
-        return state with { ActiveToolCallId = null, PendingPermission = null };
+        return state with { Entries = entries, ActiveToolCallId = null, PendingPermission = null };
     }
 
     static ChatTimelineState UpsertAssistant(ChatTimelineState state, string text, bool replace, bool streaming)
@@ -105,18 +122,24 @@ public static class ChatTimelineReducer
             if (idx >= 0)
             {
                 var existing = state.Entries[idx];
-                state.Entries[idx] = existing with
+                return state with
                 {
-                    Text = replace ? text : existing.Text + text,
-                    IsStreaming = streaming
+                    Entries = state.Entries.SetItem(idx, existing with
+                    {
+                        Text = replace ? text : existing.Text + text,
+                        IsStreaming = streaming
+                    })
                 };
-                return state;
             }
         }
 
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, ChatTimelineItemKind.Assistant, text, IsStreaming: streaming));
-        return state with { NextId = state.NextId + 1, ActiveAssistantId = id };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, ChatTimelineItemKind.Assistant, text, IsStreaming: streaming)),
+            NextId = state.NextId + 1,
+            ActiveAssistantId = id
+        };
     }
 
     static ChatTimelineState UpsertReasoning(ChatTimelineState state, string text, bool replace)
@@ -127,21 +150,30 @@ public static class ChatTimelineReducer
             if (idx >= 0)
             {
                 var existing = state.Entries[idx];
-                state.Entries[idx] = existing with { Text = replace ? text : existing.Text + text };
-                return state;
+                return state with
+                {
+                    Entries = state.Entries.SetItem(idx, existing with { Text = replace ? text : existing.Text + text })
+                };
             }
         }
 
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, ChatTimelineItemKind.Reasoning, text));
-        return state with { NextId = state.NextId + 1, ActiveReasoningId = id };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, ChatTimelineItemKind.Reasoning, text)),
+            NextId = state.NextId + 1,
+            ActiveReasoningId = id
+        };
     }
 
     static ChatTimelineState PushEntry(ChatTimelineState state, ChatTimelineItemKind kind, string text, ChatTone? tone = null)
     {
         var id = $"e{state.NextId}";
-        state.Entries.Add(new(id, kind, text, Tone: tone));
-        return state with { NextId = state.NextId + 1 };
+        return state with
+        {
+            Entries = state.Entries.Add(new(id, kind, text, Tone: tone)),
+            NextId = state.NextId + 1
+        };
     }
 
     static ChatTimelineState BeginTurn(ChatTimelineState state) =>

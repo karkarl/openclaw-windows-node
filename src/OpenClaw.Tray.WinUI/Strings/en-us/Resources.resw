@@ -2765,5 +2765,136 @@ On your gateway host (Mac/Linux), run:
   </data>
   <data name="VoiceSettingsPage_PreviewVoiceButtonContent" xml:space="preserve">
     <value>▶ Preview Voice</value>
+  </data>  <data name="DebugPage_TextBlock_OverridesHeader.Text" xml:space="preserve">
+    <value>Debug Overrides</value>
+  </data>
+  <data name="DebugPage_TextBlock_OverridesCaption.Text" xml:space="preserve">
+    <value>Override the global 'Use standard Gateway Chat interface' setting per chat container. Resets when the app restarts.</value>
+  </data>
+  <data name="DebugPage_TextBlock_HubChatLabel.Text" xml:space="preserve">
+    <value>Hub Chat tab UI:</value>
+  </data>
+  <data name="DebugPage_TextBlock_TrayChatLabel.Text" xml:space="preserve">
+    <value>Tray Chat popup UI:</value>
+  </data>
+  <data name="DebugPage_ChatOverride_NoOverride_Hub.Content" xml:space="preserve">
+    <value>No override</value>
+  </data>
+  <data name="DebugPage_ChatOverride_ForceLegacy_Hub.Content" xml:space="preserve">
+    <value>Force Gateway Chat UI</value>
+  </data>
+  <data name="DebugPage_ChatOverride_ForceNative_Hub.Content" xml:space="preserve">
+    <value>Force Companion Chat UI</value>
+  </data>
+  <data name="DebugPage_ChatOverride_NoOverride_Tray.Content" xml:space="preserve">
+    <value>No override</value>
+  </data>
+  <data name="DebugPage_ChatOverride_ForceLegacy_Tray.Content" xml:space="preserve">
+    <value>Force Gateway Chat UI</value>
+  </data>
+  <data name="DebugPage_ChatOverride_ForceNative_Tray.Content" xml:space="preserve">
+    <value>Force Companion Chat UI</value>
+  </data>
+  <data name="Chat_Status_Done" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="Chat_Status_Running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="Chat_Status_Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="Chat_Timeline_LoadEarlier" xml:space="preserve">
+    <value>Load earlier messages</value>
+  </data>
+  <data name="Chat_Tool_CallLabel" xml:space="preserve">
+    <value>Tool call</value>
+  </data>
+  <data name="Chat_Tool_OutputLabel" xml:space="preserve">
+    <value>Tool output</value>
+  </data>
+  <data name="Chat_Tool_ErrorLabel" xml:space="preserve">
+    <value>Tool error</value>
+  </data>
+  <data name="Chat_Tool_InputSection" xml:space="preserve">
+    <value>Tool input</value>
+  </data>
+  <data name="Chat_Tool_FooterLabel" xml:space="preserve">
+    <value>Tool</value>
+  </data>
+  <data name="Chat_Tool_FooterWithTimeFormat" xml:space="preserve">
+    <value>Tool · {0}</value>
+  </data>
+  <data name="Chat_Reasoning_ThinkingHeader" xml:space="preserve">
+    <value>🧠 Thinking</value>
+  </data>
+  <data name="Chat_Reasoning_ThinkingEllipsis" xml:space="preserve">
+    <value>🧠 thinking…</value>
+  </data>
+  <data name="Chat_Timeline_AssistantThinkingFormat" xml:space="preserve">
+    <value>{0} is thinking…</value>
+  </data>
+  <data name="Chat_Composer_Reasoning_Default" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="Chat_Composer_Reasoning_Auto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="Chat_Composer_Reasoning_Maximum" xml:space="preserve">
+    <value>Maximum</value>
+  </data>
+  <data name="Chat_Composer_Placeholder_Connected" xml:space="preserve">
+    <value>Message Assistant (Enter to send)</value>
+  </data>
+  <data name="Chat_Composer_Placeholder_Connecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="Chat_Composer_Placeholder_NotConnected" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="Chat_Composer_Tooltip_Attach" xml:space="preserve">
+    <value>Attach</value>
+  </data>
+  <data name="Chat_Composer_Tooltip_Voice" xml:space="preserve">
+    <value>Voice</value>
+  </data>
+  <data name="Chat_Composer_Tooltip_More" xml:space="preserve">
+    <value>More</value>
+  </data>
+  <data name="Chat_Composer_Tooltip_Send" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="Chat_Composer_Tooltip_Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Chat_Composer_AssistantWorking" xml:space="preserve">
+    <value>Assistant is working…</value>
+  </data>
+  <data name="Chat_Permission_Allow" xml:space="preserve">
+    <value>Allow</value>
+  </data>
+  <data name="Chat_Permission_Deny" xml:space="preserve">
+    <value>Deny</value>
+  </data>
+  <data name="Chat_Root_ConnectingToGateway" xml:space="preserve">
+    <value>Connecting to gateway…</value>
+  </data>
+  <data name="Chat_Root_EmptyState_SelectSession" xml:space="preserve">
+    <value>Select a session from the sidebar to start chatting.</value>
+  </data>
+  <data name="Chat_Notification_SendFailed" xml:space="preserve">
+    <value>Send failed</value>
+  </data>
+  <data name="Chat_Notification_AbortFailed" xml:space="preserve">
+    <value>Abort failed</value>
+  </data>
+  <data name="Chat_Notification_LoadHistoryFailed" xml:space="preserve">
+    <value>Failed to load history</value>
+  </data>
+  <data name="Chat_Notification_AssistantReplied" xml:space="preserve">
+    <value>Assistant replied</value>
+  </data>
+  <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
+    <value>Connection lost — response interrupted.</value>
   </data>
 </root>

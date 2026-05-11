@@ -1,4 +1,4 @@
-using ChatSample.Chat.Model;
+using OpenClaw.Chat;
 using OpenClaw.Shared;
 using OpenClawTray.Chat;
 using System.Text.Json;
@@ -1026,5 +1026,401 @@ public class OpenClawChatDataProviderTests
 
         var snapshot2 = provider.GetEntryMetadata("main");
         Assert.Equal(initialCount, snapshot2.Count);
+    }
+
+    [Fact]
+    public async Task LoadHistoryAsync_AfterLiveActivity_DoesNotDuplicateEntries()
+    {
+        // Regression for HIGH 2: prior to the dedup fix, a live assistant
+        // message that was later included in chat.history would appear twice
+        // in the rebuilt timeline (once from the rebuild, once from the
+        // append-prior step), and ID collisions could occur because both
+        // sequences reused e1, e2, …
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.HistoryBehavior = _ => Task.FromResult(new ChatHistoryInfo
+        {
+            SessionKey = "main",
+            Messages = new[]
+            {
+                new ChatMessageInfo { Role = "user",      Text = "Hi",     State = "final", Ts = nowMs },
+                new ChatMessageInfo { Role = "assistant", Text = "Hello!", State = "final", Ts = nowMs + 1000 }
+            }
+        });
+        await provider.LoadAsync();
+
+        // Simulate live activity arriving before history finishes loading:
+        // a live assistant frame for the same content (within 5s of the
+        // history timestamp). After history loads, this should be deduped.
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            Text = "Hello!",
+            State = "final",
+            Ts = nowMs + 1000
+        });
+
+        await provider.LoadHistoryAsync("main");
+
+        var timeline = snapshots[^1].Timelines["main"];
+        Assert.Equal(2, timeline.Entries.Count);
+        Assert.Equal("Hi", timeline.Entries[0].Text);
+        Assert.Equal("Hello!", timeline.Entries[1].Text);
+
+        // IDs must be unique even after the append step.
+        var ids = timeline.Entries.Select(e => e.Id).ToList();
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task LoadHistoryAsync_AfterLiveActivity_PreservesNonDuplicateLiveEntries()
+    {
+        // Live status entries (e.g. an "Aborted" warning) that the gateway
+        // doesn't replay in history should be preserved after history load,
+        // and re-IDed when their original IDs collide with the rebuilt set.
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.HistoryBehavior = _ => Task.FromResult(new ChatHistoryInfo
+        {
+            SessionKey = "main",
+            Messages = new[]
+            {
+                new ChatMessageInfo { Role = "user",      Text = "Hi",     State = "final", Ts = nowMs },
+                new ChatMessageInfo { Role = "assistant", Text = "Hello!", State = "final", Ts = nowMs + 1000 }
+            }
+        });
+        await provider.LoadAsync();
+
+        // A live event the history will NOT carry — must survive the rebuild.
+        bridge.RaiseAgent(MakeAgentEvent("lifecycle", "{\"phase\":\"error\",\"message\":\"net glitch\"}"));
+
+        await provider.LoadHistoryAsync("main");
+
+        var timeline = snapshots[^1].Timelines["main"];
+        Assert.Contains(timeline.Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status && e.Text.Contains("net glitch"));
+
+        // All entry IDs unique post-rebuild.
+        var ids = timeline.Entries.Select(e => e.Id).ToList();
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task LoadHistoryAsync_WithMissingTimestamps_PreservesAllLiveEntries()
+    {
+        // Rubber-duck round 2: when the rebuilt history entry has no
+        // timestamp (msg.Ts == 0), we must NOT dedupe a live entry against
+        // it on text alone — silent transcript loss is worse than visible
+        // duplication. The previous fingerprint logic collapsed all such
+        // entries into a single bucket=0 slot and dropped the second.
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.HistoryBehavior = _ => Task.FromResult(new ChatHistoryInfo
+        {
+            SessionKey = "main",
+            Messages = new[]
+            {
+                // Ts deliberately omitted (= 0) on both rebuilt entries.
+                new ChatMessageInfo { Role = "user",      Text = "ok", State = "final" },
+                new ChatMessageInfo { Role = "assistant", Text = "ok", State = "final" }
+            }
+        });
+        await provider.LoadAsync();
+
+        // A live assistant frame for "ok" arrives before history loads.
+        // Live entries always carry a non-zero Now timestamp, but the
+        // rebuilt side has Ts=0 → dedup must NOT match.
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            Text = "ok",
+            State = "final"
+            // Ts not set
+        });
+
+        await provider.LoadHistoryAsync("main");
+
+        var timeline = snapshots[^1].Timelines["main"];
+        // Two assistant "ok" entries must survive: one from history, one live.
+        var oks = timeline.Entries.Count(e =>
+            e.Kind == ChatTimelineItemKind.Assistant && e.Text == "ok");
+        Assert.Equal(2, oks);
+
+        var ids = timeline.Entries.Select(e => e.Id).ToList();
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task LoadHistoryAsync_WithSameTextDifferentTimestamps_PreservesBoth()
+    {
+        // Rubber-duck round 2: even with valid timestamps, two genuinely
+        // distinct events with the same text should NOT collide once the
+        // gap exceeds the 2-second tolerance window.
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.HistoryBehavior = _ => Task.FromResult(new ChatHistoryInfo
+        {
+            SessionKey = "main",
+            Messages = new[]
+            {
+                new ChatMessageInfo { Role = "assistant", Text = "ok", State = "final", Ts = nowMs }
+            }
+        });
+        await provider.LoadAsync();
+
+        // Live assistant message with the same text but 10 s later.
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            Text = "ok",
+            State = "final",
+            Ts = nowMs + 10_000
+        });
+
+        await provider.LoadHistoryAsync("main");
+
+        var timeline = snapshots[^1].Timelines["main"];
+        var oks = timeline.Entries.Count(e =>
+            e.Kind == ChatTimelineItemKind.Assistant && e.Text == "ok");
+        Assert.Equal(2, oks);
+
+        var ids = timeline.Entries.Select(e => e.Id).ToList();
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Disconnect_DuringActiveTurn_InjectsInterruptionAndEndsTurn()
+    {
+        // Rubber-duck round 2 / MEDIUM 5: when the connection drops while
+        // a turn is in flight we must synthesize a Status entry +
+        // ChatTurnEndEvent so the UI doesn't sit "thinking" forever.
+        var sendGate = new TaskCompletionSource();
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.SendBehavior = (_, _, _) => sendGate.Task;
+        await provider.LoadAsync();
+
+        // Establish Connected baseline so the next status change registers
+        // as a Connected → Disconnected transition.
+        bridge.RaiseStatus(ConnectionStatus.Connected);
+
+        // Start a turn that never completes.
+        var sendTask = provider.SendMessageAsync("main", "hi");
+        Assert.True(snapshots[^1].Timelines["main"].TurnActive);
+
+        snapshots.Clear();
+
+        // Connection drops while turn is active.
+        bridge.RaiseStatus(ConnectionStatus.Disconnected);
+
+        var timeline = snapshots[^1].Timelines["main"];
+        Assert.False(timeline.TurnActive);
+        Assert.Contains(timeline.Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Text.Contains("Chat_Notification_ConnectionInterrupted"));
+
+        // Count interruption entries before any further events.
+        var beforeCount = timeline.Entries.Count(e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Text.Contains("Chat_Notification_ConnectionInterrupted"));
+        Assert.Equal(1, beforeCount);
+
+        // Subsequent unrelated events on the thread must not re-trigger
+        // the interruption (status is already Disconnected, no transition).
+        bridge.RaiseStatus(ConnectionStatus.Disconnected);
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            Text = "late frame",
+            State = "final"
+        });
+
+        var afterTimeline = snapshots[^1].Timelines["main"];
+        var afterCount = afterTimeline.Entries.Count(e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Text.Contains("Chat_Notification_ConnectionInterrupted"));
+        Assert.Equal(1, afterCount);
+
+        // Allow the in-flight send to complete so the test can finish.
+        sendGate.SetResult();
+        await sendTask;
+    }
+
+    // ── chat rubber-duck MEDIUM 2: live System (untrusted) / toolresult ──
+
+    [Fact]
+    public async Task OnChatMessageReceived_LiveToolResult_RendersAsToolChip()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "toolresult",
+            Text = "drwxr-xr-x  3 root root\nProcess exited with code 0",
+            State = "final"
+        });
+
+        var timeline = snapshots[^1].Timelines["main"];
+        var entry = Assert.Single(timeline.Entries, e => e.Kind == ChatTimelineItemKind.ToolCall);
+        Assert.Contains("Process exited", entry.ToolOutput ?? "");
+        // Must NOT have rendered as a normal assistant bubble.
+        Assert.DoesNotContain(timeline.Entries, e => e.Kind == ChatTimelineItemKind.Assistant);
+    }
+
+    [Fact]
+    public async Task OnChatMessageReceived_LiveToolResult_AlternateRoleSpelling_AlsoRenders()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "tool_result",
+            Text = "Exec completed (exit=0)",
+            State = "final"
+        });
+
+        var timeline = snapshots[^1].Timelines["main"];
+        var entry = Assert.Single(timeline.Entries, e => e.Kind == ChatTimelineItemKind.ToolCall);
+        Assert.Contains("Exec completed", entry.ToolOutput ?? "");
+    }
+
+    [Fact]
+    public async Task OnChatMessageReceived_LiveUserSystemNote_RendersAsStatus()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "user",
+            Text = "System (untrusted): exec result for tool_call_42 follows",
+            State = "final"
+        });
+
+        var timeline = snapshots[^1].Timelines["main"];
+        // Must render as a dim Status entry (provenance preserved), NOT
+        // dropped silently and NOT shown as a real user bubble.
+        Assert.Contains(timeline.Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Text.Contains("System (untrusted)"));
+        Assert.DoesNotContain(timeline.Entries, e => e.Kind == ChatTimelineItemKind.User);
+    }
+
+    [Fact]
+    public async Task OnChatMessageReceived_LiveUserPlain_StillIgnored()
+    {
+        // Regression guard for MEDIUM 2 fix: ordinary live ``role=user``
+        // echoes (no System prefix) must still be dropped — the local
+        // SendMessageAsync path already added that user entry.
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "USER",
+            Text = "hello there",
+            State = "final"
+        });
+
+        Assert.Empty(snapshots);
+    }
+
+    // ── chat rubber-duck MEDIUM 4: per-message size cap ──
+
+    [Fact]
+    public async Task OnChatMessageReceived_OversizedContent_IsTruncated()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        // 300 KiB of ASCII — 1 byte per char in UTF-8.
+        var huge = new string('A', 300 * 1024);
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            Text = huge,
+            State = "final"
+        });
+
+        var timeline = snapshots[^1].Timelines["main"];
+        var entry = timeline.Entries.Single(e => e.Kind == ChatTimelineItemKind.Assistant);
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(entry.Text);
+        Assert.True(bytes <= OpenClawChatDataProvider.MaxEntryTextBytes,
+            $"entry was {bytes} bytes; cap is {OpenClawChatDataProvider.MaxEntryTextBytes}");
+        Assert.Contains("bytes truncated", entry.Text);
+        Assert.True(entry.Text.Length < huge.Length);
+    }
+
+    [Fact]
+    public void TruncateForChatEntry_BelowCap_ReturnsInputUnchanged()
+    {
+        var small = "hello world";
+        Assert.Same(small, OpenClawChatDataProvider.TruncateForChatEntry(small));
+    }
+
+    [Fact]
+    public void TruncateForChatEntry_AboveCap_RespectsByteCap()
+    {
+        var big = new string('Z', OpenClawChatDataProvider.MaxEntryTextBytes + 50_000);
+        var truncated = OpenClawChatDataProvider.TruncateForChatEntry(big);
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(truncated);
+        Assert.True(bytes <= OpenClawChatDataProvider.MaxEntryTextBytes);
+        Assert.EndsWith("bytes truncated]", truncated);
+    }
+
+    [Fact]
+    public void TruncateForChatEntry_DoesNotSplitSurrogatePair()
+    {
+        // String of repeated 4-byte UTF-8 emoji that lands very close to
+        // the cap boundary. The truncate must not return a string whose
+        // last char is an unpaired high surrogate.
+        const string emoji = "\uD83D\uDE00"; // 😀 (U+1F600)
+        var sb = new System.Text.StringBuilder(OpenClawChatDataProvider.MaxEntryTextBytes);
+        while (sb.Length < OpenClawChatDataProvider.MaxEntryTextBytes / 2)
+            sb.Append(emoji);
+        var truncated = OpenClawChatDataProvider.TruncateForChatEntry(sb.ToString());
+        // No unpaired surrogates: the last code unit before the marker
+        // " … […]" must not be a high surrogate.
+        var insertedAt = truncated.IndexOf(" … [", StringComparison.Ordinal);
+        if (insertedAt > 0)
+            Assert.False(char.IsHighSurrogate(truncated[insertedAt - 1]));
+    }
+
+    [Fact]
+    public async Task OnAgentEvent_OversizedToolOutput_IsTruncated()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        bridge.RaiseAgent(MakeAgentEvent("tool",
+            """{"phase":"start","name":"powershell","args":{"command":"ls"}}"""));
+
+        var huge = new string('B', 400 * 1024);
+        bridge.RaiseAgent(MakeAgentEvent("command_output",
+            JsonSerializer.Serialize(new { output = huge })));
+
+        var timeline = snapshots[^1].Timelines["main"];
+        var output = timeline.Entries.LastOrDefault(e => e.Kind == ChatTimelineItemKind.ToolCall);
+        if (output?.ToolOutput is { } body)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
+            Assert.True(bytes <= OpenClawChatDataProvider.MaxEntryTextBytes);
+        }
     }
 }

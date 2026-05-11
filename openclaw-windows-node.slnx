@@ -29,10 +29,8 @@
       <Platform Solution="*|x64" Project="x64" />
       <Platform Solution="*|ARM64" Project="ARM64" />
     </Project>
-    <Project Path="external/reactor/src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
     <Project Path="external/reactor/src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
-    <Project Path="external/reactor/samples/apps/chat/Chat.Model/Chat.Model.csproj" />
-    <Project Path="external/reactor/samples/apps/chat/Chat.UI/Chat.UI.csproj">
+    <Project Path="src/OpenClaw.Chat/OpenClaw.Chat.csproj">
       <Platform Solution="*|Any CPU" Project="x64" />
       <Platform Solution="*|x64" Project="x64" />
       <Platform Solution="*|ARM64" Project="ARM64" />

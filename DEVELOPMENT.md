@@ -57,12 +57,10 @@ openclaw-windows-hub/
 │       └── Pages/                    # XAML pages for command results
 │
 ├── external/
-│   └── reactor/                      # Vendored Microsoft.UI.Reactor + chat sample
+│   └── reactor/                      # Vendored Microsoft.UI.Reactor framework
 │       ├── src/Reactor/              # Reactor functional UI framework (MIT)
 │       ├── src/Reactor.Analyzers/    # Roslyn analyzers (bundled)
 │       ├── src/Reactor.Localization.Generator/
-│       ├── samples/apps/chat/Chat.Model/   # Provider-neutral chat state + reducer
-│       ├── samples/apps/chat/Chat.UI/      # Reusable Reactor chat components
 │       ├── README.md                       # Refresh procedure + local edits log
 │       └── NOTICE.md                       # Third-party attribution
 │

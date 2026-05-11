@@ -1,5 +1,6 @@
-using ChatSample.Chat.Model;
-using ChatSample.Chat.UI;
+using OpenClaw.Chat;
+using OpenClaw.Chat;
+using OpenClawTray.Helpers;
 using Microsoft.UI;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -61,9 +62,46 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
 {
     const double FollowThreshold = 60;
 
-    static readonly Microsoft.UI.Reactor.Markdown.MarkdownOptions _markdownOptions = new()
+    // SECURITY (chat-rubber-duck HIGH 1 / MEDIUM 3): chat-bubble Markdown is
+    // rendered with a hardened options object that:
+    //   1. Renders images as inert ``[Image: <alt>]`` text (no Uri fetch) —
+    //      blocks SSRF / tracking-pixel beacons triggered by a compromised
+    //      gateway, malicious tool output, or a prompt-injected model.
+    //   2. Pre-strips inline link / image / ref-def syntax via
+    //      <see cref="ChatMarkdownSanitizer.Sanitize(string?)"/> so explicit
+    //      ``[text](url)`` syntax never reaches the parser.
+    //   3. Wires the Reactor
+    //      <see cref="Microsoft.UI.Reactor.Markdown.MarkdownOptions.LinkBuilder"/>
+    //      hook (vendored edit, see ``external/reactor/README.md``) to
+    //      collapse any link the parser DOES emit — bare URLs and
+    //      ``<https://…>`` autolinks that the sanitizer can't strip
+    //      without breaking prose — into an inert ``RichTextRun`` carrying
+    //      visible URL text but no NavigateUri. Net effect: no
+    //      click-to-navigate hyperlink can be manufactured by untrusted
+    //      Markdown inside a chat bubble.
+    internal static readonly Microsoft.UI.Reactor.Markdown.MarkdownOptions _markdownOptions = new()
     {
         CodeFontFamily = "Cascadia Code, Cascadia Mono, Consolas",
+        // Inert link rendering: emit the link's display text followed by
+        // the visible URL in parentheses, all as a non-clickable
+        // RichTextRun. No NavigateUri is constructed anywhere in this
+        // path, so even an attacker-controlled bare URL or autolink
+        // cannot become a hyperlink.
+        LinkBuilder = (inlines, uri) =>
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var inline in inlines)
+            {
+                switch (inline)
+                {
+                    case Microsoft.UI.Reactor.Core.RichTextRun r: sb.Append(r.Text); break;
+                    case Microsoft.UI.Reactor.Core.RichTextHyperlink h: sb.Append(h.Text); break;
+                    case Microsoft.UI.Reactor.Core.RichTextLineBreak: sb.Append(' '); break;
+                }
+            }
+            var text = ChatMarkdownSanitizer.FlattenLinkToInertText(sb.ToString(), uri?.ToString());
+            return new Microsoft.UI.Reactor.Core.RichTextRun(text);
+        },
         CodeBlock = (code, lang) =>
         {
             var header = lang is { Length: > 0 }
@@ -94,6 +132,16 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 VStack(0, rows)
             ).WithBorder(Theme.DividerStroke, 1)
              .CornerRadius(4).Margin(0, 4, 0, 4);
+        },
+        // Defense-in-depth for any image syntax that survives sanitization
+        // (e.g. reference-style images): render an inert caption-styled
+        // placeholder; never instantiate a Uri-bound BitmapImage.
+        Image = (alt, _) =>
+        {
+            var label = string.IsNullOrEmpty(alt) ? "[Image]" : $"[Image: {alt}]";
+            return Caption(label)
+                .Foreground(Theme.TertiaryText)
+                .Set(t => t.IsTextSelectionEnabled = true);
         },
     };
 
@@ -303,7 +351,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
 
         // Load more button — outside the repeated items
         var loadMoreButton = Props.HasMoreHistory
-            ? Button("Load earlier messages", () => Props.OnLoadMoreHistory?.Invoke())
+            ? Button(LocalizationHelper.GetString("Chat_Timeline_LoadEarlier"), () => Props.OnLoadMoreHistory?.Invoke())
                 .HAlign(HorizontalAlignment.Center)
                 .Set(b => { b.Padding = new Thickness(16, 8, 16, 8); b.CornerRadius = new CornerRadius(4); })
                 .Resources(r => r
@@ -588,7 +636,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             // Assistant bubble — subtle gray with primary text. Radius/Padding
             // come from ChatExplorationState (BubbleCornerRadius + PaddingDensity).
             var card = Border(
-                Markdown(entry.Text ?? "", _markdownOptions)
+                Markdown(ChatMarkdownSanitizer.Sanitize(entry.Text), _markdownOptions)
             ).Background(assistantBubbleBg)
              .Set(b =>
              {
@@ -597,15 +645,9 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                  b.Padding = bubblePadding;
              });
 
-            // Speak icon (read aloud) — visible only on hover.
-            var speakIcon = HoverIcon(entry.Id, "\uE767", "Read aloud",
-                () => _ = ChatSpeakHelper.SpeakAsync(entry.Text ?? ""))
-                .VAlign(VerticalAlignment.Center);
-
             var bubbleRow = (FlexRow(
                 leftSlot,
-                card,
-                speakIcon
+                card
             ) with { ColumnGap = bubbleSideMargin }).HAlign(HorizontalAlignment.Left);
 
             Element footer = Empty();
@@ -652,15 +694,15 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             switch (entry.ToolResult)
             {
                 case ChatToolCallStatus.Success:
-                    statusText = "Done";
+                    statusText = LocalizationHelper.GetString("Chat_Status_Done");
                     statusBg = new SolidColorBrush(Color.FromArgb(0xFF, 0x28, 0xA0, 0x50));
                     break;
                 case ChatToolCallStatus.Error:
-                    statusText = "Error";
+                    statusText = LocalizationHelper.GetString("Chat_Status_Error");
                     statusBg = themeBrush("SystemFillColorCriticalBrush");
                     break;
                 default:
-                    statusText = "Running";
+                    statusText = LocalizationHelper.GetString("Chat_Status_Running");
                     statusBg = new SolidColorBrush(Color.FromArgb(0xFF, 0xDC, 0x78, 0x1E));
                     break;
             }
@@ -832,8 +874,8 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 : kindLabel;
             var callChip = BuildChip(
                 token: $"{entry.Id}:call",
-                label: "Tool call",
-                sectionLabel: "Tool input",
+                label: LocalizationHelper.GetString("Chat_Tool_CallLabel"),
+                sectionLabel: LocalizationHelper.GetString("Chat_Tool_InputSection"),
                 contentText: callContent,
                 hasContent: !string.IsNullOrEmpty(callContent));
 
@@ -842,15 +884,21 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             Element outputChip = hasOutput
                 ? BuildChip(
                     token: $"{entry.Id}:out",
-                    label: entry.ToolResult == ChatToolCallStatus.Error ? "Tool error" : "Tool output",
-                    sectionLabel: entry.ToolResult == ChatToolCallStatus.Error ? "Tool error" : "Tool output",
+                    label: entry.ToolResult == ChatToolCallStatus.Error
+                        ? LocalizationHelper.GetString("Chat_Tool_ErrorLabel")
+                        : LocalizationHelper.GetString("Chat_Tool_OutputLabel"),
+                    sectionLabel: entry.ToolResult == ChatToolCallStatus.Error
+                        ? LocalizationHelper.GetString("Chat_Tool_ErrorLabel")
+                        : LocalizationHelper.GetString("Chat_Tool_OutputLabel"),
                     contentText: entry.ToolOutput!,
                     hasContent: true)
                 : Empty();
 
             var entryMeta = MetaFor(entry.Id);
             var timeStr = FormatTime(entryMeta?.Timestamp);
-            var footerText = string.IsNullOrEmpty(timeStr) ? "Tool" : $"Tool · {timeStr}";
+            var footerText = string.IsNullOrEmpty(timeStr)
+                ? LocalizationHelper.GetString("Chat_Tool_FooterLabel")
+                : string.Format(LocalizationHelper.GetString("Chat_Tool_FooterWithTimeFormat"), timeStr);
 
             return VStack(4,
                 callChip,
@@ -874,7 +922,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 ? TimelineInset(
                     Border(
                         Expander(
-                            "🧠 Thinking",
+                            LocalizationHelper.GetString("Chat_Reasoning_ThinkingHeader"),
                             TextBlock(entry.Text)
                                 .Set(t =>
                                 {
@@ -898,7 +946,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                     top: 4,
                     bottom: 4)
                 : TimelineInset(
-                    Caption("🧠 thinking…").Foreground(TertiaryText)
+                    Caption(LocalizationHelper.GetString("Chat_Reasoning_ThinkingEllipsis")).Foreground(TertiaryText)
                         .Set(t => { t.FontStyle = global::Windows.UI.Text.FontStyle.Italic; t.FontSize = 12; })),
 
             // Filtered status — drop transient connection chatter.
@@ -970,7 +1018,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             thinkingIndicator = Border(
                 (FlexRow(
                     AssistantAvatar().VAlign(VerticalAlignment.Center),
-                    Caption($"{assistantSender} is thinking…")
+                    Caption(string.Format(LocalizationHelper.GetString("Chat_Timeline_AssistantThinkingFormat"), assistantSender))
                         .Foreground(chatStampFg)
                         .Set(t => { t.FontStyle = global::Windows.UI.Text.FontStyle.Italic; t.FontSize = 13; })
                         .VAlign(VerticalAlignment.Center)

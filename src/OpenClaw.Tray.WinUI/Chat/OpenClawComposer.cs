@@ -1,4 +1,5 @@
-using ChatSample.Chat.Model;
+using OpenClaw.Chat;
+using OpenClawTray.Helpers;
 using Microsoft.UI;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -51,7 +52,12 @@ public record OpenClawComposerProps(
 
 public sealed class OpenClawComposer : Component<OpenClawComposerProps>
 {
-    private static readonly string[] s_reasoningOptions = new[] { "Default", "Auto", "Maximum" };
+    private static string[] ReasoningOptions() => new[]
+    {
+        LocalizationHelper.GetString("Chat_Composer_Reasoning_Default"),
+        LocalizationHelper.GetString("Chat_Composer_Reasoning_Auto"),
+        LocalizationHelper.GetString("Chat_Composer_Reasoning_Maximum"),
+    };
 
     public override Element Render()
     {
@@ -88,9 +94,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         var isConnected = Props.ConnectionState == "connected";
         var placeholder = Props.ConnectionState switch
         {
-            "connected" => "Message Assistant (Enter to send)",
-            "connecting" => "Connecting…",
-            _ => "Not connected"
+            "connected" => LocalizationHelper.GetString("Chat_Composer_Placeholder_Connected"),
+            "connecting" => LocalizationHelper.GetString("Chat_Composer_Placeholder_Connecting"),
+            _ => LocalizationHelper.GetString("Chat_Composer_Placeholder_NotConnected")
         };
 
         // ── Row 1: three compact dropdowns ─────────────────────────────
@@ -132,7 +138,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             cb.CornerRadius = composerCornerRadius;
         }).VAlign(VerticalAlignment.Center);
 
-        var reasoningCombo = ComboBox(s_reasoningOptions, 0, _ => { /* not yet wired */ })
+        var reasoningCombo = ComboBox(ReasoningOptions(), 0, _ => { /* not yet wired */ })
             .Set(cb =>
             {
                 cb.MinWidth = 100;
@@ -238,7 +244,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 b.Padding = new Thickness(10, 4, 10, 4);
                 b.MinWidth = sendButtonSize + 4; b.MinHeight = sendButtonSize - 4;
                 b.CornerRadius = composerCornerRadius;
-                b.Background = ChatSample.Chat.UI.Res.Get("SystemFillColorCriticalBrush");
+                b.Background = OpenClaw.Chat.Res.Get("SystemFillColorCriticalBrush");
             }).AutomationName("Stop");
         }
         else if (!Props.TurnActive && ChatExplorationState.SendIconShow)
@@ -302,7 +308,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         Element workingBanner = Props.TurnActive
             ? (FlexRow(
                 ProgressRing().Size(16, 16),
-                Caption("Assistant is working…").Foreground(SecondaryText)
+                Caption(LocalizationHelper.GetString("Chat_Composer_AssistantWorking")).Foreground(SecondaryText)
               ) with { ColumnGap = 8 }).Padding(16, 8, 16, 0)
             : Empty();
 
@@ -312,9 +318,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                     TextBlock($"⚠ {perm.ToolName}: {perm.Detail}")
                         .Set(t => { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.CharacterEllipsis; })
                         .HAlign(HorizontalAlignment.Stretch),
-                    Button("Allow", () => Props.OnPermissionResponse(perm.RequestId, true))
+                    Button(LocalizationHelper.GetString("Chat_Permission_Allow"), () => Props.OnPermissionResponse(perm.RequestId, true))
                         .Background(Accent).Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; }),
-                    Button("Deny", () => Props.OnPermissionResponse(perm.RequestId, false))
+                    Button(LocalizationHelper.GetString("Chat_Permission_Deny"), () => Props.OnPermissionResponse(perm.RequestId, false))
                         .Set(b => { b.CornerRadius = new CornerRadius(4); b.Padding = new Thickness(12, 4, 12, 4); b.MinWidth = 0; b.MinHeight = 0; })
                 ).Padding(12, 8, 12, 8)
               ).Background(SubtleFill).CornerRadius(8).WithBorder(DividerStroke, 1).Margin(12, 4, 12, 4)
@@ -369,13 +375,13 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
 
             menuItems.Add(MenuSeparator());
             menuItems.Add(MenuItem("Thinking") with { IsEnabled = false, Padding = headerPad, FontWeight = headerWeight });
-            foreach (var r in s_reasoningOptions)
+            foreach (var r in ReasoningOptions())
             {
                 var name = r;
                 menuItems.Add(RadioMenuItem(
                     name,
                     "reasoning",
-                    isChecked: name == s_reasoningOptions[0],
+                    isChecked: name == ReasoningOptions()[0],
                     onClick: () => { /* not yet wired */ }));
             }
 

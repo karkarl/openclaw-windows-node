@@ -1,4 +1,4 @@
-namespace ChatSample.Chat.Model;
+namespace OpenClaw.Chat;
 
 public enum ChatThreadStatus
 {
@@ -78,18 +78,21 @@ public record ChatTimelineItem(
 public record ChatPermissionRequest(string RequestId, string PermissionKind, string ToolName, string Detail);
 
 public record ChatTimelineState(
-    List<ChatTimelineItem> Entries,
+    System.Collections.Immutable.ImmutableList<ChatTimelineItem> Entries,
     bool TurnActive,
     int NextId,
     string? ActiveAssistantId,
     string? ActiveReasoningId,
     string? ActiveToolCallId,
     string? CurrentIntent,
-    HashSet<string> LocalNonces,
+    System.Collections.Immutable.ImmutableHashSet<string> LocalNonces,
     bool HistoryLoaded = false,
     ChatPermissionRequest? PendingPermission = null)
 {
-    public static ChatTimelineState Initial() => new([], false, 1, null, null, null, null, []);
+    public static ChatTimelineState Initial() => new(
+        System.Collections.Immutable.ImmutableList<ChatTimelineItem>.Empty,
+        false, 1, null, null, null, null,
+        System.Collections.Immutable.ImmutableHashSet<string>.Empty);
 }
 
 public record ChatHistoryPage(ChatEvent[] Events, int NextSince, int PrevBefore, bool HasMore);

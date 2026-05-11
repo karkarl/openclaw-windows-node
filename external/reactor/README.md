@@ -1,6 +1,8 @@
 # Vendored Microsoft.UI.Reactor
 
-This directory contains a vendored snapshot of [`microsoft/microsoft-ui-reactor`](https://github.com/microsoft/microsoft-ui-reactor) plus the chat sample's `Chat.Model` and `Chat.UI` projects from `samples/apps/chat`. It is consumed by `OpenClaw.Tray.WinUI` to render the native chat UI (replacing the previous WebView2-hosted gateway web client).
+This directory contains a vendored snapshot of [`microsoft/microsoft-ui-reactor`](https://github.com/microsoft/microsoft-ui-reactor) — the declarative WinUI framework used by `OpenClaw.Tray.WinUI` to render the native chat UI (replacing the previous WebView2-hosted gateway web client).
+
+The chat-specific projects (`OpenClaw.Chat.Model` / `OpenClaw.Chat.UI`) originally started as the upstream `samples/apps/chat/` projects but have since been adopted into our own source tree under `src/` and are no longer treated as samples.
 
 ## Why vendored?
 
@@ -20,11 +22,16 @@ external/reactor/
     Reactor/                       Core declarative UI framework
     Reactor.Analyzers/             Roslyn analyzers (netstandard2.0, bundled)
     Reactor.Localization.Generator/  Source generator for .resw → strongly-typed accessors
-  samples/apps/chat/
-    Chat.Model/                    Provider-neutral chat state, reducer, IChatDataProvider
-    Chat.UI/                       Reusable Reactor chat components (Timeline, InputBar, etc.)
   Directory.Build.props            (vendored from upstream)
   Directory.Build.targets          (vendored from upstream)
+```
+
+The chat data + UI projects live in our own `src/` tree:
+
+```
+src/
+  OpenClaw.Chat.Model/             Provider-neutral chat state, reducer, IChatDataProvider
+  OpenClaw.Chat.UI/                Reactor chat components (SessionHeader, etc.)
 ```
 
 ## Local edits
@@ -32,8 +39,9 @@ external/reactor/
 A minimal set of edits has been applied so the vendored projects build cleanly inside this repo:
 
 - **TFM**: `Reactor.csproj` bumped from `net9.0-windows10.0.22621.0` to `net10.0-windows10.0.22621.0` to match the rest of this repository (which targets net10).
+- **`MarkdownBuilder.LeaveLink` LinkBuilder hook wired** (`src/Reactor/Markdown/MarkdownBuilder.cs`): the upstream snapshot declared `MarkdownOptions.LinkBuilder` (TASK-048) but never invoked it — `LeaveLink` always emitted a clickable `RichTextHyperlink`. The local edit (a) hands the captured inline elements + URI to `LinkBuilder` when set, and (b) tightens the callback type from `Func<Element[], Uri, Element>` to `Func<RichTextInline[], Uri, RichTextInline>` so the override slots into the inline run buffer correctly. OpenClawTray uses this hook to render untrusted assistant Markdown links as inert `RichTextRun` plain text.
 
-No other source files have been modified. Keep edits minimal — when refreshing from upstream, re-apply only the TFM bump above.
+When refreshing from upstream, re-apply these edits.
 
 ## Refreshing from upstream
 
@@ -41,8 +49,8 @@ No other source files have been modified. Keep edits minimal — when refreshing
 # 1. Pull a fresh clone of the upstream repo somewhere outside this tree.
 git clone https://github.com/microsoft/microsoft-ui-reactor.git D:\reactor-chat\reactor-chat
 
-# 2. Re-run the vendor copy (mirrors src/Reactor*, samples/apps/chat/{Chat.Model,Chat.UI},
-#    Directory.Build.{props,targets}, LICENSE). bin/obj are stripped.
+# 2. Mirror src/Reactor*, Directory.Build.{props,targets}, LICENSE into
+#    external/reactor/. bin/obj are stripped.
 
 # 3. Re-apply the TFM bump in src/Reactor/Reactor.csproj
 #    (net9.0-windows10.0.22621.0 → net10.0-windows10.0.22621.0).
@@ -50,6 +58,4 @@ git clone https://github.com/microsoft/microsoft-ui-reactor.git D:\reactor-chat\
 # 4. dotnet restore && ./build.ps1
 ```
 
-## Reuse contract
-
-`Chat.UI` only depends on `Chat.Model` plus Reactor/WinUI APIs — no app-specific transports or services. To wire the UI to the OpenClaw gateway, see `src/OpenClaw.Tray.WinUI/Chat/OpenClawChatDataProvider.cs`, which adapts `OpenClawGatewayClient` events into `ChatThread` / `ChatEvent` / `ChatTimelineState`.
+The `OpenClaw.Chat.Model` / `OpenClaw.Chat.UI` projects in `src/` are NOT refreshed from upstream automatically — they are part of our codebase and may diverge freely.

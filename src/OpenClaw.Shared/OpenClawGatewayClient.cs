@@ -1080,9 +1080,12 @@ public class OpenClawGatewayClient : WebSocketClientBase
             }
             else if (root.TryGetProperty("payload", out var wizPayload))
             {
-                // Log the payload kind for debugging
-                var wizardPayloadText = TokenSanitizer.Sanitize(wizPayload.ToString());
-                _logger.Info($"Wizard response payload kind={wizPayload.ValueKind}, raw={wizardPayloadText[..Math.Min(8000, wizardPayloadText.Length)]}");
+                // HIGH: never log the wizard payload body — even after token
+                // sanitisation it can include prompts, tool args, and chat
+                // content. Log shape only; full payload is available in the
+                // gateway's own server-side logs if engineering needs it.
+                var wizardPayloadLen = wizPayload.ValueKind == JsonValueKind.Undefined ? 0 : wizPayload.GetRawText().Length;
+                _logger.Info($"Wizard response payload kind={wizPayload.ValueKind} len={wizardPayloadLen}");
                 wizardCompletion.TrySetResult(wizPayload.Clone());
             }
             else
@@ -1859,9 +1862,15 @@ public class OpenClawGatewayClient : WebSocketClientBase
     {
         if (!root.TryGetProperty("payload", out var payload)) return;
 
-        // Trace inbound agent events so we can verify tool-card pipeline
-        // end-to-end (no other code path emits ``agent`` to the log).
-        try { _logger.Debug($"Agent event received: {root.GetRawText()[..Math.Min(2000, root.GetRawText().Length)]}"); } catch { }
+        // HIGH: never log raw agent event JSON — it can carry prompts,
+        // tool args/outputs, and URLs. Log shape only (type + length).
+        try
+        {
+            var rawLen = root.GetRawText().Length;
+            var streamHint = payload.TryGetProperty("stream", out var sh) ? sh.GetString() ?? "" : "";
+            _logger.Debug($"Agent event received: stream={streamHint} len={rawLen}");
+        }
+        catch { }
 
         // sessionKey is inside payload, not root
         var sessionKey = "unknown";
@@ -1989,7 +1998,10 @@ public class OpenClawGatewayClient : WebSocketClientBase
             Label = label
         };
 
-        _logger.Info($"Tool: {toolName} ({phase}) — {label}");
+        // HIGH: the activity Label may include user-provided values
+        // (commands, queries, file paths, URLs from tool args). Log only
+        // the tool name + phase — the label is for UI consumption.
+        _logger.Info($"Tool: {toolName} ({phase})");
         ActivityChanged?.Invoke(this, activity);
 
         // Update tracked session
@@ -2001,8 +2013,11 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
     private void HandleChatEvent(JsonElement root)
     {
+        // HIGH 4: never log chat content. Log shape only — the raw payload
+        // can include user prompts, assistant text, tool output, and even
+        // bearer tokens routed through the gateway in some flows.
         var rawText = root.GetRawText();
-        _logger.Debug($"Chat event received: {rawText[..Math.Min(2000, rawText.Length)]}");
+        _logger.Debug($"Chat event received: len={rawText.Length}");
         
         if (!root.TryGetProperty("payload", out var payload)) return;
 
@@ -2041,7 +2056,9 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
                         if (role == "assistant" && string.Equals(state, "final", StringComparison.OrdinalIgnoreCase))
                         {
-                            _logger.Info($"Assistant response: {text[..Math.Min(100, text.Length)]}...");
+                            // HIGH 4: log shape only — content previously
+                            // surfaced in the operator log.
+                            _logger.Info($"Assistant response: role={role} state={state} len={text.Length}");
                             EmitChatNotification(text);
                         }
                     }
@@ -2062,7 +2079,8 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
                 if (role == "assistant")
                 {
-                    _logger.Info($"Assistant response (legacy): {text[..Math.Min(100, text.Length)]}");
+                    // HIGH 4: log shape only.
+                    _logger.Info($"Assistant response (legacy): role={role} state={state} len={text.Length}");
                     EmitChatNotification(text);
                 }
             }

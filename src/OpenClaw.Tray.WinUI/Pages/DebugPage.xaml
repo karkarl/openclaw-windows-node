@@ -108,10 +108,11 @@
             <Expander x:Name="OverridesExpander" IsExpanded="True"
                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <Expander.Header>
-                    <TextBlock Text="Debug Overrides" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                    <TextBlock x:Uid="DebugPage_TextBlock_OverridesHeader" Text="Debug Overrides" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                 </Expander.Header>
                 <StackPanel Spacing="12" Padding="4">
-                    <TextBlock Text="Override the global 'Use standard Gateway Chat interface' setting per chat container. Resets when the app restarts."
+                    <TextBlock x:Uid="DebugPage_TextBlock_OverridesCaption"
+                               Text="Override the global 'Use standard Gateway Chat interface' setting per chat container. Resets when the app restarts."
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap"/>
@@ -124,25 +125,25 @@
                             <RowDefinition/>
                             <RowDefinition/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Hub Chat tab UI:"
+                        <TextBlock x:Uid="DebugPage_TextBlock_HubChatLabel" Grid.Row="0" Grid.Column="0" Text="Hub Chat tab UI:"
                                    VerticalAlignment="Center"/>
                         <ComboBox Grid.Row="0" Grid.Column="1" x:Name="HubChatOverrideCombo"
                                   HorizontalAlignment="Stretch"
                                   AutomationProperties.AutomationId="DebugPageHubChatOverride"
                                   SelectionChanged="OnHubChatOverrideChanged">
-                            <ComboBoxItem Content="No override" Tag="NoOverride"/>
-                            <ComboBoxItem Content="Force Gateway Chat UI" Tag="ForceLegacy"/>
-                            <ComboBoxItem Content="Force Companion Chat UI" Tag="ForceNative"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_NoOverride_Hub" Content="No override" Tag="NoOverride"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_ForceLegacy_Hub" Content="Force Gateway Chat UI" Tag="ForceLegacy"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_ForceNative_Hub" Content="Force Companion Chat UI" Tag="ForceNative"/>
                         </ComboBox>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Tray Chat popup UI:"
+                        <TextBlock x:Uid="DebugPage_TextBlock_TrayChatLabel" Grid.Row="1" Grid.Column="0" Text="Tray Chat popup UI:"
                                    VerticalAlignment="Center"/>
                         <ComboBox Grid.Row="1" Grid.Column="1" x:Name="TrayChatOverrideCombo"
                                   HorizontalAlignment="Stretch"
                                   AutomationProperties.AutomationId="DebugPageTrayChatOverride"
                                   SelectionChanged="OnTrayChatOverrideChanged">
-                            <ComboBoxItem Content="No override" Tag="NoOverride"/>
-                            <ComboBoxItem Content="Force Gateway Chat UI" Tag="ForceLegacy"/>
-                            <ComboBoxItem Content="Force Companion Chat UI" Tag="ForceNative"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_NoOverride_Tray" Content="No override" Tag="NoOverride"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_ForceLegacy_Tray" Content="Force Gateway Chat UI" Tag="ForceLegacy"/>
+                            <ComboBoxItem x:Uid="DebugPage_ChatOverride_ForceNative_Tray" Content="Force Companion Chat UI" Tag="ForceNative"/>
                         </ComboBox>
                     </Grid>
                 </StackPanel>

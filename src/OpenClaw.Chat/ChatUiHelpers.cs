@@ -1,4 +1,4 @@
-namespace ChatSample.Chat.UI;
+namespace OpenClaw.Chat;
 
 public static class Res
 {

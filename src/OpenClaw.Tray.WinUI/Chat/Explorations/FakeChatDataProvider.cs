@@ -1,6 +1,7 @@
-using ChatSample.Chat.Model;
+using OpenClaw.Chat;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -42,14 +43,14 @@ public sealed class FakeChatDataProvider : IChatDataProvider
         };
 
         _timeline = new ChatTimelineState(
-            Entries: entries,
+            Entries: entries.ToImmutableList(),
             TurnActive: false,
             NextId: _nextId,
             ActiveAssistantId: null,
             ActiveReasoningId: null,
             ActiveToolCallId: null,
             CurrentIntent: null,
-            LocalNonces: new HashSet<string>(),
+            LocalNonces: ImmutableHashSet<string>.Empty,
             HistoryLoaded: true,
             PendingPermission: null);
     }
@@ -92,7 +93,7 @@ public sealed class FakeChatDataProvider : IChatDataProvider
             new($"a{_nextId++}", ChatTimelineItemKind.Assistant,
                 "Demo response — no real backend connected. Use the panel toggles to compare styling."),
         };
-        _timeline = _timeline with { Entries = entries, NextId = _nextId };
+        _timeline = _timeline with { Entries = entries.ToImmutableList(), NextId = _nextId };
         RaiseChanged();
         return Task.CompletedTask;
     }

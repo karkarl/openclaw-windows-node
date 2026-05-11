@@ -16,7 +16,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenClaw.Shared\OpenClaw.Shared.csproj" />
-    <ProjectReference Include="..\..\external\reactor\samples\apps\chat\Chat.Model\Chat.Model.csproj" />
+    <!-- OpenClaw.Chat is now Windows-targeted (it includes the Reactor UI
+         types). The test project targets pure net10.0, so we cannot take a
+         ProjectReference. Compile only the model-layer files directly.
+         Also vendor a tiny GlobalUsings shim (just System.Text.Json.Nodes,
+         which the model uses) so we don't pull in the WinUI/Reactor usings
+         from src\OpenClaw.Chat\GlobalUsings.cs. -->
+    <Compile Include="..\..\src\OpenClaw.Chat\ChatModels.cs" Link="Chat\ChatModels.cs" />
+    <Compile Include="..\..\src\OpenClaw.Chat\ChatTimelineReducer.cs" Link="Chat\ChatTimelineReducer.cs" />
+    <Using Include="System.Text.Json.Nodes" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="Zeroconf" Version="3.6.11" />
   </ItemGroup>
@@ -24,6 +32,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Chat\IChatGatewayBridge.cs" Link="Chat\IChatGatewayBridge.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Chat\ChatEntryMetadata.cs" Link="Chat\ChatEntryMetadata.cs" />
+    <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Chat\ChatMarkdownSanitizer.cs" Link="Chat\ChatMarkdownSanitizer.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Chat\OpenClawChatDataProvider.cs" Link="Chat\OpenClawChatDataProvider.cs" />
   </ItemGroup>
 

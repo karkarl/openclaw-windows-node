@@ -1,4 +1,4 @@
-using ChatSample.Chat.Model;
+using OpenClaw.Chat;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -201,7 +201,9 @@ public sealed partial class ChatWindow : WindowEx
         _token = token;
         _chatUrl = BuildChatUrl(_gatewayUrl, _token);
 
-        Logger.Info($"[ChatWindow] Refreshing to {_chatUrl}");
+        // HIGH 4: never log the full chat URL — its query string contains the
+        // auth token. Strip the query before logging.
+        Logger.Info($"[ChatWindow] Refreshing to {SafeLogUrl(_chatUrl)}");
 
         // If WebView2 is already up, navigate it to the refreshed URL so the user gets a
         // working chat instead of the pre-warmed (auth-failed) view.
@@ -493,5 +495,18 @@ public sealed partial class ChatWindow : WindowEx
         {
             Logger.Warn($"Failed to focus chat input: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Strip the query string (which carries <c>?token=…</c>) from a chat URL
+    /// before logging. Returns the bare scheme + authority + path so the host
+    /// is still recognisable for diagnostics.
+    /// </summary>
+    private static string SafeLogUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "(empty)";
+        if (Uri.TryCreate(url, UriKind.Absolute, out var u))
+            return u.GetLeftPart(UriPartial.Path);
+        return "(unparseable)";
     }
 }

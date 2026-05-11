@@ -1,4 +1,4 @@
-using ChatSample.Chat.Model;
+using OpenClaw.Chat;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Hosting;

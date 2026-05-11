@@ -1,7 +1,7 @@
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
-namespace ChatSample.Chat.UI;
+namespace OpenClaw.Chat;
 
 public record SessionHeaderProps(ChatThread? Session, ChatTimelineState Timeline);
 

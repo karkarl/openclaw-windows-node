@@ -45,6 +45,11 @@ public sealed partial class ChatPage : Page
 
         if (_hub is not null)
             _hub.SettingsSaved -= OnSettingsSaved;
+
+        // MEDIUM 6: detach the static debug-override subscription so that
+        // an unloaded ChatPage doesn't keep responding to overrides changes
+        // (the page keeps the static handler alive otherwise).
+        OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed -= OnDebugOverrideChanged;
     }
 
     public void Initialize(HubWindow hub)
@@ -83,13 +88,31 @@ public sealed partial class ChatPage : Page
     {
         if (_hub?.Settings is null) return;
 
+        // HIGH 3: re-resolve the chat URL from the current settings on every
+        // surface application — _chatUrl was previously computed once in
+        // Initialize() and never refreshed, so SettingsSaved (e.g. token /
+        // gateway URL change) would leave the WebView pointing at a stale URL.
+        var freshUrl = TryComputeChatUrl(_hub.Settings);
+        var urlChanged = !string.Equals(freshUrl, _chatUrl, StringComparison.Ordinal);
+        if (freshUrl is not null)
+            _chatUrl = freshUrl;
+
         var useLegacy = OpenClawTray.Chat.DebugChatSurfaceOverrides.ResolveUseLegacy(
             OpenClawTray.Chat.DebugChatSurfaceOverrides.HubChat,
             _hub.Settings.UseLegacyWebChat);
         if (useLegacy)
-            ShowWebViewSurface();
+            ShowWebViewSurface(forceNavigate: urlChanged);
         else
             ShowReactorSurface();
+    }
+
+    private static string? TryComputeChatUrl(SettingsManager settings)
+    {
+        var gatewayUrl = settings.GetEffectiveGatewayUrl();
+        if (string.IsNullOrEmpty(gatewayUrl)) return null;
+        return GatewayChatUrlBuilder.TryBuildChatUrl(gatewayUrl, settings.Token, out var url, out _)
+            ? url
+            : null;
     }
 
     private void ShowReactorSurface()
@@ -125,7 +148,7 @@ public sealed partial class ChatPage : Page
         _reactorHost = ((Window)_hub!).MountReactorChat(ChatHost, provider);
     }
 
-    private void ShowWebViewSurface()
+    private void ShowWebViewSurface(bool forceNavigate = false)
     {
         // Tear down Reactor (so the WebView2 owns the row) and (re)init WebView2.
         _webViewMode = true;
@@ -142,11 +165,14 @@ public sealed partial class ChatPage : Page
 
         if (_webViewInitialized)
         {
-            // Already initialized — just show it (or re-navigate home).
+            // Already initialized — show it. The caller's `forceNavigate`
+            // flag is informational; we always re-navigate so a settings
+            // change (token / gateway URL) reaches the WebView.
             ErrorPanel.Visibility = Visibility.Collapsed;
             WebView.Visibility = Visibility.Visible;
             if (!string.IsNullOrEmpty(_chatUrl))
                 WebView.CoreWebView2?.Navigate(_chatUrl);
+            _ = forceNavigate; // explicit: parameter is currently advisory
             return;
         }
 
