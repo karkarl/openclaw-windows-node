@@ -1,16 +1,17 @@
 {
-  "last_run": "2026-05-11T01:17:00Z",
-  "last_run_id": "25645245943",
+  "last_run": "2026-05-11T13:20:00Z",
+  "last_run_id": "25672662361",
   "monthly_summary_issue": 254,
   "monthly_summary_month": "2026-05",
   "backlog_cursor": {
     "issues": 302,
-    "prs": 302
+    "prs": 310
   },
   "open_repo_assist_prs": [
     {"number": 296, "title": "[Repo Assist] feat: add ExecApprovalsEvaluator policy evaluation step", "branch": "repo-assist/feat-exec-approvals-evaluator", "note": "Based on PR #295 (ExecApprovalsStore). Merge #295 first."},
     {"number": 301, "title": "[Repo Assist] fix(wsl): add mountFsTab=false + [time] section to wsl.conf; make IsAlreadyConfigured probe section-aware", "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "note": "Addresses issue #281 items #5 and #6. 3 new tests."},
-    {"number": null, "title": "[Repo Assist] fix(security): stop leaking ex.Message in WindowsNodeClient, DeviceCapability, approval prompts", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "note": "Created this run (2026-05-11). Fixes 4 remaining ex.Message leaks not covered by merged #294."}
+    {"number": 306, "title": "[Repo Assist] fix(security): stop leaking ex.Message in node client, device capability, and approval prompts", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "note": "Created 2026-05-11 run. Fixes 4 remaining ex.Message leaks not covered by merged #294."},
+    {"number": null, "title": "[Repo Assist] chore(deps): align Microsoft.Windows.SDK.BuildTools to 10.0.28000.1839 in CommandPalette", "branch": "repo-assist/eng-cmdpal-pkg-version-align-2026-05-11", "note": "Created 2026-05-11 run. PR #282 updated main tray projects but missed CommandPalette Directory.Packages.props."}
   ],
   "comments_made": {
     "246": {"comment_id": "4357284092", "date": "2026-05-01"},
@@ -20,48 +21,46 @@
     "281": {"date": "2026-05-06", "note": "Confirmed isolation bug: OPENCLAW_TRAY_APPDATA_DIR vs OPENCLAW_TRAY_DATA_DIR"},
     "283": {"date": "2026-05-06", "note": "Confirmed root cause: missing ExtendsContentIntoTitleBar + repeated TryBringToFront. Linked to PR #285."},
     "288": {"date": "2026-05-07", "note": "Review comment: HttpClient anti-pattern, dependency surface, TtsCapability conflict"},
-    "99": {"date": "2026-05-10", "note": "Voice mode architecture context: STT/TTS provider structure from PR #288, WebView bridge status, WinRT built-in STT suggestion"}
+    "99": {"date": "2026-05-10", "note": "Voice mode architecture context: STT/TTS provider structure from PR #288, WebView bridge status, WinRT built-in STT suggestion"},
+    "310": {"date": "2026-05-11", "note": "Review comment: non-atomic TryClearDeviceToken write, Kill(entireProcessTree: false) concern, .squad docs dominate PR size"}
   },
   "fix_attempts": {
-    "wsl-cancellation-kill": {"status": "merged", "pr": 303, "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block without 'when' guard to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. Addresses issue #281 item #7. MERGED 2026-05-10."},
-    "ex-message-leaks-remaining": {"status": "pr_created", "pr": "TBD", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "date": "2026-05-11", "description": "WindowsNodeClient (x2), DeviceCapability SafeCollect/SafeCollectAsync (x2), ExecApprovalPromptService, UrlNavigationApprovalService. These 4 files still leaked ex.Message after merged PR #294."},
-    "nuget-cache-key": {"status": "issue_filed", "issue": 302, "branch": "repo-assist/eng-nuget-cache-key-fix-2026-05-10", "date": "2026-05-10", "description": "Filed as issue #302 because CI lacks workflow permission to push ci.yml. Issue documents the fix and patch for human PR creation."},
+    "cmdpal-pkg-version-align": {"status": "pr_created", "pr": "TBD", "branch": "repo-assist/eng-cmdpal-pkg-version-align-2026-05-11", "date": "2026-05-11", "description": "Align CommandPalette Directory.Packages.props Microsoft.Windows.SDK.BuildTools from 10.0.26100.4188 to 10.0.28000.1839. PR #282 missed this file."},
+    "wsl-cancellation-kill": {"status": "merged", "pr": 303, "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block without 'when' guard to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. MERGED 2026-05-10."},
+    "ex-message-leaks-remaining": {"status": "pr_created", "pr": 306, "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "date": "2026-05-11", "description": "WindowsNodeClient (x2), DeviceCapability SafeCollect/SafeCollectAsync (x2), ExecApprovalPromptService, UrlNavigationApprovalService."},
+    "nuget-cache-key": {"status": "issue_closed", "issue": 302, "date": "2026-05-10", "description": "Filed as issue #302; closed by steipete as completed (fix applied manually)."},
     "wsl-conf-section-probe": {"status": "pr_created", "pr": 301, "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "date": "2026-05-09", "description": "Added mountFsTab=false and [time] useWindowsTimezone=true to wsl.conf template. Made IsAlreadyConfiguredAsync probe section-aware with awk. 3 new tests."},
-    "diagnostic-token-sanitization": {"status": "merged", "pr": 300, "branch": "repo-assist/fix-diagnostic-token-sanitization-2026-05-09", "date": "2026-05-09", "description": "TokenSanitizer.Sanitize added to DiagnosticFormatter.SanitizeForDiagnostic. 24 new tests. MERGED 2026-05-10."},
-    "exec-approvals-evaluator": {"status": "pr_created", "pr": 296, "branch": "repo-assist/feat-exec-approvals-evaluator", "date": "2026-05-08", "description": "ExecApprovalsEvaluator (policy evaluation phase), ExecApprovalsAllowlistMatcher, ExecApprovalV2EvaluationOutcome. 33 new tests. Based on PR #295."},
-    "canvas-proxy-exception-message-leaks": {"status": "merged", "pr": 294, "branch": "repo-assist/fix-canvas-proxy-exception-message-leaks-2026-05-08", "date": "2026-05-08", "description": "CanvasCapability and BrowserProxyCapability ex.Message leaks fixed. MERGED 2026-05-10."},
-    "capability-ex-message-leaks": {"status": "merged", "pr": 291, "branch": "repo-assist/fix-capability-exception-message-leaks-2026-05-07", "date": "2026-05-07"},
+    "diagnostic-token-sanitization": {"status": "merged", "pr": 300, "date": "2026-05-09"},
+    "exec-approvals-evaluator": {"status": "pr_created", "pr": 296, "branch": "repo-assist/feat-exec-approvals-evaluator", "date": "2026-05-08", "description": "ExecApprovalsEvaluator (policy evaluation phase). 33 new tests. Based on PR #295."},
+    "canvas-proxy-exception-message-leaks": {"status": "merged", "pr": 294, "date": "2026-05-08"},
+    "capability-ex-message-leaks": {"status": "merged", "pr": 291, "date": "2026-05-07"},
     "perf-env-sanitizer-vectorize": {"status": "merged", "pr": 289, "date": "2026-05-07"},
     "improve-ssh-constant-options": {"status": "merged", "pr": 290, "date": "2026-05-07"},
     "perf-precompile-regexes": {"status": "merged", "pr": 286, "date": "2026-05-06"},
     "sdk-buildtools-28000": {"status": "merged", "pr": 282, "date": "2026-05-06"},
-    "ps-encoded-command-abbreviations": {"status": "merged", "pr": 270, "date": "2026-05-04"},
-    "exec-v2-policy-handler": {"status": "closed_not_merged", "pr": 261, "date": "2026-05-02"},
-    "mcp-input-schemas": {"status": "closed_not_merged", "pr": 262, "date": "2026-05-02"}
+    "ps-encoded-command-abbreviations": {"status": "merged", "pr": 270, "date": "2026-05-04"}
   },
   "notes": [
     "PR #295 (AlexAlves87) ExecApprovalsStore read path — open, needs review/merge before PR #296",
     "PR #297 (AlexAlves87) refactor: extract CommandCenterStateBuilder from App.xaml.cs — open, labelled refactor",
     "PR #298 (MythiliMur) Add MXC Sandbox example — open, labelled enhancement+documentation",
-    "PR #304 (ranjeshj) feat: gateway/connection registry architecture — MERGED 2026-05-10",
-    "PR #305 (ranjeshj) fix: setup flow, connection page, and chat token bugs — open, needs review",
+    "PR #305 (ranjeshj) fix: setup flow, connection page, and chat token bugs — MERGED 2026-05-11",
+    "PR #307 (indierawk2k2/Copilot) fix(onboarding): verify bootstrap message rendered before consuming one-shot gate — MERGED 2026-05-11",
+    "PR #308 (dependabot) gh-aw-actions 0.71.3 -> 0.73.0 — open, needs merge",
+    "PR #310 (indierawk2k2) feat: WSL gateway uninstall — large draft PR, CI green, Repo Assist commented 2026-05-11",
     "PR #296 (Repo Assist) ExecApprovalsEvaluator — open draft, depends on PR #295",
     "PR #301 (Repo Assist) fix(wsl): wsl.conf missing settings + section-aware probe — open draft",
-    "PR TBD (Repo Assist) fix(security): remaining ex.Message leaks — created 2026-05-11, branch repo-assist/fix-ex-message-leaks-remaining-2026-05-11",
-    "Issue #302 (Repo Assist): NuGet cache key — filed as issue because CI lacks workflow permission; needs human to create PR from patch",
-    "Issue #281 remaining items: #3 (operator pairing auth), #8 (DeviceToken vs NodeDeviceToken) — items #4,#5,#6,#7 all now addressed by merged PRs #300,#303 and open PR #301",
-    "Issue #191 open as tracker for remaining bridge integration (gateway SPA listener, openclaw/openclaw#69633)",
-    "Issue #235 (Dependabot bundle) still open — suggest closing",
-    "ExecApprovals pipeline progress: input validation (master), normalization (master), store read path (PR #295), evaluator (PR #296), coordinator/handler (future)",
-    "PR #288 (RBrid) audio: Whisper STT + Piper TTS — MERGED 2026-05-07",
-    "PR #294 (Repo Assist) CanvasCapability/BrowserProxyCapability security fix — MERGED 2026-05-10",
-    "PR #300 (Repo Assist) TokenSanitizer in DiagnosticFormatter — MERGED 2026-05-10",
-    "PR #303 (Repo Assist) WslExeCommandRunner cancellation kill — MERGED 2026-05-10"
+    "PR #306 (Repo Assist) fix(security): remaining ex.Message leaks — open draft",
+    "PR TBD (Repo Assist) cmdpal version align — created 2026-05-11, branch repo-assist/eng-cmdpal-pkg-version-align-2026-05-11",
+    "Issue #281 remaining items: #3 (operator pairing auth), #8 (DeviceToken vs NodeDeviceToken)",
+    "Issue #191 open as tracker for remaining bridge integration",
+    "ExecApprovals pipeline: input validation (master), normalization (master), store read path (PR #295), evaluator (PR #296), coordinator/handler (future)",
+    "PR #310 review notes: TryClearDeviceToken uses non-atomic File.WriteAllText (should be temp+rename); proc.Kill(entireProcessTree: false) may leave WSL child processes alive"
   ],
   "checked_off_by_maintainer": [],
   "test_baseline": {
     "shared_tests": "exit 0 (1438+ passed, 22 skipped, 4 pre-existing failures)",
     "tray_tests": "exit 0 (697+ passed, 1 skipped, 7 pre-existing failures)",
-    "note": "Both test suites run on Linux. build.ps1 requires Windows. Baselines from this run (2026-05-10)."
+    "note": "Both test suites run on Linux. build.ps1 requires Windows. Baselines from 2026-05-10."
   }
 }
