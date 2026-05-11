@@ -12,9 +12,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using OpenClawTray.Chat.Explorations;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Media.Core;
-using Windows.Media.Playback;
-using Windows.Media.SpeechSynthesis;
 using Windows.UI;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
@@ -48,7 +45,8 @@ public record OpenClawChatTimelineProps(
     string UserSenderLabel = "OpenClaw Windows Tray (cli)",
     string AssistantSenderLabel = "Field",
     string? DefaultModel = null,
-    bool ShowThinkingIndicator = false);
+    bool ShowThinkingIndicator = false,
+    Func<string, Task>? OnReadAloud = null);
 
 /// <summary>
 /// OpenClaw-skinned variant of <see cref="ChatTimeline"/> from the vendored
@@ -68,14 +66,6 @@ public record OpenClawChatTimelineProps(
 public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
 {
     const double FollowThreshold = 60;
-
-    // Shared TTS resources for "Read aloud" hover action — singletons so
-    // clicking on a different message cancels the previous utterance.
-    static class ChatTtsPlayer
-    {
-        public static SpeechSynthesizer? Synth;
-        public static MediaPlayer? Player;
-    }
 
     // SECURITY (chat-rubber-duck HIGH 1 / MEDIUM 3): chat-bubble Markdown is
     // rendered with a hardened options object that:
@@ -627,22 +617,12 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             catch { /* clipboard contention — silently ignore */ }
         }
 
-        // Speak assistant text via Windows TTS. One shared MediaPlayer so
-        // a second click cancels the previous utterance instead of stacking
-        // overlapping voices.
-        static async void ReadAloud(string text)
+        async void ReadAloud(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
-            try
-            {
-                ChatTtsPlayer.Synth ??= new SpeechSynthesizer();
-                ChatTtsPlayer.Player ??= new MediaPlayer { AutoPlay = true };
-                ChatTtsPlayer.Player.Pause();
-                var stream = await ChatTtsPlayer.Synth.SynthesizeTextToStreamAsync(StripMarkdownForSpeech(text));
-                ChatTtsPlayer.Player.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
-                ChatTtsPlayer.Player.Play();
-            }
-            catch { /* TTS unavailable — silently no-op */ }
+            if (Props.OnReadAloud is not { } onReadAloud) return;
+
+            await onReadAloud(StripMarkdownForSpeech(text));
         }
 
         // Very light markdown stripper so the synthesizer doesn't read

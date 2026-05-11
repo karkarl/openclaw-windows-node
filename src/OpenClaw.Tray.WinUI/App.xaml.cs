@@ -180,6 +180,7 @@ public partial class App : Application
     
     // Node service (optional, enabled in settings)
     private NodeService? _nodeService;
+    private TextToSpeechService? _chatReadAloudTts;
     
     // Keep-alive window to anchor WinUI runtime (prevents GC/threading issues)
     private Window? _keepAliveWindow;
@@ -4326,17 +4327,25 @@ public partial class App : Application
 
     private int _ttsMuteCount;
 
-    private async Task SpeakResponseAsync(string text)
+    public Task SpeakChatTextAsync(string text) => SpeakConfiguredTextAsync(text, muteVoiceCapture: false);
+
+    private Task SpeakResponseAsync(string text) => SpeakConfiguredTextAsync(text, muteVoiceCapture: true);
+
+    private async Task SpeakConfiguredTextAsync(string text, bool muteVoiceCapture)
     {
         var voiceService = _nodeService?.VoiceService;
-        var ttsService = _nodeService?.TextToSpeech;
+        var mutedVoiceCapture = false;
         try
         {
-            if (voiceService == null || _settings == null || ttsService == null) return;
+            if (_settings == null) return;
 
-            // Increment mute counter — multiple concurrent TTS won't unmute prematurely
-            Interlocked.Increment(ref _ttsMuteCount);
-            voiceService.IsMutedForPlayback = true;
+            if (muteVoiceCapture && voiceService != null)
+            {
+                // Increment mute counter — multiple concurrent TTS won't unmute prematurely
+                Interlocked.Increment(ref _ttsMuteCount);
+                mutedVoiceCapture = true;
+                voiceService.IsMutedForPlayback = true;
+            }
 
             var speakText = text.Length > 500 ? text[..500] + "..." : text;
 
@@ -4351,6 +4360,8 @@ public partial class App : Application
                 Interrupt = true
             };
 
+            var ttsService = _nodeService?.TextToSpeech
+                ?? (_chatReadAloudTts ??= new TextToSpeechService(new AppLogger(), _settings));
             await ttsService.SpeakAsync(speakArgs);
         }
         catch (Exception ex)
@@ -4360,7 +4371,7 @@ public partial class App : Application
         finally
         {
             // Only unmute when all concurrent TTS operations have finished
-            if (voiceService != null)
+            if (mutedVoiceCapture && voiceService != null)
             {
                 await Task.Delay(300);
                 if (Interlocked.Decrement(ref _ttsMuteCount) <= 0)
@@ -4474,6 +4485,12 @@ public partial class App : Application
         {
             _nodeService?.Dispose();
             _nodeService = null;
+        });
+
+        SafeShutdownStep("chat read-aloud TTS", () =>
+        {
+            _chatReadAloudTts?.Dispose();
+            _chatReadAloudTts = null;
         });
 
         SafeShutdownStep("standalone voice service", () =>

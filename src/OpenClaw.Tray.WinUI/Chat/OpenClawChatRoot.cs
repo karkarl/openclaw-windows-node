@@ -21,11 +21,16 @@ public sealed class OpenClawChatRoot : Component
 {
     private readonly IChatDataProvider _provider;
     private readonly string? _initialThreadId;
+    private readonly Func<string, Task>? _onReadAloud;
 
-    public OpenClawChatRoot(IChatDataProvider provider, string? initialThreadId = null)
+    public OpenClawChatRoot(
+        IChatDataProvider provider,
+        string? initialThreadId = null,
+        Func<string, Task>? onReadAloud = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _initialThreadId = initialThreadId;
+        _onReadAloud = onReadAloud;
     }
 
     public override Element Render()
@@ -195,7 +200,8 @@ public sealed class OpenClawChatRoot : Component
                 UserSenderLabel: "OpenClaw Windows Tray (cli)",
                 AssistantSenderLabel: assistantSenderLabel,
                 DefaultModel: selectedThread.Model,
-                ShowThinkingIndicator: showThinking));
+                ShowThinkingIndicator: showThinking,
+                OnReadAloud: _onReadAloud));
 
         // Distinct list of channel labels (= thread titles) — feeds the
         // composer's first ComboBox so the user can switch chats from the

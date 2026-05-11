@@ -135,7 +135,9 @@ public sealed partial class ChatPage : Page
             return;
         }
 
-        var provider = (App.Current as App)?.ChatProvider;
+        var app = App.Current as App;
+        var provider = app?.ChatProvider;
+        Func<string, Task>? readAloud = app is null ? null : app.SpeakChatTextAsync;
         if (provider is null)
         {
             PlaceholderPanel.Visibility = Visibility.Visible;
@@ -145,7 +147,10 @@ public sealed partial class ChatPage : Page
 
         PlaceholderPanel.Visibility = Visibility.Collapsed;
         ChatHost.Visibility = Visibility.Visible;
-        _reactorHost = ((Window)_hub!).MountReactorChat(ChatHost, provider);
+        _reactorHost = ((Window)_hub!).MountReactorChat(
+            ChatHost,
+            provider,
+            onReadAloud: readAloud);
     }
 
     private void ShowWebViewSurface(bool forceNavigate = false)

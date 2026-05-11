@@ -37,14 +37,15 @@ public static class ReactorChatHostExtensions
         this Window window,
         Border target,
         IChatDataProvider provider,
-        string? initialThreadId = null)
+        string? initialThreadId = null,
+        Func<string, Task>? onReadAloud = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(provider);
 
         var host = new ReactorHost(window) { ContentTarget = target };
-        host.Mount(new OpenClawChatRoot(provider, initialThreadId));
+        host.Mount(new OpenClawChatRoot(provider, initialThreadId, onReadAloud));
         return host;
     }
 }

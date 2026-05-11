@@ -343,7 +343,9 @@ public sealed partial class ChatWindow : WindowEx
             return;
         }
 
-        var provider = (App.Current as App)?.ChatProvider;
+        var app = App.Current as App;
+        var provider = app?.ChatProvider;
+        Func<string, Task>? readAloud = app is null ? null : app.SpeakChatTextAsync;
         if (provider is null)
         {
             PlaceholderPanel.Visibility = Visibility.Visible;
@@ -353,7 +355,10 @@ public sealed partial class ChatWindow : WindowEx
 
         PlaceholderPanel.Visibility = Visibility.Collapsed;
         ChatHost.Visibility = Visibility.Visible;
-        _reactorHost = ((Window)this).MountReactorChat(ChatHost, provider);
+        _reactorHost = ((Window)this).MountReactorChat(
+            ChatHost,
+            provider,
+            onReadAloud: readAloud);
     }
 
     private static string BuildChatUrl(string gatewayUrl, string token)
