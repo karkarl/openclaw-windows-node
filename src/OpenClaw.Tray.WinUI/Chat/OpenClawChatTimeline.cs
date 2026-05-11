@@ -700,9 +700,13 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 HoverIcon(entryId, "copy", "\uE8C8", "\uE73E",
                     LocalizationHelper.GetString("Chat_Assistant_Action_Copy"),
                     () => { CopyToClipboard(entryText); AckAction(entryId, "copy"); }).VAlign(VerticalAlignment.Center),
-                HoverIcon(entryId, "delete", "\uE74D", "\uE73E",
-                    LocalizationHelper.GetString("Chat_User_Action_Delete"),
-                    () => { /* TODO: wire to provider */ AckAction(entryId, "delete"); }).VAlign(VerticalAlignment.Center),
+                // TODO: Restore this delete action once the chat provider can remove
+                // prompts from both the local timeline and gateway history. Leaving
+                // the no-op action visible is misleading because AckAction flashes
+                // success even though nothing is deleted.
+                // HoverIcon(entryId, "delete", "\uE74D", "\uE73E",
+                //     LocalizationHelper.GetString("Chat_User_Action_Delete"),
+                //     () => { /* TODO: wire to provider */ AckAction(entryId, "delete"); }).VAlign(VerticalAlignment.Center),
             };
 
             if (showSender && !string.IsNullOrEmpty(sender))

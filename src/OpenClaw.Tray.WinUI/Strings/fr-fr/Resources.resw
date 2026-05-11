@@ -2831,6 +2831,9 @@ Sur votre hôte passerelle (Mac/Linux), exécutez :
   <data name="Chat_User_Action_Delete" xml:space="preserve">
     <value>Supprimer le message</value>
   </data>
+  <data name="Chat_TruncationMarkerFormat" xml:space="preserve">
+    <value> … [{0} octets tronqués]</value>
+  </data>
   <data name="Chat_Permission_Allow" xml:space="preserve">
     <value>Autoriser</value>
   </data>

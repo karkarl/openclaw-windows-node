@@ -2831,6 +2831,9 @@
   <data name="Chat_User_Action_Delete" xml:space="preserve">
     <value>刪除訊息</value>
   </data>
+  <data name="Chat_TruncationMarkerFormat" xml:space="preserve">
+    <value> … [已截斷 {0} 位元組]</value>
+  </data>
   <data name="Chat_Permission_Allow" xml:space="preserve">
     <value>允許</value>
   </data>

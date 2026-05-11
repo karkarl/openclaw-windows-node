@@ -14,7 +14,11 @@ namespace OpenClawTray.Chat;
 // the notification text identifiable in tests without pulling in WinAppSDK.
 internal static class LocalizationHelper
 {
-    public static string GetString(string resourceKey) => resourceKey;
+    public static string GetString(string resourceKey) => resourceKey switch
+    {
+        "Chat_TruncationMarkerFormat" => " … [{0} bytes truncated]",
+        _ => resourceKey
+    };
 }
 #endif
 
@@ -1216,9 +1220,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
         // Binary search for the largest char-count whose UTF-8 byte count
         // fits in MaxEntryTextBytes minus a generous margin for the marker.
-        const string markerPrefix = " … [";
-        const string markerSuffix = " bytes truncated]";
-        var marker = $"{markerPrefix}{actual}{markerSuffix}";
+        var marker = string.Format(LocalizationHelper.GetString("Chat_TruncationMarkerFormat"), actual);
         int budget = MaxEntryTextBytes - enc.GetByteCount(marker);
         if (budget <= 0) budget = MaxEntryTextBytes / 2;
 

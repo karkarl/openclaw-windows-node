@@ -20,6 +20,7 @@ public sealed class OpenClawChatCoordinator : IDisposable
     private string? _lastManualSpeechText;
     private DateTimeOffset _lastManualSpeechAt;
     private int _ttsMuteCount;
+    private bool _disposed;
 
     public OpenClawChatCoordinator(
         SettingsManager settings,
@@ -97,7 +98,7 @@ public sealed class OpenClawChatCoordinator : IDisposable
             };
 
             var ttsService = _nodeServiceAccessor()?.TextToSpeech
-                ?? (_fallbackTextToSpeech ??= new TextToSpeechService(_logger, _settings));
+                ?? GetFallbackTextToSpeechService();
             await ttsService.SpeakAsync(speakArgs).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -114,6 +115,15 @@ public sealed class OpenClawChatCoordinator : IDisposable
                     voiceService.IsMutedForPlayback = false;
                 }
             }
+        }
+    }
+
+    private TextToSpeechService GetFallbackTextToSpeechService()
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _fallbackTextToSpeech ??= new TextToSpeechService(_logger, _settings);
         }
     }
 
@@ -145,6 +155,7 @@ public sealed class OpenClawChatCoordinator : IDisposable
             fallbackTextToSpeech = _fallbackTextToSpeech;
             _provider = null;
             _fallbackTextToSpeech = null;
+            _disposed = true;
         }
 
         provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();

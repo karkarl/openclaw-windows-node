@@ -2832,6 +2832,9 @@ Voer op uw gateway-host (Mac/Linux) uit:
   <data name="Chat_User_Action_Delete" xml:space="preserve">
     <value>Bericht verwijderen</value>
   </data>
+  <data name="Chat_TruncationMarkerFormat" xml:space="preserve">
+    <value> … [{0} bytes afgekapt]</value>
+  </data>
   <data name="Chat_Permission_Allow" xml:space="preserve">
     <value>Toestaan</value>
   </data>

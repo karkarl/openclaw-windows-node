@@ -2879,6 +2879,9 @@ On your gateway host (Mac/Linux), run:
   <data name="Chat_User_Action_Delete" xml:space="preserve">
     <value>Delete message</value>
   </data>
+  <data name="Chat_TruncationMarkerFormat" xml:space="preserve">
+    <value> … [{0} bytes truncated]</value>
+  </data>
   <data name="Chat_Permission_Allow" xml:space="preserve">
     <value>Allow</value>
   </data>
