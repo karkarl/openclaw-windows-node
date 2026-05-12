@@ -1,20 +1,19 @@
 {
-  "last_run": "2026-05-11T13:20:00Z",
-  "last_run_id": "25672662361",
+  "last_run": "2026-05-12T01:10:00Z",
+  "last_run_id": "25706948178",
   "monthly_summary_issue": 254,
   "monthly_summary_month": "2026-05",
   "backlog_cursor": {
-    "issues": 302,
-    "prs": 310
+    "issues": 313,
+    "prs": 313
   },
   "open_repo_assist_prs": [
     {"number": 296, "title": "[Repo Assist] feat: add ExecApprovalsEvaluator policy evaluation step", "branch": "repo-assist/feat-exec-approvals-evaluator", "note": "Based on PR #295 (ExecApprovalsStore). Merge #295 first."},
     {"number": 301, "title": "[Repo Assist] fix(wsl): add mountFsTab=false + [time] section to wsl.conf; make IsAlreadyConfigured probe section-aware", "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "note": "Addresses issue #281 items #5 and #6. 3 new tests."},
-    {"number": 306, "title": "[Repo Assist] fix(security): stop leaking ex.Message in node client, device capability, and approval prompts", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "note": "Created 2026-05-11 run. Fixes 4 remaining ex.Message leaks not covered by merged #294."},
-    {"number": null, "title": "[Repo Assist] chore(deps): align Microsoft.Windows.SDK.BuildTools to 10.0.28000.1839 in CommandPalette", "branch": "repo-assist/eng-cmdpal-pkg-version-align-2026-05-11", "note": "Created 2026-05-11 run. PR #282 updated main tray projects but missed CommandPalette Directory.Packages.props."}
+    {"number": 306, "title": "[Repo Assist] fix(security): stop leaking ex.Message in node client, device capability, and approval prompts", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "note": "Created 2026-05-11 run. Fixes 4 remaining ex.Message leaks not covered by merged #294."}
   ],
   "comments_made": {
-    "246": {"comment_id": "4357284092", "date": "2026-05-01"},
+    "246": {"date": "2026-05-01"},
     "252": {"date": "2026-05-01"},
     "242": {"date": "2026-05-01"},
     "259": {"date": "2026-05-04", "note": "CI failure is pre-existing flaky integration test"},
@@ -22,11 +21,12 @@
     "283": {"date": "2026-05-06", "note": "Confirmed root cause: missing ExtendsContentIntoTitleBar + repeated TryBringToFront. Linked to PR #285."},
     "288": {"date": "2026-05-07", "note": "Review comment: HttpClient anti-pattern, dependency surface, TtsCapability conflict"},
     "99": {"date": "2026-05-10", "note": "Voice mode architecture context: STT/TTS provider structure from PR #288, WebView bridge status, WinRT built-in STT suggestion"},
-    "310": {"date": "2026-05-11", "note": "Review comment: non-atomic TryClearDeviceToken write, Kill(entireProcessTree: false) concern, .squad docs dominate PR size"}
+    "310": {"date": "2026-05-11", "note": "Review comment: non-atomic TryClearDeviceToken write, Kill(entireProcessTree: false) concern, .squad docs dominate PR size"},
+    "313": {"date": "2026-05-12", "note": "Review comment: RequestCronRunsAsync limit default mismatch (interface=20, impl=50), OnRemoveClick incorrectly blocks removing disabled jobs, ToggleEnabledGlyph copy-paste bug (same glyph for both branches)"}
   },
   "fix_attempts": {
-    "cmdpal-pkg-version-align": {"status": "pr_created", "pr": "TBD", "branch": "repo-assist/eng-cmdpal-pkg-version-align-2026-05-11", "date": "2026-05-11", "description": "Align CommandPalette Directory.Packages.props Microsoft.Windows.SDK.BuildTools from 10.0.26100.4188 to 10.0.28000.1839. PR #282 missed this file."},
-    "wsl-cancellation-kill": {"status": "merged", "pr": 303, "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block without 'when' guard to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. MERGED 2026-05-10."},
+    "cmdpal-pkg-version-align": {"status": "issue_created", "issue": 311, "branch": "repo-assist/eng-cmdpal-pkg-version-align-2026-05-11-d2bace4cbb00453d", "date": "2026-05-11", "description": "Align CommandPalette Directory.Packages.props Microsoft.Windows.SDK.BuildTools from 10.0.26100.4188 to 10.0.28000.1839. Blocked by protected-files gate, created as issue #311 with PR creation link."},
+    "wsl-cancellation-kill": {"status": "merged", "pr": 303, "branch": "repo-assist/fix-wsl-cancellation-kill-process-2026-05-10", "date": "2026-05-10", "description": "Added catch(OperationCanceledException) block to kill process tree on caller cancellation in WslExeCommandRunner.RunProcessAsync. MERGED 2026-05-10."},
     "ex-message-leaks-remaining": {"status": "pr_created", "pr": 306, "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11", "date": "2026-05-11", "description": "WindowsNodeClient (x2), DeviceCapability SafeCollect/SafeCollectAsync (x2), ExecApprovalPromptService, UrlNavigationApprovalService."},
     "nuget-cache-key": {"status": "issue_closed", "issue": 302, "date": "2026-05-10", "description": "Filed as issue #302; closed by steipete as completed (fix applied manually)."},
     "wsl-conf-section-probe": {"status": "pr_created", "pr": 301, "branch": "repo-assist/fix-wsl-conf-section-probe-and-missing-settings-2026-05-09", "date": "2026-05-09", "description": "Added mountFsTab=false and [time] useWindowsTimezone=true to wsl.conf template. Made IsAlreadyConfiguredAsync probe section-aware with awk. 3 new tests."},
@@ -44,18 +44,17 @@
     "PR #295 (AlexAlves87) ExecApprovalsStore read path — open, needs review/merge before PR #296",
     "PR #297 (AlexAlves87) refactor: extract CommandCenterStateBuilder from App.xaml.cs — open, labelled refactor",
     "PR #298 (MythiliMur) Add MXC Sandbox example — open, labelled enhancement+documentation",
-    "PR #305 (ranjeshj) fix: setup flow, connection page, and chat token bugs — MERGED 2026-05-11",
-    "PR #307 (indierawk2k2/Copilot) fix(onboarding): verify bootstrap message rendered before consuming one-shot gate — MERGED 2026-05-11",
     "PR #308 (dependabot) gh-aw-actions 0.71.3 -> 0.73.0 — open, needs merge",
     "PR #310 (indierawk2k2) feat: WSL gateway uninstall — large draft PR, CI green, Repo Assist commented 2026-05-11",
+    "PR #312 (indierawk2k2/Copilot) fix(onboarding): restore post-wizard handoff and chat connection — needs Mike manual WSL validation before merge",
+    "PR #313 (christineyan4) feat(cron): Redesign Cron Jobs page — shanselman reviewed 6 issues 2026-05-11; Repo Assist added 3 more bugs 2026-05-12",
+    "Issue #311 (Repo Assist) cmdpal version align — blocked by protected files; contains link to manually create PR",
     "PR #296 (Repo Assist) ExecApprovalsEvaluator — open draft, depends on PR #295",
     "PR #301 (Repo Assist) fix(wsl): wsl.conf missing settings + section-aware probe — open draft",
     "PR #306 (Repo Assist) fix(security): remaining ex.Message leaks — open draft",
-    "PR TBD (Repo Assist) cmdpal version align — created 2026-05-11, branch repo-assist/eng-cmdpal-pkg-version-align-2026-05-11",
-    "Issue #281 remaining items: #3 (operator pairing auth), #8 (DeviceToken vs NodeDeviceToken)",
-    "Issue #191 open as tracker for remaining bridge integration",
+    "Issue #191 open as tracker for remaining bridge integration — gateway SPA listener in progress at openclaw/openclaw#69633",
     "ExecApprovals pipeline: input validation (master), normalization (master), store read path (PR #295), evaluator (PR #296), coordinator/handler (future)",
-    "PR #310 review notes: TryClearDeviceToken uses non-atomic File.WriteAllText (should be temp+rename); proc.Kill(entireProcessTree: false) may leave WSL child processes alive"
+    "PR #313 Repo Assist bugs: (1) RequestCronRunsAsync limit default mismatch interface=20/impl=50, (2) OnRemoveClick blocks removing disabled jobs, (3) ToggleEnabledGlyph same glyph uE7E8 for both enabled/disabled states"
   ],
   "checked_off_by_maintainer": [],
   "test_baseline": {
