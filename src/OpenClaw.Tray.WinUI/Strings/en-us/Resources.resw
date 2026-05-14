@@ -347,6 +347,15 @@
   <data name="QuickSend_CancelButton" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="DeepLink_SendMessageTitle" xml:space="preserve">
+    <value>Send deep link message?</value>
+  </data>
+  <data name="DeepLink_SendMessageBody" xml:space="preserve">
+    <value>A deep link is requesting to send this message to the agent.</value>
+  </data>
+  <data name="DeepLink_SendMessageSource" xml:space="preserve">
+    <value>Source: {0}</value>
+  </data>
   <data name="QuickSend_Sending" xml:space="preserve">
     <value>Sending...</value>
   </data>

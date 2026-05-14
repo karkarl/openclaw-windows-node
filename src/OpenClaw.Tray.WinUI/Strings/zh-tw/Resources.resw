@@ -320,6 +320,15 @@
   <data name="QuickSend_CancelButton" xml:space="preserve">
     <value>取消</value>
   </data>
+  <data name="DeepLink_SendMessageTitle" xml:space="preserve">
+    <value>傳送深層連結訊息？</value>
+  </data>
+  <data name="DeepLink_SendMessageBody" xml:space="preserve">
+    <value>深層連結正在要求將此訊息傳送給代理。</value>
+  </data>
+  <data name="DeepLink_SendMessageSource" xml:space="preserve">
+    <value>來源：{0}</value>
+  </data>
   <data name="QuickSend_Sending" xml:space="preserve">
     <value>發送中...</value>
   </data>

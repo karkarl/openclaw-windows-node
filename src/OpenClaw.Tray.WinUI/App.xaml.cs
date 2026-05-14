@@ -4950,12 +4950,14 @@ public partial class App : Application
                 var content = new StackPanel { Spacing = 8 };
                 content.Children.Add(new TextBlock
                 {
-                    Text = "A deep link is requesting to send this message to the agent.",
+                    Text = LocalizationHelper.GetString("DeepLink_SendMessageBody"),
                     TextWrapping = TextWrapping.Wrap
                 });
                 content.Children.Add(new TextBlock
                 {
-                    Text = $"Source: {source ?? "unknown"}",
+                    Text = LocalizationHelper.Format(
+                        "DeepLink_SendMessageSource",
+                        source ?? LocalizationHelper.GetString("StatusDisplay_Unknown")),
                     TextWrapping = TextWrapping.Wrap
                 });
                 content.Children.Add(new TextBox
@@ -4969,10 +4971,10 @@ public partial class App : Application
 
                 var dialog = new ContentDialog
                 {
-                    Title = "Send deep link message?",
+                    Title = LocalizationHelper.GetString("DeepLink_SendMessageTitle"),
                     Content = content,
-                    PrimaryButtonText = "Send",
-                    CloseButtonText = "Cancel",
+                    PrimaryButtonText = LocalizationHelper.GetString("QuickSend_SendButton"),
+                    CloseButtonText = LocalizationHelper.GetString("QuickSend_CancelButton"),
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = root.XamlRoot
                 };
