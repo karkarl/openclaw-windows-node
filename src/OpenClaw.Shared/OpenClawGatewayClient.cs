@@ -2669,10 +2669,10 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         if (item.TryGetProperty("abortedLastRun", out var abortedLastRun) &&
             (abortedLastRun.ValueKind == JsonValueKind.True || abortedLastRun.ValueKind == JsonValueKind.False))
             session.AbortedLastRun = abortedLastRun.GetBoolean();
-        session.InputTokens = GetLong(item, "inputTokens");
-        session.OutputTokens = GetLong(item, "outputTokens");
-        session.TotalTokens = GetLong(item, "totalTokens");
-        session.ContextTokens = GetLong(item, "contextTokens");
+        session.InputTokens = item.GetInt64OrDefault("inputTokens", allowDouble: true);
+        session.OutputTokens = item.GetInt64OrDefault("outputTokens", allowDouble: true);
+        session.TotalTokens = item.GetInt64OrDefault("totalTokens", allowDouble: true);
+        session.ContextTokens = item.GetInt64OrDefault("contextTokens", allowDouble: true);
 
         var updated = ParseUnixTimestampMs(item, "updatedAt");
         if (updated.HasValue)
@@ -2719,30 +2719,30 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                     continue;
 
                 var nodeId = FirstNonEmpty(
-                    GetString(nodeElement, "nodeId"),
-                    GetString(nodeElement, "deviceId"),
-                    GetString(nodeElement, "id"),
-                    GetString(nodeElement, "clientId"));
+                    nodeElement.GetStringOrNull("nodeId"),
+                    nodeElement.GetStringOrNull("deviceId"),
+                    nodeElement.GetStringOrNull("id"),
+                    nodeElement.GetStringOrNull("clientId"));
                 if (string.IsNullOrWhiteSpace(nodeId))
                     continue;
 
                 var status = FirstNonEmpty(
-                    GetString(nodeElement, "status"),
-                    GetString(nodeElement, "state"),
+                    nodeElement.GetStringOrNull("status"),
+                    nodeElement.GetStringOrNull("state"),
                     "unknown");
-                var connected = GetOptionalBool(nodeElement, "connected");
-                var online = GetOptionalBool(nodeElement, "online");
-                var paired = GetOptionalBool(nodeElement, "paired");
-                var capabilities = GetStringArray(nodeElement, "caps");
+                var connected = nodeElement.GetBoolOrNull("connected");
+                var online = nodeElement.GetBoolOrNull("online");
+                var paired = nodeElement.GetBoolOrNull("paired");
+                var capabilities = nodeElement.GetStringArray("caps", skipEmpty: true);
                 if (capabilities.Length == 0)
-                    capabilities = GetStringArray(nodeElement, "capabilities");
-                var commands = GetStringArray(nodeElement, "declaredCommands");
+                    capabilities = nodeElement.GetStringArray("capabilities", skipEmpty: true);
+                var commands = nodeElement.GetStringArray("declaredCommands", skipEmpty: true);
                 if (commands.Length == 0)
-                    commands = GetStringArray(nodeElement, "commands");
-                var disabledCommands = GetStringArray(nodeElement, "disabledCommands");
+                    commands = nodeElement.GetStringArray("commands", skipEmpty: true);
+                var disabledCommands = nodeElement.GetStringArray("disabledCommands", skipEmpty: true);
                 var permissions = GetBoolDictionary(nodeElement, "permissions");
 
-                var clientMode = GetString(nodeElement, "clientMode");
+                var clientMode = nodeElement.GetStringOrNull("clientMode");
 
                 // Distinguish "user gave this node a name" from "we fell back
                 // to the id". The rename dialog uses this so it can prefill
@@ -2750,25 +2750,25 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 // pre-seeding the textbox with the id, which would otherwise
                 // get persisted as the new display name on Enter).
                 var explicitName = FirstNonEmpty(
-                    GetString(nodeElement, "displayName"),
-                    GetString(nodeElement, "name"),
-                    GetString(nodeElement, "label"));
+                    nodeElement.GetStringOrNull("displayName"),
+                    nodeElement.GetStringOrNull("name"),
+                    nodeElement.GetStringOrNull("label"));
 
                 buffer[count++] = new GatewayNodeInfo
                 {
                     NodeId = nodeId!,
                     DisplayName = !string.IsNullOrWhiteSpace(explicitName)
                         ? explicitName!
-                        : FirstNonEmpty(GetString(nodeElement, "shortId"), nodeId)!,
+                        : FirstNonEmpty(nodeElement.GetStringOrNull("shortId"), nodeId)!,
                     HasExplicitDisplayName = !string.IsNullOrWhiteSpace(explicitName),
                     Mode = FirstNonEmpty(
-                        GetString(nodeElement, "mode"),
+                        nodeElement.GetStringOrNull("mode"),
                         clientMode,
                         "node")!,
                     Status = status!,
                     Platform = FirstNonEmpty(
-                        GetString(nodeElement, "platform"),
-                        GetString(nodeElement, "os")),
+                        nodeElement.GetStringOrNull("platform"),
+                        nodeElement.GetStringOrNull("os")),
                     // Gateway NodeListNode wire schema uses *Ms suffix; older
                     // fallbacks kept for compatibility with mocks/tests.
                     // ConnectedAt is parsed independently below — do NOT fall
@@ -2782,22 +2782,22 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                                   ParseUnixTimestampMs(nodeElement, "connectedAt"),
                     ApprovedAt = ParseUnixTimestampMs(nodeElement, "approvedAtMs") ??
                                  ParseUnixTimestampMs(nodeElement, "approvedAt"),
-                    LastSeenReason = GetString(nodeElement, "lastSeenReason"),
+                    LastSeenReason = nodeElement.GetStringOrNull("lastSeenReason"),
                     Capabilities = capabilities.ToList(),
                     Commands = commands.ToList(),
                     DisabledCommands = disabledCommands.ToList(),
                     Permissions = permissions,
                     CapabilityCount = capabilities.Length,
                     CommandCount = commands.Length,
-                    Version = GetString(nodeElement, "version"),
-                    CoreVersion = GetString(nodeElement, "coreVersion"),
-                    UiVersion = GetString(nodeElement, "uiVersion"),
-                    ClientId = GetString(nodeElement, "clientId"),
+                    Version = nodeElement.GetStringOrNull("version"),
+                    CoreVersion = nodeElement.GetStringOrNull("coreVersion"),
+                    UiVersion = nodeElement.GetStringOrNull("uiVersion"),
+                    ClientId = nodeElement.GetStringOrNull("clientId"),
                     ClientMode = clientMode,
-                    DeviceFamily = GetString(nodeElement, "deviceFamily"),
-                    ModelIdentifier = GetString(nodeElement, "modelIdentifier"),
-                    RemoteIp = GetString(nodeElement, "remoteIp"),
-                    PathEnv = GetString(nodeElement, "pathEnv"),
+                    DeviceFamily = nodeElement.GetStringOrNull("deviceFamily"),
+                    ModelIdentifier = nodeElement.GetStringOrNull("modelIdentifier"),
+                    RemoteIp = nodeElement.GetStringOrNull("remoteIp"),
+                    PathEnv = nodeElement.GetStringOrNull("pathEnv"),
                     IsPaired = paired ?? false,
                     IsOnline = online ?? connected ?? status is "ok" or "online" or "connected" or "ready" or "active"
                 };
@@ -2864,10 +2864,10 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 {
                     var provider = new GatewayUsageProviderInfo
                     {
-                        Provider = GetString(providerElement, "provider") ?? "",
-                        DisplayName = GetString(providerElement, "displayName") ?? GetString(providerElement, "provider") ?? "",
-                        Plan = GetString(providerElement, "plan"),
-                        Error = GetString(providerElement, "error")
+                        Provider = providerElement.GetStringOrNull("provider") ?? "",
+                        DisplayName = providerElement.GetStringOrNull("displayName") ?? providerElement.GetStringOrNull("provider") ?? "",
+                        Plan = providerElement.GetStringOrNull("plan"),
+                        Error = providerElement.GetStringOrNull("error")
                     };
 
                     if (providerElement.TryGetProperty("windows", out var windows) &&
@@ -2877,8 +2877,8 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                         {
                             provider.Windows.Add(new GatewayUsageWindowInfo
                             {
-                                Label = GetString(windowElement, "label") ?? "",
-                                UsedPercent = GetDouble(windowElement, "usedPercent"),
+                                Label = windowElement.GetStringOrNull("label") ?? "",
+                                UsedPercent = windowElement.GetDoubleOrDefault("usedPercent"),
                                 ResetAt = ParseUnixTimestampMs(windowElement, "resetAt")
                             });
                         }
@@ -2908,20 +2908,20 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
             var summary = new GatewayCostUsageInfo
             {
                 UpdatedAt = ParseUnixTimestampMs(payload, "updatedAt") ?? DateTime.UtcNow,
-                Days = GetInt(payload, "days")
+                Days = payload.GetInt32OrDefault("days", clampOverflow: true)
             };
 
             if (payload.TryGetProperty("totals", out var totals) && totals.ValueKind == JsonValueKind.Object)
             {
                 summary.Totals = new GatewayCostUsageTotalsInfo
                 {
-                    Input = GetLong(totals, "input"),
-                    Output = GetLong(totals, "output"),
-                    CacheRead = GetLong(totals, "cacheRead"),
-                    CacheWrite = GetLong(totals, "cacheWrite"),
-                    TotalTokens = GetLong(totals, "totalTokens"),
-                    TotalCost = GetDouble(totals, "totalCost"),
-                    MissingCostEntries = GetInt(totals, "missingCostEntries")
+                    Input = totals.GetInt64OrDefault("input", allowDouble: true),
+                    Output = totals.GetInt64OrDefault("output", allowDouble: true),
+                    CacheRead = totals.GetInt64OrDefault("cacheRead", allowDouble: true),
+                    CacheWrite = totals.GetInt64OrDefault("cacheWrite", allowDouble: true),
+                    TotalTokens = totals.GetInt64OrDefault("totalTokens", allowDouble: true),
+                    TotalCost = totals.GetDoubleOrDefault("totalCost"),
+                    MissingCostEntries = totals.GetInt32OrDefault("missingCostEntries", clampOverflow: true)
                 };
             }
 
@@ -2931,14 +2931,14 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 {
                     summary.Daily.Add(new GatewayCostUsageDayInfo
                     {
-                        Date = GetString(day, "date") ?? "",
-                        Input = GetLong(day, "input"),
-                        Output = GetLong(day, "output"),
-                        CacheRead = GetLong(day, "cacheRead"),
-                        CacheWrite = GetLong(day, "cacheWrite"),
-                        TotalTokens = GetLong(day, "totalTokens"),
-                        TotalCost = GetDouble(day, "totalCost"),
-                        MissingCostEntries = GetInt(day, "missingCostEntries")
+                        Date = day.GetStringOrNull("date") ?? "",
+                        Input = day.GetInt64OrDefault("input", allowDouble: true),
+                        Output = day.GetInt64OrDefault("output", allowDouble: true),
+                        CacheRead = day.GetInt64OrDefault("cacheRead", allowDouble: true),
+                        CacheWrite = day.GetInt64OrDefault("cacheWrite", allowDouble: true),
+                        TotalTokens = day.GetInt64OrDefault("totalTokens", allowDouble: true),
+                        TotalCost = day.GetDoubleOrDefault("totalCost"),
+                        MissingCostEntries = day.GetInt32OrDefault("missingCostEntries", clampOverflow: true)
                     });
                 }
             }
@@ -2973,8 +2973,8 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 {
                     var preview = new SessionPreviewInfo
                     {
-                        Key = GetString(previewElement, "key") ?? "",
-                        Status = GetString(previewElement, "status") ?? "unknown"
+                        Key = previewElement.GetStringOrNull("key") ?? "",
+                        Status = previewElement.GetStringOrNull("status") ?? "unknown"
                     };
 
                     if (previewElement.TryGetProperty("items", out var items) &&
@@ -2984,8 +2984,8 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                         {
                             preview.Items.Add(new SessionPreviewItemInfo
                             {
-                                Role = GetString(item, "role") ?? "other",
-                                Text = GetString(item, "text") ?? ""
+                                Role = item.GetStringOrNull("role") ?? "other",
+                                Text = item.GetStringOrNull("text") ?? ""
                             });
                         }
                     }
@@ -3008,8 +3008,8 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         {
             Method = method,
             Ok = true,
-            Key = GetString(payload, "key"),
-            Reason = GetString(payload, "reason")
+            Key = payload.GetStringOrNull("key"),
+            Reason = payload.GetStringOrNull("reason")
         };
 
         if (payload.TryGetProperty("deleted", out var deleted) &&
@@ -3088,78 +3088,6 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         }
 
         return null;
-    }
-
-    private static string? GetString(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.String)
-            return null;
-        return value.GetString();
-    }
-
-    private static bool? GetOptionalBool(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value))
-            return null;
-        return value.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            _ => null
-        };
-    }
-
-    private static int GetInt(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Number)
-            return 0;
-        if (value.TryGetInt32(out var intVal)) return intVal;
-        if (value.TryGetInt64(out var longVal)) return (int)Math.Clamp(longVal, int.MinValue, int.MaxValue);
-        return 0;
-    }
-
-    private static long GetLong(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Number)
-            return 0;
-        if (value.TryGetInt64(out var longVal)) return longVal;
-        if (value.TryGetDouble(out var doubleVal)) return (long)doubleVal;
-        return 0;
-    }
-
-    private static double GetDouble(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Number)
-            return 0;
-        if (value.TryGetDouble(out var doubleVal)) return doubleVal;
-        return 0;
-    }
-
-    private static int GetArrayLength(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
-            return 0;
-        return value.GetArrayLength();
-    }
-
-    private static string[] GetStringArray(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
-            return [];
-
-        var buffer = new string[value.GetArrayLength()];
-        var count = 0;
-        foreach (var item in value.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.String)
-                continue;
-
-            var text = item.GetString();
-            if (!string.IsNullOrWhiteSpace(text))
-                buffer[count++] = text;
-        }
-
-        return count == 0 ? [] : buffer[..count];
     }
 
     private static Dictionary<string, bool> GetBoolDictionary(JsonElement parent, string property)

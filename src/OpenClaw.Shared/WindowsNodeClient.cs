@@ -785,11 +785,11 @@ public class WindowsNodeClient : WebSocketClientBase
             }
             if (errorProp.TryGetProperty("details", out var detailsProp))
             {
-                if (TryGetString(detailsProp, "reason", out var reason))
+                if (detailsProp.GetStringOrNull("reason") is { } reason && !string.IsNullOrWhiteSpace(reason))
                 {
                     pairingReason = reason;
                 }
-                if (TryGetString(detailsProp, "requestId", out var requestId))
+                if (detailsProp.GetStringOrNull("requestId") is { } requestId && !string.IsNullOrWhiteSpace(requestId))
                 {
                     pairingRequestId = requestId;
                 }
@@ -852,13 +852,14 @@ public class WindowsNodeClient : WebSocketClientBase
 
     private bool PayloadTargetsCurrentDevice(JsonElement payload)
     {
-        if (TryGetString(payload, "deviceId", out var deviceId) &&
+        if (payload.GetStringOrNull("deviceId") is { } deviceId &&
+            !string.IsNullOrWhiteSpace(deviceId) &&
             string.Equals(deviceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        if (TryGetString(payload, "nodeId", out var nodeId))
+        if (payload.GetStringOrNull("nodeId") is { } nodeId && !string.IsNullOrWhiteSpace(nodeId))
         {
             if (!string.IsNullOrEmpty(_nodeId))
             {
@@ -868,7 +869,8 @@ public class WindowsNodeClient : WebSocketClientBase
             return string.Equals(nodeId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase);
         }
 
-        if (TryGetString(payload, "instanceId", out var instanceId) &&
+        if (payload.GetStringOrNull("instanceId") is { } instanceId &&
+            !string.IsNullOrWhiteSpace(instanceId) &&
             string.Equals(instanceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -876,44 +878,18 @@ public class WindowsNodeClient : WebSocketClientBase
 
         if (payload.TryGetProperty("device", out var devicePayload))
         {
-            return TryGetString(devicePayload, "id", out var nestedDeviceId) &&
+            return devicePayload.GetStringOrNull("id") is { } nestedDeviceId &&
+                !string.IsNullOrWhiteSpace(nestedDeviceId) &&
                 string.Equals(nestedDeviceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase);
         }
 
         return false;
     }
 
-    private static bool TryGetString(JsonElement element, string propertyName, out string? value)
-    {
-        value = null;
-        if (!element.TryGetProperty(propertyName, out var prop) || prop.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        value = prop.GetString();
-        return !string.IsNullOrWhiteSpace(value);
-    }
-
     private static string[]? TryGetAuthScopes(JsonElement authPayload)
     {
-        if (!authPayload.TryGetProperty("scopes", out var scopes) || scopes.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        var values = new List<string>();
-        foreach (var item in scopes.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.String)
-            {
-                var value = item.GetString();
-                if (!string.IsNullOrWhiteSpace(value))
-                    values.Add(value);
-            }
-        }
-
-        return values.Count == 0 ? null : values.Distinct(StringComparer.Ordinal).ToArray();
+        var values = authPayload.GetStringArray("scopes", skipEmpty: true).Distinct(StringComparer.Ordinal).ToArray();
+        return values.Length == 0 ? null : values;
     }
     
     private async Task HandleRequestAsync(JsonElement root)

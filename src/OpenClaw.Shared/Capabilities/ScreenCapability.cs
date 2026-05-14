@@ -98,7 +98,7 @@ public class ScreenCapability : NodeCapabilityBase
         }
 
         var durationMs = Clamp(GetIntArg(request.Args, "durationMs", 10000), 100, MaxRecordDurationMs);
-        var fpsRaw = GetDoubleArg(request.Args, "fps", 10);
+        var fpsRaw = request.Args.GetDoubleOrDefault("fps", 10);
         var fps = fpsRaw < 1 ? 1 : (fpsRaw > 60 ? 60 : fpsRaw);
         var screenIndex = Clamp(GetIntArg(request.Args, "screenIndex", 0), 0, MaxScreenIndex);
         var includeAudio = GetBoolArg(request.Args, "includeAudio", false);
@@ -142,21 +142,6 @@ public class ScreenCapability : NodeCapabilityBase
 
     private static int Clamp(int value, int min, int max)
         => value < min ? min : (value > max ? max : value);
-
-    private static double GetDoubleArg(System.Text.Json.JsonElement args, string name, double defaultValue)
-    {
-        if (args.ValueKind == System.Text.Json.JsonValueKind.Undefined ||
-            args.ValueKind == System.Text.Json.JsonValueKind.Null)
-            return defaultValue;
-
-        if (args.TryGetProperty(name, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.Number)
-        {
-            try { return prop.GetDouble(); }
-            catch (FormatException) { return defaultValue; }
-        }
-
-        return defaultValue;
-    }
 }
 
 public class ScreenCaptureArgs
@@ -196,4 +181,3 @@ public class ScreenRecordResult
     public int Height { get; set; }
     public bool HasAudio { get; set; }
 }
-

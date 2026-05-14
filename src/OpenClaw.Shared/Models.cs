@@ -188,10 +188,10 @@ public static class ChannelHealthParser
             var ch = new ChannelHealth { Name = prop.Name };
             var val = prop.Value;
 
-            var isRunning = TryGetBool(val, "running");
-            var isConfigured = TryGetBool(val, "configured");
-            var isLinked = TryGetBool(val, "linked");
-            var probeOk = val.TryGetProperty("probe", out var probe) && TryGetBool(probe, "ok");
+            var isRunning = val.GetBoolOrDefault("running");
+            var isConfigured = val.GetBoolOrDefault("configured");
+            var isLinked = val.GetBoolOrDefault("linked");
+            var probeOk = val.TryGetProperty("probe", out var probe) && probe.GetBoolOrDefault("ok");
             var hasError = val.TryGetProperty("lastError", out var lastError) && lastError.ValueKind != JsonValueKind.Null;
 
             ch.IsLinked = isLinked;
@@ -208,9 +208,9 @@ public static class ChannelHealthParser
             else
                 ch.Status = "not configured";
 
-            ch.Error = GetString(val, "error") ?? GetString(val, "lastError");
-            ch.AuthAge = GetString(val, "authAge");
-            ch.Type = GetString(val, "type");
+            ch.Error = val.GetStringOrNull("error") ?? val.GetStringOrNull("lastError");
+            ch.AuthAge = val.GetStringOrNull("authAge");
+            ch.Type = val.GetStringOrNull("type");
 
             healthList.Add(ch);
         }
@@ -218,15 +218,6 @@ public static class ChannelHealthParser
         return healthList.ToArray();
     }
 
-    private static bool TryGetBool(JsonElement parent, string property) =>
-        parent.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
-
-    private static string? GetString(JsonElement parent, string property)
-    {
-        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.String)
-            return null;
-        return value.GetString();
-    }
 }
 
 public class SessionInfo
@@ -662,21 +653,21 @@ public class GatewaySelfInfo
     {
         var info = new GatewaySelfInfo
         {
-            Protocol = GetInt(payload, "protocol"),
+            Protocol = payload.GetInt32OrNull("protocol"),
             LastUpdatedUtc = DateTime.UtcNow
         };
 
         if (payload.TryGetProperty("server", out var server))
         {
-            info.ServerVersion = GetString(server, "version");
-            info.ConnectionId = GetString(server, "connId");
+            info.ServerVersion = server.GetStringOrNull("version");
+            info.ConnectionId = server.GetStringOrNull("connId");
         }
 
         if (payload.TryGetProperty("policy", out var policy))
         {
-            info.MaxPayload = GetInt(policy, "maxPayload");
-            info.MaxBufferedBytes = GetInt(policy, "maxBufferedBytes");
-            info.TickIntervalMs = GetInt(policy, "tickIntervalMs");
+            info.MaxPayload = policy.GetInt32OrNull("maxPayload");
+            info.MaxBufferedBytes = policy.GetInt32OrNull("maxBufferedBytes");
+            info.TickIntervalMs = policy.GetInt32OrNull("tickIntervalMs");
         }
 
         if (payload.TryGetProperty("snapshot", out var snapshot))
@@ -723,8 +714,8 @@ public class GatewaySelfInfo
 
     private static void ApplySnapshot(GatewaySelfInfo info, JsonElement snapshot)
     {
-        info.UptimeMs = GetLong(snapshot, "uptimeMs") ?? info.UptimeMs;
-        info.AuthMode = GetString(snapshot, "authMode") ?? info.AuthMode;
+        info.UptimeMs = snapshot.GetInt64OrNull("uptimeMs") ?? info.UptimeMs;
+        info.AuthMode = snapshot.GetStringOrNull("authMode") ?? info.AuthMode;
 
         if (snapshot.TryGetProperty("presence", out var presence) &&
             presence.ValueKind == JsonValueKind.Array)
@@ -734,30 +725,9 @@ public class GatewaySelfInfo
 
         if (snapshot.TryGetProperty("stateVersion", out var stateVersion))
         {
-            info.StateVersionPresence = GetLong(stateVersion, "presence") ?? info.StateVersionPresence;
-            info.StateVersionHealth = GetLong(stateVersion, "health") ?? info.StateVersionHealth;
+            info.StateVersionPresence = stateVersion.GetInt64OrNull("presence") ?? info.StateVersionPresence;
+            info.StateVersionHealth = stateVersion.GetInt64OrNull("health") ?? info.StateVersionHealth;
         }
-    }
-
-    private static string? GetString(JsonElement parent, string property)
-    {
-        return parent.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-    }
-
-    private static int? GetInt(JsonElement parent, string property)
-    {
-        return parent.TryGetProperty(property, out var value) && value.TryGetInt32(out var result)
-            ? result
-            : null;
-    }
-
-    private static long? GetLong(JsonElement parent, string property)
-    {
-        return parent.TryGetProperty(property, out var value) && value.TryGetInt64(out var result)
-            ? result
-            : null;
     }
 
     private static string FormatDuration(TimeSpan duration)
@@ -1969,4 +1939,3 @@ public class DiscoveredGateway
         }
     }
 }
-

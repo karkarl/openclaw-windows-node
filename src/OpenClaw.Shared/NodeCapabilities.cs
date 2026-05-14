@@ -112,82 +112,25 @@ public abstract class NodeCapabilityBase : INodeCapability
     
     protected T? GetArg<T>(JsonElement args, string name, T? defaultValue = default)
     {
-        if (args.ValueKind == JsonValueKind.Undefined || args.ValueKind == JsonValueKind.Null)
-            return defaultValue;
-        if (args.TryGetProperty(name, out var prop))
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<T>(prop.GetRawText());
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
+        var value = args.GetObject<T>(name);
+        return value is null ? defaultValue : value;
     }
     
     protected string? GetStringArg(JsonElement args, string name, string? defaultValue = null)
-    {
-        if (args.ValueKind == JsonValueKind.Undefined || args.ValueKind == JsonValueKind.Null)
-            return defaultValue;
-        if (args.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
-        {
-            return prop.GetString();
-        }
-        return defaultValue;
-    }
+        => args.GetStringOrNull(name) ?? defaultValue;
     
     protected int GetIntArg(JsonElement args, string name, int defaultValue = 0)
-    {
-        if (args.ValueKind == JsonValueKind.Undefined || args.ValueKind == JsonValueKind.Null)
-            return defaultValue;
-        if (args.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Number)
-        {
-            try { return prop.GetInt32(); }
-            catch (FormatException) { return defaultValue; }
-        }
-        return defaultValue;
-    }
+        => args.GetInt32OrDefault(name, defaultValue);
     
     protected bool GetBoolArg(JsonElement args, string name, bool defaultValue = false)
-    {
-        if (args.ValueKind == JsonValueKind.Undefined || args.ValueKind == JsonValueKind.Null)
-            return defaultValue;
-        if (args.TryGetProperty(name, out var prop))
-        {
-            if (prop.ValueKind == JsonValueKind.True) return true;
-            if (prop.ValueKind == JsonValueKind.False) return false;
-        }
-        return defaultValue;
-    }
+        => args.GetBoolOrDefault(name, defaultValue);
 
     /// <summary>
     /// Get a string array from a JSON array property. Non-string and whitespace-only elements
     /// are ignored. Strings are trimmed to preserve the historical system.which behavior.
     /// </summary>
     protected string[] GetStringArrayArg(JsonElement args, string name)
-    {
-        if (args.ValueKind == JsonValueKind.Undefined || args.ValueKind == JsonValueKind.Null)
-            return Array.Empty<string>();
-        if (!args.TryGetProperty(name, out var prop) || prop.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-
-        var buffer = new string[prop.GetArrayLength()];
-        var count = 0;
-        foreach (var item in prop.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.String)
-                continue;
-
-            var value = item.GetString()?.Trim();
-            if (!string.IsNullOrEmpty(value))
-                buffer[count++] = value;
-        }
-
-        return count > 0 ? buffer[..count] : [];
-    }
+        => args.GetStringArray(name, trimValues: true, skipEmpty: true);
 }
 
 /// <summary>

@@ -73,12 +73,12 @@ public static class ExecApprovalV2InputValidator
 
         return ExecApprovalV2ValidationOutcome.Ok(new ValidatedRunRequest(
             argv,
-            TryGetString(request.Args, "shell"),
+            request.Args.GetStringOrNull("shell"),
             cwd,
             timeoutMs,
             env,
-            TryGetString(request.Args, "agentId"),
-            TryGetString(request.Args, "sessionKey")));
+            request.Args.GetStringOrNull("agentId"),
+            request.Args.GetStringOrNull("sessionKey")));
     }
 
     private static ExecApprovalV2ValidationOutcome Deny(string reason)
@@ -126,12 +126,4 @@ public static class ExecApprovalV2InputValidator
         return null;
     }
 
-    private static string? TryGetString(JsonElement args, string key)
-    {
-        if (args.ValueKind != JsonValueKind.Object ||
-            !args.TryGetProperty(key, out var el) ||
-            el.ValueKind != JsonValueKind.String)
-            return null;
-        return el.GetString();
-    }
 }
