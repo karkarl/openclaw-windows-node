@@ -168,7 +168,6 @@ public class CameraCaptureService : IDisposable
                 if (recordingStarted)
                 {
                     await capture.StopRecordAsync();
-                    recordingStarted = false;
                 }
             }
             var elapsed = (DateTime.UtcNow - recordStart).TotalMilliseconds;

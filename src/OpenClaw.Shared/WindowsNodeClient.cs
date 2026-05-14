@@ -301,7 +301,7 @@ public class WindowsNodeClient : WebSocketClientBase
                 await HandlePairingResolvedEventAsync(root, eventType);
                 break;
             case "node.invoke.request":
-                _ = HandleNodeInvokeEventAsync(root.Clone());
+                TrackNodeInvokeTask(HandleNodeInvokeEventAsync(root.Clone()));
                 break;
             case "node.invoke.cancel":
                 HandleNodeInvokeCancel(root);
@@ -998,7 +998,7 @@ public class WindowsNodeClient : WebSocketClientBase
         switch (method)
         {
             case "node.invoke":
-                _ = HandleNodeInvokeAsync(root.Clone(), id);
+                TrackNodeInvokeTask(HandleNodeInvokeAsync(root.Clone(), id));
                 break;
             case "node.invoke.cancel":
                 HandleNodeInvokeCancel(root);
@@ -1100,6 +1100,23 @@ public class WindowsNodeClient : WebSocketClientBase
             await SendErrorResponseAsync(requestId, "Command execution failed");
             stopwatch.Stop();
             RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+        }
+    }
+
+    private void TrackNodeInvokeTask(Task task)
+    {
+        _ = ObserveNodeInvokeTaskAsync(task);
+    }
+
+    private async Task ObserveNodeInvokeTaskAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("node.invoke dispatch failed", ex);
         }
     }
 
