@@ -785,11 +785,11 @@ public class WindowsNodeClient : WebSocketClientBase
             }
             if (errorProp.TryGetProperty("details", out var detailsProp))
             {
-                if (detailsProp.GetStringOrNull("reason") is { } reason && !string.IsNullOrWhiteSpace(reason))
+                if (detailsProp.GetNonWhiteSpaceStringOrNull("reason") is { } reason)
                 {
                     pairingReason = reason;
                 }
-                if (detailsProp.GetStringOrNull("requestId") is { } requestId && !string.IsNullOrWhiteSpace(requestId))
+                if (detailsProp.GetNonWhiteSpaceStringOrNull("requestId") is { } requestId)
                 {
                     pairingRequestId = requestId;
                 }
@@ -852,14 +852,13 @@ public class WindowsNodeClient : WebSocketClientBase
 
     private bool PayloadTargetsCurrentDevice(JsonElement payload)
     {
-        if (payload.GetStringOrNull("deviceId") is { } deviceId &&
-            !string.IsNullOrWhiteSpace(deviceId) &&
+        if (payload.GetNonWhiteSpaceStringOrNull("deviceId") is { } deviceId &&
             string.Equals(deviceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        if (payload.GetStringOrNull("nodeId") is { } nodeId && !string.IsNullOrWhiteSpace(nodeId))
+        if (payload.GetNonWhiteSpaceStringOrNull("nodeId") is { } nodeId)
         {
             if (!string.IsNullOrEmpty(_nodeId))
             {
@@ -869,8 +868,7 @@ public class WindowsNodeClient : WebSocketClientBase
             return string.Equals(nodeId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase);
         }
 
-        if (payload.GetStringOrNull("instanceId") is { } instanceId &&
-            !string.IsNullOrWhiteSpace(instanceId) &&
+        if (payload.GetNonWhiteSpaceStringOrNull("instanceId") is { } instanceId &&
             string.Equals(instanceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -878,8 +876,7 @@ public class WindowsNodeClient : WebSocketClientBase
 
         if (payload.TryGetProperty("device", out var devicePayload))
         {
-            return devicePayload.GetStringOrNull("id") is { } nestedDeviceId &&
-                !string.IsNullOrWhiteSpace(nestedDeviceId) &&
+            return devicePayload.GetNonWhiteSpaceStringOrNull("id") is { } nestedDeviceId &&
                 string.Equals(nestedDeviceId, _deviceIdentity.DeviceId, StringComparison.OrdinalIgnoreCase);
         }
 

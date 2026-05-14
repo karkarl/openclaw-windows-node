@@ -21,6 +21,7 @@ public class JsonElementExtensionsTests
         Assert.Null(element.GetStringOrNull("missing"));
         Assert.Null(element.GetStringOrNull("count"));
         Assert.Null(Parse("""["name"]""").GetStringOrNull("name"));
+        Assert.Null(Parse("""{"name":"  "}""").GetNonWhiteSpaceStringOrNull("name"));
     }
 
     [Fact]

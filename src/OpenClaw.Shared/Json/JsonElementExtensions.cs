@@ -17,6 +17,12 @@ public static class JsonElementExtensions
     public static string GetStringOrDefault(this JsonElement element, string property, string @default = "")
         => element.GetStringOrNull(property) ?? @default;
 
+    public static string? GetNonWhiteSpaceStringOrNull(this JsonElement element, string property)
+    {
+        var value = element.GetStringOrNull(property);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
     public static int? GetInt32OrNull(this JsonElement element, string property)
     {
         if (element.ValueKind != JsonValueKind.Object)
@@ -127,6 +133,9 @@ public static class JsonElementExtensions
         }
     }
 
+    /// <summary>
+    /// Gets string items from an array property; when skipEmpty is true, empty and whitespace-only values are filtered.
+    /// </summary>
     public static string[] GetStringArray(this JsonElement element, string property, bool trimValues = false, bool skipEmpty = false)
     {
         if (element.ValueKind != JsonValueKind.Object)
