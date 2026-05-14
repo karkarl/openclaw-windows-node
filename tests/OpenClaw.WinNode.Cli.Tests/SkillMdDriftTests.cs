@@ -122,7 +122,7 @@ public class SkillMdDriftTests
                 Assert.Fail($"NodeService registers {name}, but no matching INodeCapability type was found.");
             }
 
-            yield return type!;
+            yield return type;
         }
     }
 
@@ -151,7 +151,6 @@ public class SkillMdDriftTests
         }
 
         Assert.Fail($"Could not construct registered capability {type.FullName} for command drift testing.");
-        throw new InvalidOperationException();
     }
 
     private static bool TryCreateConstructorArg(ParameterInfo parameter, out object? value)
@@ -215,6 +214,7 @@ public class SkillMdDriftTests
 
     private sealed class FakeDeviceStatusProvider : IDeviceStatusProvider
     {
+        // Drift testing only needs to instantiate DeviceCapability and read Commands.
         public object GetOsInfo() => new { };
         public Task<object> GetCpuInfoAsync() => Task.FromResult<object>(new { });
         public object GetMemoryInfo() => new { };
