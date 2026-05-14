@@ -236,6 +236,10 @@ public class McpToolBridge
         ["camera.clip"] =
             "Record a short clip from a camera. Args: deviceId (string, optional), durationMs (int, required, max 60000), format ('mp4'|'webm', default 'mp4'), maxWidth (int, default 1280). Returns { format, durationMs, base64 }.",
 
+        // location.*
+        ["location.get"] =
+            "Get the Windows node's current location using OS geolocation. Args: accuracy (string, default 'default'), maxAge (int ms, default 30000), locationTimeout (int ms, default 10000). Returns { latitude, longitude, accuracy, timestamp }. Privacy-sensitive: reveals physical location and may require OS permission.",
+
         // stt.* — microphone capture → text. Default-off; privacy-sensitive.
         // Single engine: Whisper.net runs locally on the device.
         ["stt.transcribe"] =
@@ -248,6 +252,16 @@ public class McpToolBridge
         // tts.*
         ["tts.speak"] =
             "Speak text aloud on the Windows node. Args: text (string, required), provider ('piper'|'windows'|'elevenlabs', optional — falls back to the configured TtsProvider setting, default 'piper' for fresh installs), voiceId (string, optional — overrides the per-provider configured voice), model (string, optional, ElevenLabs only), interrupt (bool, default false — interrupts any in-progress playback). Returns { spoken, provider, contentType, durationMs }.",
+
+        // device.*
+        ["device.info"] =
+            "Return static Windows node metadata. No args. Returns { deviceName, modelIdentifier, systemName, systemVersion, appVersion, appBuild, locale }. Privacy-sensitive: exposes machine name, hardware/OS identifier, and locale.",
+        ["device.status"] =
+            "Return device health and status. Args: sections (string[], optional; valid values 'os', 'cpu', 'memory', 'disk', 'battery'; omit or pass an empty array for all sections). Returns { collectedAt, os?, cpu?, memory?, disk?, battery?, thermal, storage, network, uptimeSeconds }; battery includes legacy { level, state, lowPowerModeEnabled }. Privacy-sensitive: reveals battery state, storage capacity, uptime, and network type.",
+
+        // browser.*
+        ["browser.proxy"] =
+            "Proxy a request to the local browser-control host (gateway port + 2). Args: path (string, required, local control path only — URLs are rejected), method ('GET'|'POST'|'DELETE', default 'GET'; unsupported values fall back to 'GET'), query (object, optional), profile (string, optional), body (object, optional for POST/DELETE), timeoutMs (int ms, 1..120000, default 20000). Returns { result } and, when small referenced files are collected, { result, files: [{ path, base64, mimeType }] }. Privacy-sensitive: may expose browser automation results and local file contents.",
 
         // app.*
         ["app.navigate"] =

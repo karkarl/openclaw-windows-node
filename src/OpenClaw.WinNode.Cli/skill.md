@@ -221,6 +221,20 @@ default camera.
 ```
 Returns `{ format, durationMs, base64 }`.
 
+## Location (location.*)
+
+### location.get
+Get the Windows node's current location through OS geolocation.
+**Privacy-sensitive: reveals physical location and may require OS permission.**
+```
+{
+  "accuracy": "default",       // optional string, defaults to "default"
+  "maxAge": 30000,             // optional int ms, defaults to 30000
+  "locationTimeout": 10000     // optional int ms, defaults to 10000
+}
+```
+Returns `{ latitude, longitude, accuracy, timestamp }`.
+
 ## Speech-to-text (stt.*)
 
 Local Whisper.net runs on this device — no audio leaves the box. The
@@ -275,6 +289,44 @@ Speak text aloud on the Windows node.
 }
 ```
 Returns `{ spoken, provider, contentType, durationMs }`.
+
+## Device status (device.*)
+
+### device.info
+Return static Windows node metadata. No params.
+**Privacy-sensitive: exposes machine name, hardware/OS identifier, and locale.**
+Returns `{ deviceName, modelIdentifier, systemName, systemVersion, appVersion, appBuild, locale }`.
+
+### device.status
+Return device health and status.
+**Privacy-sensitive: reveals battery state, storage capacity, uptime, and network type.**
+```
+{
+  "sections": ["os", "cpu", "memory", "disk", "battery"]  // optional string[]; omit/empty = all
+}
+```
+Valid `sections` values are `"os"`, `"cpu"`, `"memory"`, `"disk"`, and
+`"battery"`; unknown values are rejected. Returns
+`{ collectedAt, os?, cpu?, memory?, disk?, battery?, thermal, storage, network, uptimeSeconds }`.
+`battery` includes legacy `{ level, state, lowPowerModeEnabled }` fields.
+
+## Browser proxy (browser.*)
+
+### browser.proxy
+Proxy a request to the local browser-control host (gateway port + 2).
+**Privacy-sensitive: may expose browser automation results and local file contents.**
+```
+{
+  "path": "/json/version",     // required string; local control path only, not a URL
+  "method": "GET",             // optional "GET"|"POST"|"DELETE"; unsupported values fall back to GET
+  "query": {},                 // optional object, serialized as query string
+  "profile": "string",         // optional string, added as profile query parameter
+  "body": {},                  // optional object for POST/DELETE JSON body
+  "timeoutMs": 20000           // optional int ms, clamped to 1..120000
+}
+```
+Returns `{ result }` and, when small referenced files are collected,
+`{ result, files: [{ path, base64, mimeType }] }`.
 
 ## App control (app.*)
 
