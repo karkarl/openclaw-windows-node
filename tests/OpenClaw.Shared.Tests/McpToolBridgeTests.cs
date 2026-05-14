@@ -139,8 +139,9 @@ public class McpToolBridgeTests
         using var doc = JsonDocument.Parse(resp!);
         foreach (var tool in doc.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray())
         {
+            var toolName = tool.GetProperty("name").GetString();
             var properties = tool.GetProperty("inputSchema").GetProperty("properties");
-            Assert.True(properties.EnumerateObject().Any(), $"{tool.GetProperty("name").GetString()} should expose named schema properties");
+            Assert.True(properties.EnumerateObject().Any(), $"{toolName} should expose named schema properties");
         }
 
         var tts = FindTool(doc, "tts.speak").GetProperty("inputSchema");

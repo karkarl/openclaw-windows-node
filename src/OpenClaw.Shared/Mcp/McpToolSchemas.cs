@@ -154,7 +154,7 @@ public partial class McpToolBridge
             P("timeoutMs", "integer", "Proxy timeout in milliseconds.", 20000, minimum: 1, maximum: 120000),
             P("query", "object", "Query-string parameters.", additionalProperties: true),
             P("profile", "string", "Browser profile selector."),
-            P("body", new[] { "object", "array", "string", "number", "boolean" }, "JSON request body for POST/DELETE.")),
+            P("body", new[] { "object", "array", "string", "number", "boolean" }, "JSON request body for POST/DELETE; ignored for GET.")),
     };
 
     private static object GetInputSchema(string command)
@@ -374,6 +374,9 @@ public partial class McpToolBridge
                 var found = false;
                 foreach (var allowed in EnumValues)
                 {
+                    // Capability handlers normalize many enum-like strings, so
+                    // validation accepts case variants while tools/list still
+                    // advertises canonical values.
                     if (string.Equals(actual, allowed, StringComparison.OrdinalIgnoreCase))
                     {
                         found = true;
