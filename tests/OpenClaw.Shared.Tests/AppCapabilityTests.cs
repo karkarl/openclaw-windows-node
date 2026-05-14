@@ -66,6 +66,45 @@ public class AppCapabilityTests
         Assert.False(res.Ok);
     }
 
+    [Theory]
+    [InlineData("GatewayUrl")]
+    [InlineData("BootstrapToken")]
+    [InlineData("Token")]
+    [InlineData("EnableMcpServer")]
+    [InlineData("EnableNodeMode")]
+    [InlineData("ScreenRecordingConsentGiven")]
+    [InlineData("dpapi:gateways/default/device-key")]
+    public async Task SettingsSet_WithDeniedSetting_ReturnsErrorWithoutCallingHandler(string name)
+    {
+        var cap = new AppCapability(NullLogger.Instance);
+        var handlerCalled = false;
+        cap.SettingsSetHandler = (_, _) =>
+        {
+            handlerCalled = true;
+            return new { ok = true };
+        };
+        var req = new NodeInvokeRequest { Id = "1", Command = "app.settings.set", Args = ParseArgs($$"""{ "name": "{{name}}", "value": "true" }""") };
+
+        var res = await cap.ExecuteAsync(req);
+
+        Assert.False(res.Ok);
+        Assert.Equal($"Setting not remotely writable: {name}", res.Error);
+        Assert.False(handlerCalled);
+    }
+
+    [Fact]
+    public async Task SettingsSet_WithRemoteWritableSetting_CallsHandler()
+    {
+        var cap = new AppCapability(NullLogger.Instance);
+        cap.SettingsSetHandler = (name, value) => new { name, value };
+        var req = new NodeInvokeRequest { Id = "1", Command = "app.settings.set", Args = ParseArgs("""{ "name": "AutoStart", "value": "false" }""") };
+
+        var res = await cap.ExecuteAsync(req);
+
+        Assert.True(res.Ok);
+        Assert.NotNull(res.Payload);
+    }
+
     [Fact]
     public async Task UnknownCommand_ReturnsError()
     {

@@ -27,6 +27,17 @@ public class AppCapability : NodeCapabilityBase
         "app.search",
     };
 
+    private static readonly HashSet<string> RemoteWritableSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AutoStart", "GlobalHotkeyEnabled", "ShowNotifications", "NotificationSound",
+        "NotifyHealth", "NotifyUrgent", "NotifyReminder", "NotifyEmail", "NotifyCalendar",
+        "NotifyBuild", "NotifyStock", "NotifyInfo", "NotifyChatResponses",
+        "PreferStructuredCategories",
+        "NodeCanvasEnabled", "NodeScreenEnabled", "NodeCameraEnabled",
+        "NodeLocationEnabled", "NodeBrowserProxyEnabled", "NodeTtsEnabled",
+        "HasSeenActivityStreamTip", "TtsProvider"
+    };
+
     public override IReadOnlyList<string> Commands => _commands;
 
     // Handler delegates — wired up by App.xaml.cs after construction.
@@ -130,6 +141,8 @@ public class AppCapability : NodeCapabilityBase
             return Error("Missing required arg: name");
         if (value == null)
             return Error("Missing required arg: value");
+        if (!RemoteWritableSettings.Contains(name))
+            return Error($"Setting not remotely writable: {name}");
         if (SettingsSetHandler == null)
             return Error("Settings handler not registered");
         return Success(SettingsSetHandler(name, value));

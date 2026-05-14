@@ -3025,7 +3025,7 @@ public partial class App : Application
             "AutoStart", "GlobalHotkeyEnabled", "ShowNotifications", "NotificationSound",
             "NotifyHealth", "NotifyUrgent", "NotifyReminder", "NotifyEmail", "NotifyCalendar",
             "NotifyBuild", "NotifyStock", "NotifyInfo", "NotifyChatResponses",
-            "EnableNodeMode", "EnableMcpServer", "PreferStructuredCategories",
+            "PreferStructuredCategories",
             "NodeCanvasEnabled", "NodeScreenEnabled", "NodeCameraEnabled",
             "NodeLocationEnabled", "NodeBrowserProxyEnabled", "NodeTtsEnabled",
             "HasSeenActivityStreamTip", "TtsProvider"
