@@ -206,8 +206,8 @@ public sealed class RecordingConsentDialog : WindowEx
             {
                 if (_ownerHwnd != IntPtr.Zero)
                 {
-                    SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, _ownerHwnd);
                     _ownerDisabled = EnableWindow(_ownerHwnd, false);
+                    SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, _ownerHwnd);
                 }
 
                 Activate();
