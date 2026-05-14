@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-13T13:04:48Z",
-  "run_id": "25800798536",
+  "last_run": "2026-05-14T01:16:29Z",
+  "run_id": "25835819134",
   "comments_made": {
     "pr_327": {"date": "2026-05-13", "run": "25800798536"},
     "pr_296": {"date": "2026-05-13", "run": "25800798536", "note": "superseded by PR #327"},
@@ -16,12 +16,14 @@
     "issue_191": {"date": "2026-04-21", "run": "24698532801"}
   },
   "fix_attempts": {
+    "pr_342_showtoas_sound_pref": {"status": "pr_created_pending", "branch": "repo-assist/fix-nodeservice-showtoas-sound-pref-issue-342", "date": "2026-05-14"},
     "pr_328_canvas_jsonlpath": {"status": "open", "branch": "repo-assist/fix-canvas-jsonlpath-exmessage-leak-2026-05-13", "date": "2026-05-13"},
     "pr_306_exmessage": {"status": "open", "branch": "repo-assist/fix-ex-message-leaks-remaining-2026-05-11-83f5733e4978f96a", "date": "2026-05-11"},
     "pr_301_wsl": {"status": "open", "branch": "repo-assist/fix-wsl-conf-2026-05-09", "date": "2026-05-09"},
     "pr_296_evaluator": {"status": "open-superseded", "branch": "repo-assist/feat-exec-approvals-evaluator-c0279fa0892414f5", "date": "2026-05-08", "note": "superseded by PR #327"}
   },
-  "backlog_cursor": "issue_191",
-  "issues_open": [99, 179, 191, 246, 254, 281, 311],
-  "notes": "PR #327 from @AlexAlves87 supersedes our PR #296. Commented on #296 noting supersession. PR #306 and #301 still await merge. New PR created to fix residual CanvasCapability jsonlPath ex.Message leak missed by PR #294. Issue #281 items #3 and #8 remain (complex Windows-specific, deferred)."
+  "backlog_cursor": "issue_338",
+  "issues_open": [99, 179, 191, 246, 254, 281, 311, 331, 338],
+  "deep_review_issues_labelled": "2026-05-14",
+  "notes": "PR #327 from @AlexAlves87 supersedes our PR #296. PRs #306, #301, #328 still await merge. PR for #342 (NodeService ShowToast sound pref fix) created 2026-05-14, awaiting GitHub to assign number. Deep-review issues #341-#372 all labelled this run. 33 security/bug/refactor/enhancement issues from codemonkeychris multi-axis review."
 }
