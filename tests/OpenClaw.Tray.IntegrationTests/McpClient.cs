@@ -23,7 +23,7 @@ public sealed class McpClient : IDisposable
     public McpClient(string endpoint, string? authToken)
     {
         _endpoint = endpoint;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
         if (!string.IsNullOrEmpty(authToken))
         {
             _http.DefaultRequestHeaders.Authorization =
