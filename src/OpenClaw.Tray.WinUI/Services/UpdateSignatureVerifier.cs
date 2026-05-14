@@ -56,19 +56,19 @@ internal static class UpdateSignatureVerifier
         if (executableEntry == null)
             return new(false, $"Update package does not contain {UpdateExecutableName}.");
 
-        var tempPath = Path.Combine(Path.GetTempPath(), "OpenClawUpdateVerify", Guid.NewGuid().ToString("N"), UpdateExecutableName);
-        Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
+        var tempDir = Directory.CreateTempSubdirectory("OpenClawUpdateVerify");
+        var tempPath = Path.Combine(tempDir.FullName, UpdateExecutableName);
 
         try
         {
-            executableEntry.ExtractToFile(tempPath);
+            executableEntry.ExtractToFile(tempPath, overwrite: false);
             return verifyFile(tempPath);
         }
         finally
         {
             try
             {
-                Directory.Delete(Path.GetDirectoryName(tempPath)!, recursive: true);
+                tempDir.Delete(recursive: true);
             }
             catch
             {

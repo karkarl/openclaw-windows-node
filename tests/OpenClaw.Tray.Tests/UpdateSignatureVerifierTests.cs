@@ -3,8 +3,10 @@ using OpenClawTray.Services;
 
 namespace OpenClaw.Tray.Tests;
 
-public sealed class UpdateSignatureVerifierTests
+public sealed class UpdateSignatureVerifierTests : IDisposable
 {
+    private readonly List<string> _tempDirs = [];
+
     [Theory]
     [InlineData("CN=Scott Hanselman", true)]
     [InlineData("O=Scott Hanselman, CN=Scott Hanselman, C=US", true)]
@@ -44,9 +46,10 @@ public sealed class UpdateSignatureVerifierTests
         Assert.Contains(UpdateSignatureVerifier.UpdateExecutableName, result.Message);
     }
 
-    private static string CreatePackageZip(bool includeExecutable)
+    private string CreatePackageZip(bool includeExecutable)
     {
         var tempDir = Directory.CreateTempSubdirectory("OpenClawUpdateSignatureTests");
+        _tempDirs.Add(tempDir.FullName);
         var zipPath = Path.Combine(tempDir.FullName, "update.zip");
 
         using var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
@@ -58,5 +61,20 @@ public sealed class UpdateSignatureVerifierTests
         writer.Write("test");
 
         return zipPath;
+    }
+
+    public void Dispose()
+    {
+        foreach (var tempDir in _tempDirs)
+        {
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup only.
+            }
+        }
     }
 }
