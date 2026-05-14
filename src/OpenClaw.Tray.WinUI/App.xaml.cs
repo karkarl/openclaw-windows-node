@@ -750,7 +750,7 @@ public partial class App : Application
                 ? _startupArgs[1] : null);
         if (startupDeepLink != null)
         {
-            HandleDeepLink(startupDeepLink);
+            HandleDeepLink(startupDeepLink, "OS protocol handler");
         }
 
         Logger.Info("Application started (WinUI 3)");
@@ -4860,7 +4860,7 @@ public partial class App : Application
                     if (!string.IsNullOrEmpty(uri))
                     {
                         Logger.Info($"Received deep link via IPC: {uri}");
-                        _dispatcherQueue?.TryEnqueue(() => HandleDeepLink(uri));
+                        _dispatcherQueue?.TryEnqueue(() => HandleDeepLink(uri, "IPC pipe"));
                     }
                 }
                 catch (OperationCanceledException)
@@ -4880,7 +4880,7 @@ public partial class App : Application
         }, token);
     }
 
-    private void HandleDeepLink(string uri)
+    private void HandleDeepLink(string uri, string? source = null)
     {
         DeepLinkHandler.Handle(uri, new DeepLinkActions
         {
@@ -4913,6 +4913,7 @@ public partial class App : Application
             OpenHub = (page) => ShowHub(page),
             OpenVoice = () => ShowVoiceOverlay(),
             StopVoice = () => _ = StopVoiceAsync(),
+            ConfirmSendMessage = ConfirmDeepLinkSendMessageAsync,
             SendMessage = async (msg) =>
             {
                 var client = _connectionManager?.OperatorClient;
@@ -4921,7 +4922,76 @@ public partial class App : Application
                     await client.SendChatMessageAsync(msg);
                 }
             }
-        });
+        }, source);
+    }
+
+    private Task<bool> ConfirmDeepLinkSendMessageAsync(string message, string? source)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (_dispatcherQueue == null)
+        {
+            Logger.Warn("Deep link send confirmation blocked: dispatcher is not available");
+            tcs.SetResult(false);
+            return tcs.Task;
+        }
+
+        if (!_dispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                var root = _keepAliveWindow?.Content as FrameworkElement;
+                if (root?.XamlRoot == null)
+                {
+                    Logger.Warn("Deep link send confirmation blocked: no XamlRoot is available");
+                    tcs.TrySetResult(false);
+                    return;
+                }
+
+                var content = new StackPanel { Spacing = 8 };
+                content.Children.Add(new TextBlock
+                {
+                    Text = "A deep link is requesting to send this message to the agent.",
+                    TextWrapping = TextWrapping.Wrap
+                });
+                content.Children.Add(new TextBlock
+                {
+                    Text = $"Source: {source ?? "unknown"}",
+                    TextWrapping = TextWrapping.Wrap
+                });
+                content.Children.Add(new TextBox
+                {
+                    Text = message,
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxHeight = 240
+                });
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Send deep link message?",
+                    Content = content,
+                    PrimaryButtonText = "Send",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = root.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                tcs.TrySetResult(result == ContentDialogResult.Primary);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Deep link send confirmation failed: {ex.Message}");
+                tcs.TrySetResult(false);
+            }
+        }))
+        {
+            Logger.Warn("Deep link send confirmation blocked: failed to enqueue prompt");
+            tcs.SetResult(false);
+        }
+
+        return tcs.Task;
     }
 
     private async Task StopVoiceAsync()

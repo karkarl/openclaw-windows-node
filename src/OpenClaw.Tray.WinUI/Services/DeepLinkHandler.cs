@@ -51,7 +51,7 @@ public static class DeepLinkHandler
     private static bool IsPackagedApp() => OpenClawTray.Helpers.PackageHelper.IsPackaged;
 #endif
 
-    public static void Handle(string uri, DeepLinkActions actions)
+    public static void Handle(string uri, DeepLinkActions actions, string? source = null)
     {
         var result = OpenClaw.Shared.DeepLinkParser.ParseDeepLink(uri);
         if (result == null)
@@ -227,6 +227,19 @@ public static class DeepLinkHandler
                     {
                         try
                         {
+                            if (actions.ConfirmSendMessage == null)
+                            {
+                                Logger.Warn("Deep link: agent message blocked because no confirmation handler is registered");
+                                return;
+                            }
+
+                            var confirmed = await actions.ConfirmSendMessage(agentMessage, source);
+                            if (!confirmed)
+                            {
+                                Logger.Info("Deep link: agent message canceled by user");
+                                return;
+                            }
+
                             await actions.SendMessage(agentMessage);
                             Logger.Info($"Sent message via deep link: {agentMessage}");
                         }
@@ -295,6 +308,7 @@ public class DeepLinkActions
     public Action<string?>? OpenDashboard { get; set; }
     public Action<string?>? OpenQuickSend { get; set; }
     public Action<string?>? OpenHub { get; set; }
+    public Func<string, string?, Task<bool>>? ConfirmSendMessage { get; set; }
     public Func<string, Task>? SendMessage { get; set; }
     public Action? OpenVoice { get; set; }
     public Action? StopVoice { get; set; }

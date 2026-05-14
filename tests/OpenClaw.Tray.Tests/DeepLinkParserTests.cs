@@ -342,6 +342,62 @@ public class DeepLinkParserTests
     public async Task Handle_Agent_SendsMessage()
     {
         var sent = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var confirmation = new TaskCompletionSource<(string Message, string? Source)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var actions = new DeepLinkActions
+        {
+            ConfirmSendMessage = (message, source) =>
+            {
+                confirmation.SetResult((message, source));
+                return Task.FromResult(true);
+            },
+            SendMessage = message =>
+            {
+                sent.SetResult(message);
+                return Task.CompletedTask;
+            }
+        };
+
+        DeepLinkHandler.Handle("openclaw://agent?message=ping", actions, "IPC pipe");
+
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert.Same(sent.Task, completed);
+        Assert.Equal(("ping", "IPC pipe"), await confirmation.Task);
+        Assert.Equal("ping", await sent.Task);
+    }
+
+    [Fact]
+    public async Task Handle_Agent_CancelDoesNotSendMessage()
+    {
+        var confirmation = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sent = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var actions = new DeepLinkActions
+        {
+            ConfirmSendMessage = (message, _) =>
+            {
+                confirmation.SetResult(message);
+                return Task.FromResult(false);
+            },
+            SendMessage = message =>
+            {
+                sent.SetResult(message);
+                return Task.CompletedTask;
+            }
+        };
+
+        DeepLinkHandler.Handle("openclaw://agent?message=ping", actions);
+
+        var confirmed = await Task.WhenAny(confirmation.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert.Same(confirmation.Task, confirmed);
+        Assert.Equal("ping", await confirmation.Task);
+
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromMilliseconds(200)));
+        Assert.NotSame(sent.Task, completed);
+    }
+
+    [Fact]
+    public async Task Handle_Agent_WithoutConfirmationDoesNotSendMessage()
+    {
+        var sent = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var actions = new DeepLinkActions
         {
             SendMessage = message =>
@@ -353,9 +409,8 @@ public class DeepLinkParserTests
 
         DeepLinkHandler.Handle("openclaw://agent?message=ping", actions);
 
-        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromSeconds(3)));
-        Assert.Same(sent.Task, completed);
-        Assert.Equal("ping", await sent.Task);
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromMilliseconds(200)));
+        Assert.NotSame(sent.Task, completed);
     }
 
     [Fact]
