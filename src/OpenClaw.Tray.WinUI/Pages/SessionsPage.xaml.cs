@@ -37,8 +37,8 @@ public sealed partial class SessionsPage : Page
 
         ConnectionWarning.IsOpen = false;
 
-        if (hub.LastSessions != null)
-            UpdateSessions(hub.LastSessions);
+        if (hub.GatewayDataStore?.Sessions is { } sessions)
+            UpdateSessions(sessions);
 
         _ = hub.GatewayClient.RequestSessionsAsync();
         _ = hub.GatewayClient.RequestModelsListAsync();

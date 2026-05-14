@@ -27,15 +27,16 @@ public sealed partial class UsagePage : Page
         if (hub.GatewayClient != null)
         {
             // Apply cached data immediately, then request fresh.
-            if (hub.LastUsage != null) UpdateUsage(hub.LastUsage);
+            var store = hub.GatewayDataStore;
+            if (store?.Usage != null) UpdateUsage(store.Usage);
             // Only apply cached cost data when its period matches the current
             // selection — otherwise the daily list briefly shows e.g. 30-day
             // data while the selector reads "7 Days".
-            if (hub.LastUsageCost != null && hub.LastUsageCost.Days == _currentPeriodDays)
+            if (store?.UsageCost != null && store.UsageCost.Days == _currentPeriodDays)
             {
-                UpdateUsageCost(hub.LastUsageCost);
+                UpdateUsageCost(store.UsageCost);
             }
-            if (hub.LastUsageStatus != null) UpdateUsageStatus(hub.LastUsageStatus);
+            if (store?.UsageStatus != null) UpdateUsageStatus(store.UsageStatus);
             _ = hub.GatewayClient.RequestUsageAsync();
             _ = hub.GatewayClient.RequestUsageCostAsync(_currentPeriodDays);
             _ = hub.GatewayClient.RequestUsageStatusAsync();

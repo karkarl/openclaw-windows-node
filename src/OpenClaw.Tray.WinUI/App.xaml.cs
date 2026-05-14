@@ -177,6 +177,7 @@ public partial class App : Application
     private ModelsListInfo? _lastModelsList;
     private PresenceEntry[]? _lastPresence;
     private readonly List<AgentEventInfo> _agentEventsCache = new();
+    private readonly GatewayDataStore _gatewayDataStore = new();
     private const int MaxAppAgentEvents = 400;
     private UpdateCommandCenterInfo _lastUpdateInfo = BuildInitialUpdateInfo();
     private DateTime _lastCheckTime = DateTime.Now;
@@ -265,6 +266,7 @@ public partial class App : Application
         
         CheckPreviousRun();
         MarkRunStarted();
+        _gatewayDataStore.SetLastUpdateInfo(_lastUpdateInfo);
         
         // Hook up crash handlers
         this.UnhandledException += OnUnhandledException;
@@ -990,6 +992,7 @@ public partial class App : Application
                 _lastDevicePairList = null;
                 _lastModelsList = null;
                 _agentEventsCache.Clear();
+                _gatewayDataStore.ClearPairingAndAgentCaches();
                 UpdateTrayIcon();
                 _hubWindow?.UpdateStatus(ConnectionStatus.Disconnected);
                 break;
@@ -3360,6 +3363,7 @@ public partial class App : Application
             _lastNodePairList = null;
             _lastDevicePairList = null;
             _lastModelsList = null;
+            _gatewayDataStore.ClearPairingAndAgentCaches();
             _lastGatewaySelf = null;
         }
 
@@ -3400,13 +3404,16 @@ public partial class App : Application
             if (_displayedSessionKey != null && _sessionActivities.ContainsKey(_displayedSessionKey))
             {
                 _sessionActivities.Remove(_displayedSessionKey);
+                _gatewayDataStore.RemoveSessionActivity(_displayedSessionKey);
             }
             _currentActivity = null;
+            _gatewayDataStore.SetCurrentActivity(null);
         }
         else
         {
             var sessionKey = activity.SessionKey ?? "default";
             _sessionActivities[sessionKey] = activity;
+            _gatewayDataStore.SetSessionActivity(sessionKey, activity);
             AddRecentActivity(
                 $"{sessionKey}: {activity.Label}",
                 category: "session",
@@ -3426,6 +3433,7 @@ public partial class App : Application
             if (_displayedSessionKey == sessionKey)
             {
                 _currentActivity = activity;
+                _gatewayDataStore.SetCurrentActivity(activity);
             }
         }
         
@@ -3435,6 +3443,7 @@ public partial class App : Application
     private void OnChannelHealthUpdated(object? sender, ChannelHealth[] channels)
     {
         _lastChannels = channels;
+        _gatewayDataStore.SetChannels(channels);
         _lastCheckTime = DateTime.Now;
         var signature = string.Join("|", channels
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
@@ -3464,6 +3473,7 @@ public partial class App : Application
     private void OnSessionsUpdated(object? sender, SessionInfo[] sessions)
     {
         _lastSessions = sessions;
+        _gatewayDataStore.SetSessions(sessions);
         _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         _dispatcherQueue?.TryEnqueue(() =>
@@ -3492,6 +3502,7 @@ public partial class App : Application
     private void OnUsageUpdated(object? sender, GatewayUsageInfo usage)
     {
         _lastUsage = usage;
+        _gatewayDataStore.SetUsage(usage);
         _dispatcherQueue?.TryEnqueue(() =>
         {
             _hubWindow?.UpdateUsage(usage);
@@ -3501,6 +3512,7 @@ public partial class App : Application
     private void OnUsageStatusUpdated(object? sender, GatewayUsageStatusInfo usageStatus)
     {
         _lastUsageStatus = usageStatus;
+        _gatewayDataStore.SetUsageStatus(usageStatus);
         _dispatcherQueue?.TryEnqueue(() =>
         {
             _hubWindow?.UpdateUsageStatus(usageStatus);
@@ -3510,6 +3522,7 @@ public partial class App : Application
     private void OnUsageCostUpdated(object? sender, GatewayCostUsageInfo usageCost)
     {
         _lastUsageCost = usageCost;
+        _gatewayDataStore.SetUsageCost(usageCost);
         _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         _dispatcherQueue?.TryEnqueue(() =>
@@ -3531,6 +3544,7 @@ public partial class App : Application
     private void OnGatewaySelfUpdated(object? sender, GatewaySelfInfo gatewaySelf)
     {
         _lastGatewaySelf = _lastGatewaySelf?.Merge(gatewaySelf) ?? gatewaySelf;
+        _gatewayDataStore.SetGatewaySelf(_lastGatewaySelf);
         DiagnosticsJsonlService.Write("gateway.self", new
         {
             version = _lastGatewaySelf.ServerVersion,
@@ -3554,6 +3568,7 @@ public partial class App : Application
         var previousOnline = _lastNodes.Count(n => n.IsOnline);
         var online = nodes.Count(n => n.IsOnline);
         _lastNodes = nodes;
+        _gatewayDataStore.SetNodes(nodes);
         _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         _dispatcherQueue?.TryEnqueue(() =>
@@ -3579,6 +3594,7 @@ public partial class App : Application
                 _sessionPreviews[preview.Key] = preview;
             }
         }
+        _gatewayDataStore.UpsertSessionPreviews(payload.Previews);
         _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
     }
 
@@ -3681,6 +3697,7 @@ public partial class App : Application
             _agentEventsCache.Insert(0, evt);
             if (_agentEventsCache.Count > MaxAppAgentEvents)
                 _agentEventsCache.RemoveRange(MaxAppAgentEvents, _agentEventsCache.Count - MaxAppAgentEvents);
+            _gatewayDataStore.AddAgentEvent(evt, MaxAppAgentEvents);
             _hubWindow?.UpdateAgentEvent(evt);
         });
     }
@@ -3688,24 +3705,28 @@ public partial class App : Application
     private void OnNodePairListUpdated(object? sender, PairingListInfo data)
     {
         _lastNodePairList = data;
+        _gatewayDataStore.SetNodePairList(data);
         _dispatcherQueue?.TryEnqueue(() => _hubWindow?.UpdateNodePairList(data));
     }
 
     private void OnDevicePairListUpdated(object? sender, DevicePairingListInfo data)
     {
         _lastDevicePairList = data;
+        _gatewayDataStore.SetDevicePairList(data);
         _dispatcherQueue?.TryEnqueue(() => _hubWindow?.UpdateDevicePairList(data));
     }
 
     private void OnModelsListUpdated(object? sender, ModelsListInfo data)
     {
         _lastModelsList = data;
+        _gatewayDataStore.SetModelsList(data);
         _dispatcherQueue?.TryEnqueue(() => _hubWindow?.UpdateModelsList(data));
     }
 
     private void OnPresenceUpdated(object? sender, PresenceEntry[] data)
     {
         _lastPresence = data;
+        _gatewayDataStore.SetPresence(data);
         _dispatcherQueue?.TryEnqueue(() => _hubWindow?.UpdatePresence(data));
     }
 
@@ -3935,6 +3956,7 @@ public partial class App : Application
         {
             _hubWindow = new HubWindow();
             _hubWindow.Settings = _settings;
+            _hubWindow.GatewayDataStore = _gatewayDataStore;
             _hubWindow.GatewayClient = _connectionManager?.OperatorClient;
             _hubWindow.CurrentStatus = _currentStatus;
             _hubWindow.OpenDashboardAction = OpenDashboard;
@@ -3960,7 +3982,11 @@ public partial class App : Application
             {
                 _ = _connectionManager?.ReconnectAsync();
             };
-            _hubWindow.ClearAppAgentEventsCache = () => _agentEventsCache.Clear();
+            _hubWindow.ClearAppAgentEventsCache = () =>
+            {
+                _agentEventsCache.Clear();
+                _gatewayDataStore.ClearAgentEvents();
+            };
             if (_nodeService != null)
             {
                 _hubWindow.NodeIsConnected = _nodeService.IsConnected;
@@ -3985,6 +4011,7 @@ public partial class App : Application
         }
         // Always update live state
         _hubWindow.Settings = _settings;
+        _hubWindow.GatewayDataStore = _gatewayDataStore;
         _hubWindow.GatewayClient = _connectionManager?.OperatorClient;
         _hubWindow.CurrentStatus = _currentStatus;
         _hubWindow.VoiceServiceInstance = _nodeService?.VoiceService ?? _standaloneVoiceService;
@@ -4033,15 +4060,15 @@ public partial class App : Application
     {
         if (_hubWindow == null) return;
         // Seed all cached data types so pages see data immediately
-        if (_lastSessions.Length > 0) _hubWindow.UpdateSessions(_lastSessions);
-        if (_lastNodes.Length > 0) _hubWindow.UpdateNodes(_lastNodes);
-        if (_lastNodePairList != null) _hubWindow.UpdateNodePairList(_lastNodePairList);
-        if (_lastDevicePairList != null) _hubWindow.UpdateDevicePairList(_lastDevicePairList);
-        if (_lastModelsList != null) _hubWindow.UpdateModelsList(_lastModelsList);
-        if (_lastPresence != null) _hubWindow.UpdatePresence(_lastPresence);
-        if (_lastGatewaySelf != null) _hubWindow.UpdateGatewaySelf(_lastGatewaySelf);
+        if (_gatewayDataStore.Sessions.Length > 0) _hubWindow.UpdateSessions(_gatewayDataStore.Sessions);
+        if (_gatewayDataStore.Nodes.Length > 0) _hubWindow.UpdateNodes(_gatewayDataStore.Nodes);
+        if (_gatewayDataStore.NodePairList != null) _hubWindow.UpdateNodePairList(_gatewayDataStore.NodePairList);
+        if (_gatewayDataStore.DevicePairList != null) _hubWindow.UpdateDevicePairList(_gatewayDataStore.DevicePairList);
+        if (_gatewayDataStore.ModelsList != null) _hubWindow.UpdateModelsList(_gatewayDataStore.ModelsList);
+        if (_gatewayDataStore.Presence.Length > 0) _hubWindow.UpdatePresence(_gatewayDataStore.Presence);
+        if (_gatewayDataStore.GatewaySelf != null) _hubWindow.UpdateGatewaySelf(_gatewayDataStore.GatewaySelf);
         if (_lastAgentsList.HasValue) _hubWindow.UpdateAgentsList(_lastAgentsList.Value);
-        if (_agentEventsCache.Count > 0) _hubWindow.SeedAgentEvents(_agentEventsCache);
+        if (_gatewayDataStore.AgentEvents.Count > 0) _hubWindow.SeedAgentEvents(_gatewayDataStore.AgentEvents);
     }
 
     private void ShowSettings()
@@ -4292,15 +4319,15 @@ public partial class App : Application
     {
         Status = _currentStatus,
         LastCheckTime = _lastCheckTime,
-        Channels = _lastChannels,
-        Sessions = _lastSessions,
-        Nodes = _lastNodes,
-        Usage = _lastUsage,
-        UsageStatus = _lastUsageStatus,
-        UsageCost = _lastUsageCost,
-        GatewaySelf = _lastGatewaySelf,
+        Channels = _gatewayDataStore.Channels,
+        Sessions = _gatewayDataStore.Sessions,
+        Nodes = _gatewayDataStore.Nodes,
+        Usage = _gatewayDataStore.Usage,
+        UsageStatus = _gatewayDataStore.UsageStatus,
+        UsageCost = _gatewayDataStore.UsageCost,
+        GatewaySelf = _gatewayDataStore.GatewaySelf,
         AuthFailureMessage = _authFailureMessage,
-        LastUpdateInfo = _lastUpdateInfo,
+        LastUpdateInfo = _gatewayDataStore.LastUpdateInfo,
         Settings = _settings,
         NodeService = _nodeService,
         SshTunnelService = _sshTunnelService,
@@ -4701,60 +4728,67 @@ public partial class App : Application
         CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown"
     };
 
+    private void SetLastUpdateInfo(UpdateCommandCenterInfo info)
+    {
+        _lastUpdateInfo = info;
+        _gatewayDataStore.SetLastUpdateInfo(info);
+    }
+
     private async Task<bool> CheckForUpdatesAsync()
     {
         try
         {
 #if DEBUG
             Logger.Info("Skipping update check in debug build");
-            _lastUpdateInfo = new UpdateCommandCenterInfo
+            SetLastUpdateInfo(new UpdateCommandCenterInfo
             {
                 Status = "Skipped",
                 CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
                 CheckedAt = DateTime.UtcNow,
                 Detail = "debug build"
-            };
+            });
             return true;
 #else
             Logger.Info("Checking for updates...");
-            _lastUpdateInfo = new UpdateCommandCenterInfo
+            SetLastUpdateInfo(new UpdateCommandCenterInfo
             {
                 Status = "Checking",
                 CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
                 CheckedAt = DateTime.UtcNow
-            };
+            });
             var updateFound = await AppUpdater.CheckForUpdatesAsync();
 
             if (!updateFound)
             {
                 Logger.Info("No updates available");
-                _lastUpdateInfo = new UpdateCommandCenterInfo
+                SetLastUpdateInfo(new UpdateCommandCenterInfo
                 {
                     Status = "Current",
                     CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
                     CheckedAt = DateTime.UtcNow,
                     Detail = "no updates available"
-                };
+                });
                 return true;
             }
 
             var release = AppUpdater.LatestRelease!;
             var changelog = AppUpdater.GetChangelog(true) ?? "No release notes available.";
             Logger.Info($"Update available: {release.TagName}");
-            _lastUpdateInfo = new UpdateCommandCenterInfo
+            SetLastUpdateInfo(new UpdateCommandCenterInfo
             {
                 Status = "Available",
                 CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
                 LatestVersion = release.TagName,
                 CheckedAt = DateTime.UtcNow,
                 Detail = "prompted"
-            };
+            });
 
             if (!string.IsNullOrWhiteSpace(_settings?.SkippedUpdateTag) &&
                 string.Equals(_settings.SkippedUpdateTag, release.TagName, StringComparison.OrdinalIgnoreCase))
             {
                 Logger.Info($"Skipping update prompt for remembered version {release.TagName}");
                 _lastUpdateInfo.Detail = "skipped by user";
+                _gatewayDataStore.SetLastUpdateInfo(_lastUpdateInfo);
                 return true;
             }
 
@@ -4764,6 +4798,7 @@ public partial class App : Application
             if (result == UpdateDialogResult.Download)
             {
                 _lastUpdateInfo.Detail = "download requested";
+                _gatewayDataStore.SetLastUpdateInfo(_lastUpdateInfo);
                 if (_settings != null)
                 {
                     _settings.SkippedUpdateTag = string.Empty;
@@ -4778,6 +4813,7 @@ public partial class App : Application
                 _settings.SkippedUpdateTag = release.TagName ?? string.Empty;
                 _settings.Save();
                 _lastUpdateInfo.Detail = "skipped by user";
+                _gatewayDataStore.SetLastUpdateInfo(_lastUpdateInfo);
             }
 
             return true; // RemindLater or Skip - continue
@@ -4786,13 +4822,13 @@ public partial class App : Application
         catch (Exception ex)
         {
             Logger.Warn($"Update check failed: {ex.Message}");
-            _lastUpdateInfo = new UpdateCommandCenterInfo
+            SetLastUpdateInfo(new UpdateCommandCenterInfo
             {
                 Status = "Failed",
                 CurrentVersion = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
                 CheckedAt = DateTime.UtcNow,
                 Detail = ex.Message
-            };
+            });
             return true;
         }
     }

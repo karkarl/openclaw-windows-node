@@ -26,8 +26,8 @@ public sealed partial class ChannelsPage : Page
         if (hub.GatewayClient != null)
         {
             // Apply cached data immediately
-            if (hub.LastChannels != null)
-                UpdateChannels(hub.LastChannels);
+            if (hub.GatewayDataStore?.Channels is { } channels)
+                UpdateChannels(channels);
             else
                 ChannelsList.Children.Clear();
         }

@@ -36,8 +36,8 @@ public sealed partial class NodesPage : Page
         if (hub.GatewayClient != null)
         {
             // Apply cached data immediately, then request fresh
-            if (hub.LastNodes != null)
-                UpdateNodes(hub.LastNodes);
+            if (hub.GatewayDataStore?.Nodes is { } nodes)
+                UpdateNodes(nodes);
             else
                 NodesList.Children.Clear();
             _ = hub.GatewayClient.RequestNodesAsync();

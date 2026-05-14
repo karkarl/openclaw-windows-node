@@ -34,6 +34,7 @@ public sealed partial class HubWindow : WindowEx
         }
     }
     public IOperatorGatewayClient? GatewayClient { get; set; }
+    internal GatewayDataStore? GatewayDataStore { get; set; }
     public ConnectionStatus CurrentStatus { get; set; }
     private string _currentAgentId = "main";
     public string CurrentAgentId => _currentAgentId;
@@ -61,12 +62,12 @@ public sealed partial class HubWindow : WindowEx
     public string? NodeFullDeviceId { get; set; }
 
     // Cached gateway data — pages read these on navigation
-    public SessionInfo[]? LastSessions { get; private set; }
-    public ChannelHealth[]? LastChannels { get; private set; }
-    public GatewayUsageInfo? LastUsage { get; private set; }
-    public GatewayCostUsageInfo? LastUsageCost { get; private set; }
-    public GatewayUsageStatusInfo? LastUsageStatus { get; private set; }
-    public GatewayNodeInfo[]? LastNodes { get; private set; }
+    public SessionInfo[]? LastSessions => GatewayDataStore?.Sessions;
+    public ChannelHealth[]? LastChannels => GatewayDataStore?.Channels;
+    public GatewayUsageInfo? LastUsage => GatewayDataStore?.Usage;
+    public GatewayCostUsageInfo? LastUsageCost => GatewayDataStore?.UsageCost;
+    public GatewayUsageStatusInfo? LastUsageStatus => GatewayDataStore?.UsageStatus;
+    public GatewayNodeInfo[]? LastNodes => GatewayDataStore?.Nodes;
 
     public System.Text.Json.JsonElement? LastConfig { get; private set; }
     public System.Text.Json.JsonElement? LastConfigSchema { get; private set; }
@@ -233,7 +234,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateSessions(SessionInfo[] sessions)
     {
-        LastSessions = sessions;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {
@@ -244,7 +244,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateChannelHealth(ChannelHealth[] channels)
     {
-        LastChannels = channels;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {
@@ -254,7 +253,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateUsage(GatewayUsageInfo usage)
     {
-        LastUsage = usage;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {
@@ -264,7 +262,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateUsageCost(GatewayCostUsageInfo cost)
     {
-        LastUsageCost = cost;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {
@@ -274,7 +271,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateUsageStatus(GatewayUsageStatusInfo status)
     {
-        LastUsageStatus = status;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {
@@ -284,7 +280,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateNodes(GatewayNodeInfo[] nodes)
     {
-        LastNodes = nodes;
         if (IsClosed) return;
         DispatcherQueue?.TryEnqueue(() =>
         {

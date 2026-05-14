@@ -33,8 +33,8 @@ public sealed partial class HomePage : Page
             GatewayUrlText.Text = hub.Settings.GetEffectiveGatewayUrl();
         }
 
-        if (hub.LastSessions != null)
-            UpdateSessions(hub.LastSessions);
+        if (hub.GatewayDataStore?.Sessions is { } sessions)
+            UpdateSessions(sessions);
 
         if (!_buttonsWired)
         {
