@@ -173,7 +173,9 @@ public sealed class CardRenderer : IComponentRenderer
             Padding = new Thickness(pad),
             BorderThickness = new Thickness(1),
         };
-        if (Application.Current.Resources.TryGetValue("CardBackgroundFillColorDefaultBrush", out var bg) && bg is Brush bgBrush)
+        if (ctx.Theme.CardBackground is { } cardBg)
+            border.Background = new SolidColorBrush(cardBg);
+        else if (Application.Current.Resources.TryGetValue("CardBackgroundFillColorDefaultBrush", out var bg) && bg is Brush bgBrush)
             border.Background = bgBrush;
         if (Application.Current.Resources.TryGetValue("CardStrokeColorDefaultBrush", out var bs) && bs is Brush bsBrush)
             border.BorderBrush = bsBrush;

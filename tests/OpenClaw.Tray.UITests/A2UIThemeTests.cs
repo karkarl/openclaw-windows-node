@@ -128,6 +128,34 @@ public sealed class A2UIThemeTests
     }
 
     [Fact]
+    public async Task Theme_CardBackground_AppliesToCardBorderBackground()
+    {
+        await _ui.PauseAsync("theme cardBackground → Border.Background");
+        await _ui.ResetContainerAsync();
+        await _ui.RunOnUIAsync(() =>
+        {
+            var harness = BuildHarness(_ui);
+            harness.Router.Push(Surface(
+                "s", "card",
+                new[]
+                {
+                    Component("card", "Card", new() { ["child"] = "tx" }),
+                    Component("tx", "Text", new() { ["text"] = Lit("themed card") }),
+                },
+                styles: Styles(cardBackground: "#2233FF")));
+
+
+            var border = FindLogical<Border>(harness.LastSurface!.RootElement).First();
+            var brush = border.Background as SolidColorBrush;
+            Assert.NotNull(brush);
+            Assert.Equal(0x22, brush!.Color.R);
+            Assert.Equal(0x33, brush.Color.G);
+            Assert.Equal(0xFF, brush.Color.B);
+        });
+        await _ui.PauseAsync();
+    }
+
+    [Fact]
     public async Task Theme_NoStyles_LeavesSurfaceResourcesUntouched()
     {
         await _ui.ResetContainerAsync();
