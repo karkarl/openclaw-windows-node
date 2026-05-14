@@ -1,4 +1,5 @@
 using OpenClaw.Shared;
+using OpenClaw.Shared.Net;
 
 namespace OpenClawTray.Helpers;
 
@@ -59,6 +60,6 @@ public static class GatewayChatUrlBuilder
     /// </summary>
     public static bool IsLocalHost(Uri uri)
     {
-        return uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
+        return LoopbackClassifier.IsLoopbackHostString(uri.Host);
     }
 }

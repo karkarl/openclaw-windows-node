@@ -108,6 +108,16 @@ public class GatewayChatHelperTests
         Assert.StartsWith("http://127.0.0.1:18789", url);
     }
 
+    [Fact]
+    public void TryBuildChatUrl_Ipv6Loopback_AcceptedAsLocal()
+    {
+        var ok = GatewayChatUrlBuilder.TryBuildChatUrl(
+            "ws://[::1]:18789", "tok", out var url, out _);
+
+        Assert.True(ok);
+        Assert.StartsWith("http://[::1]:18789", url);
+    }
+
     #endregion
 
     #region TryBuildChatUrl — error cases

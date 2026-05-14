@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OpenClaw.Shared.Mcp;
+using OpenClaw.Shared.Net;
 
 namespace OpenClaw.WinNode.Cli;
 
@@ -154,7 +155,7 @@ internal static class CliRunner
         // refuse. The whole loopback-only threat model in McpHttpServer relies
         // on the bearer never leaving 127.0.0.1; honoring an explicit override
         // is OK (the user took the action knowingly) but auto-load is not.
-        if (token.Token is not null && !endpointUri.IsLoopback)
+        if (token.Token is not null && !LoopbackClassifier.IsLoopbackHostString(endpointUri.Host))
         {
             if (token.Source.StartsWith("file:", StringComparison.Ordinal))
             {

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using OpenClaw.Shared.Net;
 
 namespace OpenClaw.Shared.Mcp;
 
@@ -133,7 +134,7 @@ public sealed class McpHttpServer : IDisposable
             }
 
             // Defensive: even though the prefix is loopback-only, double-check.
-            if (!IPAddress.IsLoopback(ctx.Request.RemoteEndPoint.Address))
+            if (!LoopbackClassifier.IsLoopbackEndpoint(ctx.Request.RemoteEndPoint))
             {
                 Reject(ctx, HttpStatusCode.Forbidden, "loopback only");
                 continue;
@@ -223,7 +224,7 @@ public sealed class McpHttpServer : IDisposable
 
             // Host header must match our loopback bind. Defends against DNS
             // rebinding pivots that route a public hostname to 127.0.0.1.
-            if (!IsHostAllowed(ctx.Request.Headers["Host"]))
+            if (!LoopbackClassifier.IsLoopbackHostString(ctx.Request.Headers["Host"]))
             {
                 Reject(ctx, HttpStatusCode.Forbidden, "host not allowed");
                 return;
@@ -335,26 +336,6 @@ public sealed class McpHttpServer : IDisposable
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(presented),
             Encoding.UTF8.GetBytes(authToken));
-    }
-
-    private static bool IsHostAllowed(string? host)
-    {
-        if (string.IsNullOrEmpty(host)) return false;
-        var trimmed = host.Trim();
-        // IPv6 form: [::1]:port — strip the bracketed address.
-        if (trimmed.StartsWith('['))
-        {
-            var closeBracket = trimmed.IndexOf(']');
-            if (closeBracket < 0) return false;
-            var v6 = trimmed.Substring(1, closeBracket - 1);
-            return string.Equals(v6, "::1", StringComparison.Ordinal);
-        }
-        // IPv4 / hostname: strip trailing :port if present.
-        var colon = trimmed.LastIndexOf(':');
-        var hostname = (colon > 0 ? trimmed.Substring(0, colon) : trimmed).Trim();
-        return string.Equals(hostname, "127.0.0.1", StringComparison.Ordinal)
-            || string.Equals(hostname, "::1", StringComparison.Ordinal)
-            || string.Equals(hostname, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<string> ReadBodyAsync(HttpListenerRequest request, long maxBytes, CancellationToken ct)
