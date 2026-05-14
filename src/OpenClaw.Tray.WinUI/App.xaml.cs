@@ -146,6 +146,25 @@ public partial class App : Application
             ? WinRT.Interop.WindowNative.GetWindowHandle(_onboardingWindow)
             : IntPtr.Zero;
 
+    /// <summary>
+    /// Returns the best HWND to own privacy-critical recording consent prompts.
+    /// </summary>
+    public IntPtr GetRecordingConsentOwnerWindowHandle()
+    {
+        if (_hubWindow != null && !_hubWindow.IsClosed)
+            return WinRT.Interop.WindowNative.GetWindowHandle(_hubWindow);
+
+        if (_onboardingWindow != null)
+            return WinRT.Interop.WindowNative.GetWindowHandle(_onboardingWindow);
+
+        if (_trayMenuWindow != null)
+            return WinRT.Interop.WindowNative.GetWindowHandle(_trayMenuWindow);
+
+        return _keepAliveWindow != null
+            ? WinRT.Interop.WindowNative.GetWindowHandle(_keepAliveWindow)
+            : IntPtr.Zero;
+    }
+
     private SettingsManager? _settings;
     private SettingsData? _previousSettingsSnapshot;
     private SshTunnelService? _sshTunnelService;

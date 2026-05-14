@@ -485,6 +485,48 @@ public class TrayMenuWindowMarkupTests
         Assert.True(navigationCompleted.Success);
     }
 
+    [Fact]
+    public void RecordingConsentDialog_HasAccessibilitySafeDefaults()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Dialogs",
+            "RecordingConsentDialog.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("AutomationProperties.SetName(denyButton, LocalizationHelper.GetString(\"RecordingConsent_Deny\"))", source);
+        Assert.Contains("AutomationProperties.SetName(allowButton, LocalizationHelper.GetString(\"RecordingConsent_Allow\"))", source);
+        Assert.Contains("AutomationProperties.SetLiveSetting(root, AutomationLiveSetting.Assertive)", source);
+        Assert.Contains("denyButton.Loaded += (s, e) => FocusSafeDefaultOnce();", source);
+        Assert.Contains("Activated += (s, e) => FocusSafeDefaultOnce();", source);
+        Assert.Contains("_denyButton?.Focus(FocusState.Programmatic)", source);
+        Assert.Contains("SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, _ownerHwnd);", source);
+        Assert.Contains("_ownerDisabled = EnableWindow(_ownerHwnd, false);", source);
+        Assert.Contains("ReenableOwnerWindow();", source);
+    }
+
+    [Fact]
+    public void RecordingConsentDialog_IsCreatedWithOwnerWindow()
+    {
+        var appSource = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "App.xaml.cs"));
+        var nodeServiceSource = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Services",
+            "NodeService.cs"));
+
+        Assert.Contains("GetRecordingConsentOwnerWindowHandle()", appSource);
+        Assert.Contains("new Dialogs.RecordingConsentDialog(type, ownerHwnd)", nodeServiceSource);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

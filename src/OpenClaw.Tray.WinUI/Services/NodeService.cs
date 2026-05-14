@@ -1736,7 +1736,8 @@ public sealed class NodeService : IDisposable
         {
             try
             {
-                var dialog = new Dialogs.RecordingConsentDialog(type);
+                var ownerHwnd = (Application.Current as App)?.GetRecordingConsentOwnerWindowHandle() ?? IntPtr.Zero;
+                var dialog = new Dialogs.RecordingConsentDialog(type, ownerHwnd);
                 var consented = await dialog.ShowAsync();
 
                 if (consented && _settings != null)
