@@ -82,7 +82,7 @@ public sealed class TtsCapability : NodeCapabilityBase
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Error("Speak canceled");
+            return Error("cancelled");
         }
         catch (Exception ex)
         {

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using OpenClaw.Shared;
 using OpenClaw.Shared.Capabilities;
@@ -1374,6 +1375,111 @@ public class WindowsNodeClientTests
         }
     }
 
+    [Fact]
+    public async Task NodeInvokeCancel_RequestPath_CancelsActiveCapability()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"openclaw-node-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataPath);
+
+        try
+        {
+            using var client = new WindowsNodeClient("ws://localhost:18789", "test-token", dataPath);
+            var cap = new CancellableCapability("mock.slow");
+            client.RegisterCapability(cap);
+
+            var completed = new TaskCompletionSource<NodeInvokeCompletedEventArgs>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            client.InvokeCompleted += (_, e) => completed.TrySetResult(e);
+
+            await InvokeProcessMessageAsync(client, """
+                {
+                  "type": "req",
+                  "id": "req-4",
+                  "method": "node.invoke",
+                  "params": {
+                    "command": "mock.slow",
+                    "args": {}
+                  }
+                }
+                """);
+
+            await cap.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(cap.LastTokenCanBeCanceled);
+
+            await InvokeProcessMessageAsync(client, """
+                {
+                  "type": "req",
+                  "id": "cancel-4",
+                  "method": "node.invoke.cancel",
+                  "params": {
+                    "requestId": "req-4"
+                  }
+                }
+                """);
+
+            var result = await completed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.False(result.Ok);
+            Assert.Equal("cancelled", result.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(dataPath))
+                Directory.Delete(dataPath, true);
+        }
+    }
+
+    [Fact]
+    public async Task NodeInvokeCancel_EventPath_CancelsActiveCapability()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"openclaw-node-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataPath);
+
+        try
+        {
+            using var client = new WindowsNodeClient("ws://localhost:18789", "test-token", dataPath);
+            var cap = new CancellableCapability("mock.slow");
+            client.RegisterCapability(cap);
+
+            var completed = new TaskCompletionSource<NodeInvokeCompletedEventArgs>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            client.InvokeCompleted += (_, e) => completed.TrySetResult(e);
+
+            await InvokeProcessMessageAsync(client, """
+                {
+                  "type": "event",
+                  "event": "node.invoke.request",
+                  "payload": {
+                    "requestId": "inv-evt-cancel",
+                    "command": "mock.slow",
+                    "args": {}
+                  }
+                }
+                """);
+
+            await cap.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(cap.LastTokenCanBeCanceled);
+
+            await InvokeProcessMessageAsync(client, """
+                {
+                  "type": "event",
+                  "event": "node.invoke.cancel",
+                  "payload": {
+                    "requestId": "inv-evt-cancel"
+                  }
+                }
+                """);
+
+            var result = await completed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.False(result.Ok);
+            Assert.Equal("cancelled", result.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(dataPath))
+                Directory.Delete(dataPath, true);
+        }
+    }
+
     private static async Task InvokeProcessMessageAsync(WindowsNodeClient client, string json)
     {
         var processMethod = typeof(WindowsNodeClient).GetMethod(
@@ -1382,5 +1488,43 @@ public class WindowsNodeClientTests
         Assert.NotNull(processMethod);
         var task = (Task)processMethod!.Invoke(client, [json])!;
         await task;
+    }
+
+    private sealed class CancellableCapability : INodeCapability
+    {
+        private readonly string _command;
+
+        public CancellableCapability(string command)
+        {
+            _command = command;
+        }
+
+        public string Category => "mock";
+        public IReadOnlyList<string> Commands => [_command];
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool LastTokenCanBeCanceled { get; private set; }
+
+        public bool CanHandle(string command) => string.Equals(command, _command, StringComparison.Ordinal);
+
+        public Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+            => ExecuteAsync(request, CancellationToken.None);
+
+        public async Task<NodeInvokeResponse> ExecuteAsync(
+            NodeInvokeRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastTokenCanBeCanceled = cancellationToken.CanBeCanceled;
+            Started.TrySetResult();
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+                return new NodeInvokeResponse { Id = request.Id, Ok = true };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return new NodeInvokeResponse { Id = request.Id, Ok = false, Error = "cancelled" };
+            }
+        }
     }
 }

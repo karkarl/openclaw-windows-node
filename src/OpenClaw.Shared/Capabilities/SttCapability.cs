@@ -179,7 +179,7 @@ public sealed class SttCapability : NodeCapabilityBase
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Error("Transcribe canceled");
+            return Error("cancelled");
         }
         catch (Exception ex)
         {
@@ -237,7 +237,7 @@ public sealed class SttCapability : NodeCapabilityBase
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Error("Listen canceled");
+            return Error("cancelled");
         }
         catch (Exception ex)
         {
@@ -263,6 +263,10 @@ public sealed class SttCapability : NodeCapabilityBase
                 isListenWithVadSupported = result.IsListenWithVadSupported,
                 isBoundedTranscribeSupported = result.IsBoundedTranscribeSupported
             });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Error("cancelled");
         }
         catch (Exception ex)
         {

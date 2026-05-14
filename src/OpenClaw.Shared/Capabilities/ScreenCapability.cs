@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared.Capabilities;
@@ -27,12 +28,17 @@ public class ScreenCapability : NodeCapabilityBase
     {
     }
     
-    public override async Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+    public override Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+        => ExecuteAsync(request, CancellationToken.None);
+
+    public override async Task<NodeInvokeResponse> ExecuteAsync(
+        NodeInvokeRequest request,
+        CancellationToken cancellationToken)
     {
         return request.Command switch
         {
-            "screen.snapshot" => await HandleCaptureAsync(request),
-            "screen.record" => await HandleRecordAsync(request),
+            "screen.snapshot" => await HandleCaptureAsync(request, cancellationToken),
+            "screen.record" => await HandleRecordAsync(request, cancellationToken),
             _ => Error($"Unknown command: {request.Command}")
         };
     }
@@ -44,8 +50,11 @@ public class ScreenCapability : NodeCapabilityBase
     private const int MaxQuality = 100;
     private const int MaxScreenIndex = 32;          // far above any plausible monitor count
 
-    private async Task<NodeInvokeResponse> HandleCaptureAsync(NodeInvokeRequest request)
+    private async Task<NodeInvokeResponse> HandleCaptureAsync(
+        NodeInvokeRequest request,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var format = GetStringArg(request.Args, "format", "png");
         var maxWidth = Clamp(GetIntArg(request.Args, "maxWidth", 1920), MinDimension, MaxScreenWidth);
         var quality = Clamp(GetIntArg(request.Args, "quality", 80), MinQuality, MaxQuality);
@@ -68,7 +77,8 @@ public class ScreenCapability : NodeCapabilityBase
                 MaxWidth = maxWidth,
                 Quality = quality,
                 MonitorIndex = screenIndex,
-                IncludePointer = includePointer
+                IncludePointer = includePointer,
+                CancellationToken = cancellationToken
             });
             
             var image = $"data:image/{result.Format.ToLowerInvariant()};base64,{result.Base64}";
@@ -81,6 +91,10 @@ public class ScreenCapability : NodeCapabilityBase
                 image
             });
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Error("cancelled");
+        }
         catch (Exception ex)
         {
             Logger.Error("Screen capture failed", ex);
@@ -88,8 +102,11 @@ public class ScreenCapability : NodeCapabilityBase
         }
     }
 
-    private async Task<NodeInvokeResponse> HandleRecordAsync(NodeInvokeRequest request)
+    private async Task<NodeInvokeResponse> HandleRecordAsync(
+        NodeInvokeRequest request,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var format = GetStringArg(request.Args, "format", "mp4");
         if (!string.IsNullOrWhiteSpace(format) &&
             !string.Equals(format, "mp4", StringComparison.OrdinalIgnoreCase))
@@ -118,7 +135,8 @@ public class ScreenCapability : NodeCapabilityBase
                 Fps = fps,
                 ScreenIndex = screenIndex,
                 Format = "mp4",
-                IncludeAudio = includeAudio
+                IncludeAudio = includeAudio,
+                CancellationToken = cancellationToken
             });
 
             return Success(new
@@ -130,6 +148,10 @@ public class ScreenCapability : NodeCapabilityBase
                 screenIndex = result.ScreenIndex,
                 hasAudio = result.HasAudio
             });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Error("cancelled");
         }
         catch (Exception ex)
         {
@@ -166,6 +188,7 @@ public class ScreenCaptureArgs
     public int Quality { get; set; } = 80;
     public int MonitorIndex { get; set; } = 0;
     public bool IncludePointer { get; set; } = true;
+    public CancellationToken CancellationToken { get; set; }
 }
 
 public class ScreenCaptureResult
@@ -183,6 +206,7 @@ public class ScreenRecordArgs
     public double Fps { get; set; } = 10;
     public int ScreenIndex { get; set; }
     public bool IncludeAudio { get; set; }
+    public CancellationToken CancellationToken { get; set; }
 }
 
 public class ScreenRecordResult
@@ -196,4 +220,3 @@ public class ScreenRecordResult
     public int Height { get; set; }
     public bool HasAudio { get; set; }
 }
-

@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared;
@@ -21,6 +23,7 @@ public class WindowsNodeClient : WebSocketClientBase
     private readonly List<INodeCapability> _capabilities = new();
     private FrozenDictionary<string, INodeCapability> _commandMap = FrozenDictionary<string, INodeCapability>.Empty;
     private readonly NodeRegistration _registration;
+    private readonly ConcurrentDictionary<string, InvocationCancellation> _activeInvocations = new(StringComparer.Ordinal);
     
     // Connection state
     private bool _isConnected;
@@ -298,7 +301,10 @@ public class WindowsNodeClient : WebSocketClientBase
                 await HandlePairingResolvedEventAsync(root, eventType);
                 break;
             case "node.invoke.request":
-                await HandleNodeInvokeEventAsync(root);
+                _ = HandleNodeInvokeEventAsync(root.Clone());
+                break;
+            case "node.invoke.cancel":
+                HandleNodeInvokeCancel(root);
                 break;
             case "health":
                 if (root.TryGetProperty("payload", out var payload))
@@ -477,18 +483,27 @@ public class WindowsNodeClient : WebSocketClientBase
         }
         
         var stopwatch = Stopwatch.StartNew();
+        using var invocation = CreateInvocationCancellation(requestId, command, out var timedOut);
         try
         {
             // Raise event for UI notification
             InvokeReceived?.Invoke(this, request);
             
             // Execute the command
-            var response = await capability.ExecuteAsync(request);
+            var response = await capability.ExecuteAsync(request, invocation.Token);
             response.Id = requestId;
              
             await SendNodeInvokeResultAsync(requestId, response.Ok, response.Payload, response.Error);
             stopwatch.Stop();
             RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
+        }
+        catch (OperationCanceledException) when (invocation.IsCancellationRequested)
+        {
+            var error = timedOut() ? "timed out" : "cancelled";
+            _logger.Warn($"[NODE] Command {error}: {command}");
+            await SendNodeInvokeResultAsync(requestId, false, null, error);
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, false, error, stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
@@ -497,6 +512,59 @@ public class WindowsNodeClient : WebSocketClientBase
             stopwatch.Stop();
             RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
         }
+    }
+
+    private void HandleNodeInvokeCancel(JsonElement root)
+    {
+        if (!TryGetNodeInvokeCancelRequestId(root, out var requestId))
+        {
+            _logger.Warn("[NODE] node.invoke.cancel has no requestId");
+            return;
+        }
+
+        if (_activeInvocations.TryGetValue(requestId, out var invocation))
+        {
+            _logger.Info($"[NODE] Cancelling node.invoke request: {requestId}");
+            invocation.Cancel();
+        }
+        else
+        {
+            _logger.Debug($"[NODE] Cancel ignored for inactive node.invoke request: {requestId}");
+        }
+    }
+
+    private static bool TryGetNodeInvokeCancelRequestId(JsonElement root, out string requestId)
+    {
+        requestId = "";
+
+        if (root.TryGetProperty("payload", out var payload) &&
+            TryGetRequestId(payload, out requestId))
+        {
+            return true;
+        }
+
+        if (root.TryGetProperty("params", out var parameters) &&
+            TryGetRequestId(parameters, out requestId))
+        {
+            return true;
+        }
+
+        return TryGetRequestId(root, out requestId);
+    }
+
+    private static bool TryGetRequestId(JsonElement element, out string requestId)
+    {
+        requestId = "";
+        if (element.TryGetProperty("requestId", out var requestIdProp))
+        {
+            requestId = requestIdProp.GetString() ?? "";
+        }
+        else if (element.TryGetProperty("id", out var idProp))
+        {
+            requestId = idProp.GetString() ?? "";
+        }
+
+        return !string.IsNullOrWhiteSpace(requestId);
     }
     
     private async Task SendNodeInvokeResultAsync(string requestId, bool success, object? payload, string? error)
@@ -930,7 +998,10 @@ public class WindowsNodeClient : WebSocketClientBase
         switch (method)
         {
             case "node.invoke":
-                await HandleNodeInvokeAsync(root, id);
+                _ = HandleNodeInvokeAsync(root.Clone(), id);
+                break;
+            case "node.invoke.cancel":
+                HandleNodeInvokeCancel(root);
                 break;
             case "ping":
                 await SendPongAsync(id);
@@ -1001,18 +1072,27 @@ public class WindowsNodeClient : WebSocketClientBase
         }
         
         var stopwatch = Stopwatch.StartNew();
+        using var invocation = CreateInvocationCancellation(requestId, command, out var timedOut);
         try
         {
             // Raise event for UI notification
             InvokeReceived?.Invoke(this, request);
             
             // Execute the command
-            var response = await capability.ExecuteAsync(request);
+            var response = await capability.ExecuteAsync(request, invocation.Token);
             response.Id = requestId;
              
             await SendInvokeResponseAsync(response);
             stopwatch.Stop();
             RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
+        }
+        catch (OperationCanceledException) when (invocation.IsCancellationRequested)
+        {
+            var error = timedOut() ? "timed out" : "cancelled";
+            _logger.Warn($"Command {error}: {command}");
+            await SendErrorResponseAsync(requestId, error);
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, false, error, stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
@@ -1020,6 +1100,71 @@ public class WindowsNodeClient : WebSocketClientBase
             await SendErrorResponseAsync(requestId, "Command execution failed");
             stopwatch.Stop();
             RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+        }
+    }
+
+    private InvocationCancellation CreateInvocationCancellation(
+        string requestId,
+        string command,
+        out Func<bool> timedOut)
+    {
+        var maxRuntime = GetMaxRuntime(command);
+        var invocation = new InvocationCancellation(requestId, _activeInvocations, CancellationToken);
+        if (maxRuntime.HasValue)
+        {
+            invocation.CancelAfter(maxRuntime.Value);
+        }
+
+        _activeInvocations[requestId] = invocation;
+        timedOut = () => maxRuntime.HasValue &&
+                         invocation.IsCancellationRequested &&
+                         !invocation.WasCancelledByGateway &&
+                         !CancellationToken.IsCancellationRequested;
+        return invocation;
+    }
+
+    private static TimeSpan? GetMaxRuntime(string command) => command switch
+    {
+        "system.run" => TimeSpan.FromMinutes(10),
+        "screen.record" => TimeSpan.FromMinutes(5),
+        "camera.clip" => TimeSpan.FromMinutes(1),
+        "stt.transcribe" => TimeSpan.FromSeconds(30),
+        "stt.listen" => TimeSpan.FromMinutes(2),
+        _ => null
+    };
+
+    private sealed class InvocationCancellation : IDisposable
+    {
+        private readonly string _requestId;
+        private readonly ConcurrentDictionary<string, InvocationCancellation> _activeInvocations;
+        private readonly CancellationTokenSource _cts;
+
+        public InvocationCancellation(
+            string requestId,
+            ConcurrentDictionary<string, InvocationCancellation> activeInvocations,
+            CancellationToken clientToken)
+        {
+            _requestId = requestId;
+            _activeInvocations = activeInvocations;
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(clientToken);
+        }
+
+        public CancellationToken Token => _cts.Token;
+        public bool IsCancellationRequested => _cts.IsCancellationRequested;
+        public bool WasCancelledByGateway { get; private set; }
+
+        public void Cancel()
+        {
+            WasCancelledByGateway = true;
+            _cts.Cancel();
+        }
+
+        public void CancelAfter(TimeSpan delay) => _cts.CancelAfter(delay);
+
+        public void Dispose()
+        {
+            _activeInvocations.TryRemove(_requestId, out _);
+            _cts.Dispose();
         }
     }
 
@@ -1139,6 +1284,7 @@ public class WindowsNodeClient : WebSocketClientBase
     protected override void OnDisconnected()
     {
         _isConnected = false;
+        CancelActiveInvocations();
         // Don't reset pairing state when disconnected due to pairing — gateway
         // closes the socket after PAIRING_REQUIRED but we're still waiting for approval
         if (!_pairingBlocked)
@@ -1148,9 +1294,23 @@ public class WindowsNodeClient : WebSocketClientBase
         }
     }
 
+    protected override void OnDisposing()
+    {
+        CancelActiveInvocations();
+    }
+
+    private void CancelActiveInvocations()
+    {
+        foreach (var invocation in _activeInvocations.Values)
+        {
+            try { invocation.Cancel(); } catch { }
+        }
+    }
+
     protected override void OnError(Exception ex)
     {
         _isConnected = false;
+        CancelActiveInvocations();
         if (!_pairingBlocked)
         {
             _isPendingApproval = false;

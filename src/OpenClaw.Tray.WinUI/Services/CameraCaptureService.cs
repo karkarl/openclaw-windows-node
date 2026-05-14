@@ -56,7 +56,7 @@ public class CameraCaptureService : IDisposable
     public async Task<CameraSnapResult> SnapAsync(CameraSnapArgs args)
     {
         _logger.Info($"camera.snap start: deviceId={args.DeviceId ?? "(default)"}, format={args.Format}, maxWidth={args.MaxWidth}, quality={args.Quality}");
-        await _captureLock.WaitAsync();
+        await _captureLock.WaitAsync(args.CancellationToken);
         
         try
         {
@@ -130,11 +130,12 @@ public class CameraCaptureService : IDisposable
     public async Task<CameraClipResult> ClipAsync(CameraClipArgs args)
     {
         _logger.Info($"camera.clip start: deviceId={args.DeviceId ?? "(default)"}, durationMs={args.DurationMs}, includeAudio={args.IncludeAudio}, format={args.Format}");
-        await _captureLock.WaitAsync();
+        await _captureLock.WaitAsync(args.CancellationToken);
         
         try
         {
             using var capture = new MediaCapture();
+            var recordingStarted = false;
             
             var settings = new MediaCaptureInitializationSettings
             {
@@ -154,12 +155,22 @@ public class CameraCaptureService : IDisposable
             var profile = CreateClipProfile(args.IncludeAudio, recordProperties);
             
             var recordStart = DateTime.UtcNow;
-            await capture.StartRecordToStreamAsync(profile, stream);
-            _logger.Info($"camera.clip: recording started");
-            
-            await Task.Delay(args.DurationMs);
-            
-            await capture.StopRecordAsync();
+            try
+            {
+                await capture.StartRecordToStreamAsync(profile, stream);
+                recordingStarted = true;
+                _logger.Info($"camera.clip: recording started");
+                
+                await Task.Delay(args.DurationMs, args.CancellationToken);
+            }
+            finally
+            {
+                if (recordingStarted)
+                {
+                    await capture.StopRecordAsync();
+                    recordingStarted = false;
+                }
+            }
             var elapsed = (DateTime.UtcNow - recordStart).TotalMilliseconds;
             _logger.Info($"camera.clip: recording stopped after {elapsed:0}ms");
             
@@ -183,6 +194,10 @@ public class CameraCaptureService : IDisposable
         catch (UnauthorizedAccessException ex)
         {
             _logger.Error("Camera access denied. Check Windows privacy settings.", ex);
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
             throw;
         }
         catch (Exception ex)

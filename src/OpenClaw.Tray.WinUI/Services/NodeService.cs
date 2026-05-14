@@ -1388,8 +1388,11 @@ public sealed class NodeService : IDisposable
             throw new InvalidOperationException("Screen recording service not available");
         }
 
+        args.CancellationToken.ThrowIfCancellationRequested();
         await EnsureRecordingConsentAsync(RecordingType.Screen);
+        args.CancellationToken.ThrowIfCancellationRequested();
         await ShowRecordingCountdownAsync();
+        args.CancellationToken.ThrowIfCancellationRequested();
 
         SetRecordingState(RecordingType.Screen, true, args.DurationMs);
         try
@@ -1459,8 +1462,11 @@ public sealed class NodeService : IDisposable
             throw new InvalidOperationException("Camera capture service not available");
         }
 
+        args.CancellationToken.ThrowIfCancellationRequested();
         await EnsureRecordingConsentAsync(RecordingType.Camera);
+        args.CancellationToken.ThrowIfCancellationRequested();
         await ShowRecordingCountdownAsync();
+        args.CancellationToken.ThrowIfCancellationRequested();
 
         SetRecordingState(RecordingType.Camera, true, args.DurationMs);
         try

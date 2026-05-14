@@ -97,11 +97,16 @@ public class SystemCapability : NodeCapabilityBase
     }
     
     public override async Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+        => await ExecuteAsync(request, CancellationToken.None);
+
+    public override async Task<NodeInvokeResponse> ExecuteAsync(
+        NodeInvokeRequest request,
+        CancellationToken cancellationToken)
     {
         return request.Command switch
         {
             "system.notify" => await HandleNotifyAsync(request),
-            "system.run" => await HandleRunAsync(request),
+            "system.run" => await HandleRunAsync(request, cancellationToken),
             "system.run.prepare" => HandleRunPrepare(request),
             "system.which" => HandleWhich(request),
             "system.execApprovals.get" => HandleExecApprovalsGet(),
@@ -254,9 +259,12 @@ public class SystemCapability : NodeCapabilityBase
         });
     }
     
-    private async Task<NodeInvokeResponse> HandleRunAsync(NodeInvokeRequest request)
+    private async Task<NodeInvokeResponse> HandleRunAsync(
+        NodeInvokeRequest request,
+        CancellationToken cancellationToken)
     {
         var correlationId = Guid.NewGuid().ToString("N")[..8];
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Routing seam (rail 2): select path, delegate — no approval logic here.
         if (_v2Handler != null)
@@ -365,7 +373,7 @@ public class SystemCapability : NodeCapabilityBase
         if (_approvalPolicy != null)
         {
             var approval = _approvalPolicy.Evaluate(fullCommand, shell);
-            if (!await EnsureApprovedAsync(fullCommand, shell, approval))
+            if (!await EnsureApprovedAsync(fullCommand, shell, approval, cancellationToken))
             {
                 Logger.Warn($"system.run DENIED: {fullCommand} ({approval.Reason})");
                 return Error($"Command denied by exec policy: {approval.Reason}");
@@ -381,7 +389,7 @@ public class SystemCapability : NodeCapabilityBase
             foreach (var target in parseResult.Targets)
             {
                 var innerApproval = _approvalPolicy.Evaluate(target.Command, target.Shell);
-                if (!await EnsureApprovedAsync(target.Command, target.Shell, innerApproval))
+                if (!await EnsureApprovedAsync(target.Command, target.Shell, innerApproval, cancellationToken))
                 {
                     Logger.Warn($"system.run DENIED: {target.Command} ({innerApproval.Reason})");
                     return Error($"Command denied by exec policy: {innerApproval.Reason}");
@@ -399,7 +407,7 @@ public class SystemCapability : NodeCapabilityBase
                 Cwd = cwd,
                 TimeoutMs = timeoutMs,
                 Env = env
-            });
+            }, cancellationToken);
             
             return Success(new
             {
@@ -409,6 +417,10 @@ public class SystemCapability : NodeCapabilityBase
                 timedOut = result.TimedOut,
                 durationMs = result.DurationMs
             });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Error("cancelled");
         }
         catch (Exception ex)
         {
