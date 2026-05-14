@@ -23,11 +23,11 @@ namespace OpenClaw.Tray.UITests;
 public static class TestSupport
 {
     /// <summary>Build a fresh router/registry/datamodel/sink stack for one test.</summary>
-    public static TestHarness BuildHarness(UIThreadFixture ui)
+    public static TestHarness BuildHarness(UIThreadFixture ui, ComponentRendererRegistry? registry = null)
     {
         var logger = NullLogger.Instance;
         var media = new MediaResolver(logger);
-        var registry = ComponentRendererRegistry.BuildDefault(media);
+        registry ??= ComponentRendererRegistry.BuildDefault(media);
         var dataModel = new DataModelStore(ui.Dispatcher);
         var actions = new RecordingActionSink();
         var router = new A2UIRouter(ui.Dispatcher, dataModel, registry, actions, logger);

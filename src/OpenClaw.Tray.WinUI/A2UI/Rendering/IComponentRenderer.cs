@@ -11,8 +11,8 @@ namespace OpenClawTray.A2UI.Rendering;
 
 /// <summary>
 /// One implementation per A2UI v0.8 component type. Catalog-strict: registry
-/// is populated at construction time. To extend, add a renderer class and
-/// register it in <see cref="ComponentRendererRegistry.BuildDefault"/>.
+/// is populated at construction time and can be extended with
+/// <see cref="ComponentRendererRegistry.Set"/>.
 /// </summary>
 public interface IComponentRenderer
 {

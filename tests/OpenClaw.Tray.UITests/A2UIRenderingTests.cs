@@ -4,7 +4,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using OpenClaw.Shared;
 using OpenClawTray.A2UI.Hosting;
+using OpenClawTray.A2UI.Protocol;
+using OpenClawTray.A2UI.Rendering;
 
 namespace OpenClaw.Tray.UITests;
 
@@ -175,6 +178,33 @@ public sealed class A2UIRenderingTests
     }
 
     [Fact]
+    public async Task RegisteredCustomComponent_UsesRegisteredRenderer()
+    {
+        const string jsonl =
+            """{"surfaceUpdate":{"surfaceId":"sCustom","components":[{"id":"r","component":{"Frobnicate":{"foo":"bar"}}}]}}""" + "\n" +
+            """{"beginRendering":{"surfaceId":"sCustom","root":"r"}}""";
+
+        await _ui.PauseAsync("Registered custom component → custom renderer");
+        await _ui.ResetContainerAsync();
+        await _ui.RunOnUIAsync(() =>
+        {
+            var registry = ComponentRendererRegistry.BuildDefault(new MediaResolver(NullLogger.Instance));
+            var renderer = new RecordingRenderer();
+            registry.Set("Frobnicate", renderer);
+            var harness = TestSupport.BuildHarness(_ui, registry);
+
+            harness.Router.Push(jsonl);
+
+            Assert.NotNull(harness.LastSurface);
+            Assert.Equal(1, renderer.RenderCount);
+            Assert.Equal("Frobnicate", renderer.LastComponentName);
+            var text = TestSupport.FindLogical<TextBlock>(harness.LastSurface!.RootElement).Single();
+            Assert.Equal("custom renderer invoked", text.Text);
+        });
+        await _ui.PauseAsync();
+    }
+
+    [Fact]
     public async Task DeleteSurface_RemovesSurfaceFromRouter()
     {
         const string jsonl =
@@ -227,4 +257,18 @@ public sealed class A2UIRenderingTests
 
     private static IEnumerable<T> FindDescendants<T>(DependencyObject root) where T : DependencyObject
         => TestSupport.FindDescendants<T>(root);
+
+    private sealed class RecordingRenderer : IComponentRenderer
+    {
+        public string ComponentName => "Frobnicate";
+        public int RenderCount { get; private set; }
+        public string? LastComponentName { get; private set; }
+
+        public FrameworkElement Render(A2UIComponentDef component, RenderContext ctx)
+        {
+            RenderCount++;
+            LastComponentName = component.ComponentName;
+            return new TextBlock { Text = "custom renderer invoked" };
+        }
+    }
 }
