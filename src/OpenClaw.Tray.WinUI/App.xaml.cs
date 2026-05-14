@@ -22,6 +22,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -153,6 +154,7 @@ public partial class App : Application
     private Mutex? _mutex;
     private Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
     private CancellationTokenSource? _deepLinkCts;
+    private string? _deepLinkPipeTokenPath;
     private bool _isExiting;
     
     /// <summary>
@@ -293,6 +295,11 @@ public partial class App : Application
     private void OnProcessExit(object? sender, EventArgs e)
     {
         MarkRunEnded();
+        if (_deepLinkPipeTokenPath != null)
+        {
+            DeepLinkPipeAuthenticator.TryDeleteTokenFile(_deepLinkPipeTokenPath);
+            _deepLinkPipeTokenPath = null;
+        }
         try
         {
             Logger.Info($"Process exiting (ExitCode={Environment.ExitCode})");
@@ -4844,6 +4851,18 @@ public partial class App : Application
 
     private void StartDeepLinkServer()
     {
+        string pipeToken;
+        try
+        {
+            _deepLinkPipeTokenPath = DeepLinkPipeAuthenticator.GetTokenPath(SettingsManager.SettingsDirectoryPath);
+            pipeToken = DeepLinkPipeAuthenticator.CreateSessionTokenFile(SettingsManager.SettingsDirectoryPath);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Deep link server disabled: failed to initialize IPC token: {ex.Message}");
+            return;
+        }
+
         _deepLinkCts = new CancellationTokenSource();
         var token = _deepLinkCts.Token;
         
@@ -4853,9 +4872,16 @@ public partial class App : Application
             {
                 try
                 {
-                    using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.In);
+                    using var pipe = DeepLinkPipeAuthenticator.CreateServerStream(PipeName);
                     await pipe.WaitForConnectionAsync(token);
-                    using var reader = new System.IO.StreamReader(pipe);
+                    using var reader = new System.IO.StreamReader(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    var presentedToken = await reader.ReadLineAsync(token);
+                    if (!DeepLinkPipeAuthenticator.TokenMatches(pipeToken, presentedToken))
+                    {
+                        Logger.Warn("Rejected deep link IPC request with invalid token");
+                        continue;
+                    }
+
                     var uri = await reader.ReadLineAsync(token);
                     if (!string.IsNullOrEmpty(uri))
                     {
@@ -4938,9 +4964,17 @@ public partial class App : Application
     {
         try
         {
+            var pipeToken = DeepLinkPipeAuthenticator.TryReadSessionToken(SettingsManager.SettingsDirectoryPath);
+            if (string.IsNullOrEmpty(pipeToken))
+            {
+                Logger.Warn("Failed to forward deep link: IPC token is unavailable");
+                return;
+            }
+
             using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             pipe.Connect(1000);
-            using var writer = new System.IO.StreamWriter(pipe);
+            using var writer = new System.IO.StreamWriter(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            writer.WriteLine(pipeToken);
             writer.WriteLine(uri);
             writer.Flush();
         }
@@ -5082,6 +5116,15 @@ public partial class App : Application
         {
             _deepLinkCts?.Dispose();
             _deepLinkCts = null;
+        });
+
+        SafeShutdownStep("deep link IPC token file", () =>
+        {
+            if (_deepLinkPipeTokenPath != null)
+            {
+                DeepLinkPipeAuthenticator.TryDeleteTokenFile(_deepLinkPipeTokenPath);
+                _deepLinkPipeTokenPath = null;
+            }
         });
 
         Logger.Info("Shutdown complete; calling Exit() now");
