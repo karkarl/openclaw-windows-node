@@ -3227,7 +3227,7 @@ public class SttCapabilityTests
             cts.Token);
 
         Assert.False(res.Ok);
-        Assert.Contains("canceled", res.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("cancelled", res.Error);
     }
 
     [Fact]
@@ -3432,7 +3432,7 @@ public class SttCapabilityTests
             cts.Token);
 
         Assert.False(res.Ok);
-        Assert.Contains("canceled", res.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("cancelled", res.Error);
     }
 
     // ============================================================
