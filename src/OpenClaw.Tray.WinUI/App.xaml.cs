@@ -4960,14 +4960,18 @@ public partial class App : Application
                         source ?? LocalizationHelper.GetString("StatusDisplay_Unknown")),
                     TextWrapping = TextWrapping.Wrap
                 });
-                content.Children.Add(new TextBox
+                var messagePreview = new TextBox
                 {
                     Text = message,
                     IsReadOnly = true,
                     AcceptsReturn = true,
                     TextWrapping = TextWrapping.Wrap,
                     MaxHeight = 240
-                });
+                };
+                AutomationProperties.SetName(
+                    messagePreview,
+                    LocalizationHelper.GetString("DeepLink_SendMessagePreviewLabel"));
+                content.Children.Add(messagePreview);
 
                 var dialog = new ContentDialog
                 {

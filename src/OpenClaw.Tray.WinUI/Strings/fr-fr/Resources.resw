@@ -329,6 +329,9 @@
   <data name="DeepLink_SendMessageSource" xml:space="preserve">
     <value>Source : {0}</value>
   </data>
+  <data name="DeepLink_SendMessagePreviewLabel" xml:space="preserve">
+    <value>Message à envoyer</value>
+  </data>
   <data name="QuickSend_Sending" xml:space="preserve">
     <value>Envoi en cours...</value>
   </data>

@@ -329,6 +329,9 @@
   <data name="DeepLink_SendMessageSource" xml:space="preserve">
     <value>来源：{0}</value>
   </data>
+  <data name="DeepLink_SendMessagePreviewLabel" xml:space="preserve">
+    <value>要发送的消息</value>
+  </data>
   <data name="QuickSend_Sending" xml:space="preserve">
     <value>发送中...</value>
   </data>

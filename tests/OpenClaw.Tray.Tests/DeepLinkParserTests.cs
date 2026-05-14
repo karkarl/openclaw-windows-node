@@ -5,6 +5,9 @@ namespace OpenClaw.Tray.Tests;
 
 public class DeepLinkParserTests
 {
+    private static readonly TimeSpan AsyncActionTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan UnexpectedActionDelay = TimeSpan.FromMilliseconds(200);
+
     #region ParseDeepLink
 
     [Fact]
@@ -359,7 +362,7 @@ public class DeepLinkParserTests
 
         DeepLinkHandler.Handle("openclaw://agent?message=ping", actions, "IPC pipe");
 
-        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(AsyncActionTimeout));
         Assert.Same(sent.Task, completed);
         Assert.Equal(("ping", "IPC pipe"), await confirmation.Task);
         Assert.Equal("ping", await sent.Task);
@@ -386,11 +389,11 @@ public class DeepLinkParserTests
 
         DeepLinkHandler.Handle("openclaw://agent?message=ping", actions);
 
-        var confirmed = await Task.WhenAny(confirmation.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        var confirmed = await Task.WhenAny(confirmation.Task, Task.Delay(AsyncActionTimeout));
         Assert.Same(confirmation.Task, confirmed);
         Assert.Equal("ping", await confirmation.Task);
 
-        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromMilliseconds(200)));
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(UnexpectedActionDelay));
         Assert.NotSame(sent.Task, completed);
     }
 
@@ -409,7 +412,7 @@ public class DeepLinkParserTests
 
         DeepLinkHandler.Handle("openclaw://agent?message=ping", actions);
 
-        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromMilliseconds(200)));
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(UnexpectedActionDelay));
         Assert.NotSame(sent.Task, completed);
     }
 
@@ -428,7 +431,7 @@ public class DeepLinkParserTests
 
         DeepLinkHandler.Handle("openclaw://healthcheck", actions);
 
-        var completed = await Task.WhenAny(ran.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        var completed = await Task.WhenAny(ran.Task, Task.Delay(AsyncActionTimeout));
         Assert.Same(ran.Task, completed);
     }
 

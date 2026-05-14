@@ -330,6 +330,9 @@
   <data name="DeepLink_SendMessageSource" xml:space="preserve">
     <value>Bron: {0}</value>
   </data>
+  <data name="DeepLink_SendMessagePreviewLabel" xml:space="preserve">
+    <value>Te verzenden bericht</value>
+  </data>
   <data name="QuickSend_Sending" xml:space="preserve">
     <value>Verzenden...</value>
   </data>
