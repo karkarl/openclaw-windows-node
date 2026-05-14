@@ -63,9 +63,11 @@ The capability list lives on `NodeService`, *not* on `WindowsNodeClient`. That s
 `OpenClaw.Shared/Mcp/McpToolBridge.cs` is transport-agnostic JSON-RPC 2.0. It implements:
 
 - `initialize` — protocol version `2024-11-05`, server info.
-- `tools/list` — flattens `_capabilities` into MCP tools. Tool name = command name (`"screen.snapshot"`); description = `"{category} capability: {command}"`; `inputSchema` is permissive.
+- `tools/list` — flattens `_capabilities` into MCP tools. Tool name = command name (`"screen.snapshot"`); description = `"{category} capability: {command}"`; `inputSchema` declares each known command's arguments, required fields, types, bounds, and enum values.
 - `tools/call` — finds the capability via `INodeCapability.CanHandle(name)`, builds a `NodeInvokeRequest` (the same struct the gateway path uses), calls `ExecuteAsync`, wraps the result as MCP `content[].text`. Tool failures come back as `result.isError = true`, not JSON-RPC errors (per MCP spec — JSON-RPC errors are reserved for protocol issues).
 - `ping`, `notifications/initialized` — protocol housekeeping.
+
+Set `OPENCLAW_MCP_VALIDATE_INPUT=1` in development/test environments to validate `tools/call` arguments against those schemas before capability dispatch.
 
 The bridge takes a `Func<IReadOnlyList<INodeCapability>>` rather than a snapshot. Every `tools/list` re-reads the live list. This is what guarantees zero-cost capability addition — register a new capability after server start and it appears on the next `tools/list`.
 

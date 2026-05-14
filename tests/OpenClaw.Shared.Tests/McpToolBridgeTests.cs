@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,6 +33,25 @@ public class McpToolBridgeTests
 
     private static McpToolBridge CreateBridge(IReadOnlyList<INodeCapability> caps)
         => new(() => caps);
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previous;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previous = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable(_name, _previous);
+    }
+
+    private static IDisposable SetMcpInputValidation(string? value)
+        => new EnvironmentVariableScope("OPENCLAW_MCP_VALIDATE_INPUT", value);
 
     [Fact]
     public async Task Initialize_ReturnsProtocolAndServerInfo()
@@ -103,6 +123,67 @@ public class McpToolBridgeTests
     }
 
     [Fact]
+    public async Task ToolsList_ArgumentBearingCommands_GetTypedInputSchemas()
+    {
+        var caps = new List<INodeCapability>
+        {
+            new FakeCapability("tts", "tts.speak"),
+            new FakeCapability("system", "system.run"),
+            new FakeCapability("screen", "screen.snapshot"),
+            new FakeCapability("canvas", "canvas.navigate"),
+            new FakeCapability("custom", "custom.unknown"),
+        };
+        var bridge = CreateBridge(caps);
+        var resp = await bridge.HandleRequestAsync(@"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/list""}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        foreach (var tool in doc.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray())
+        {
+            var properties = tool.GetProperty("inputSchema").GetProperty("properties");
+            Assert.True(properties.EnumerateObject().Any(), $"{tool.GetProperty("name").GetString()} should expose named schema properties");
+        }
+
+        var tts = FindTool(doc, "tts.speak").GetProperty("inputSchema");
+        Assert.Equal("object", tts.GetProperty("type").GetString());
+        Assert.False(tts.GetProperty("additionalProperties").GetBoolean());
+        Assert.Contains(tts.GetProperty("required").EnumerateArray(), r => r.GetString() == "text");
+        Assert.Equal("string", tts.GetProperty("properties").GetProperty("text").GetProperty("type").GetString());
+        Assert.Equal(5000, tts.GetProperty("properties").GetProperty("text").GetProperty("maxLength").GetInt32());
+
+        var systemRunCommand = FindTool(doc, "system.run")
+            .GetProperty("inputSchema")
+            .GetProperty("properties")
+            .GetProperty("command");
+        Assert.Equal(JsonValueKind.Array, systemRunCommand.GetProperty("type").ValueKind);
+        Assert.Contains(systemRunCommand.GetProperty("type").EnumerateArray(), t => t.GetString() == "string");
+        Assert.Contains(systemRunCommand.GetProperty("type").EnumerateArray(), t => t.GetString() == "array");
+
+        var screenFormat = FindTool(doc, "screen.snapshot")
+            .GetProperty("inputSchema")
+            .GetProperty("properties")
+            .GetProperty("format")
+            .GetProperty("enum");
+        Assert.Contains(screenFormat.EnumerateArray(), v => v.GetString() == "png");
+        Assert.Contains(screenFormat.EnumerateArray(), v => v.GetString() == "jpeg");
+    }
+
+    [Fact]
+    public async Task ToolsList_NoArgumentCommand_AdvertisesClosedEmptySchema()
+    {
+        var bridge = CreateBridge(new List<INodeCapability> { new FakeCapability("camera", "camera.list") });
+        var resp = await bridge.HandleRequestAsync(@"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/list""}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        var schema = doc.RootElement.GetProperty("result")
+            .GetProperty("tools")[0]
+            .GetProperty("inputSchema");
+
+        Assert.Equal("object", schema.GetProperty("type").GetString());
+        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        Assert.Empty(schema.GetProperty("properties").EnumerateObject());
+    }
+
+    [Fact]
     public async Task ToolsList_PicksUpNewCapabilityRegisteredAfterStart()
     {
         var caps = new List<INodeCapability>
@@ -146,6 +227,81 @@ public class McpToolBridgeTests
         using var payload = JsonDocument.Parse(text);
         Assert.Equal("world", payload.RootElement.GetProperty("hello").GetString());
         Assert.Equal(42, payload.RootElement.GetProperty("n").GetInt32());
+    }
+
+    [Fact]
+    public async Task ToolsCall_InputValidationOff_AllowsCapabilityLayerToHandleArguments()
+    {
+        using var _ = SetMcpInputValidation(null);
+        var called = false;
+        var fake = new FakeCapability("tts", "tts.speak")
+        {
+            OnExecute = _ =>
+            {
+                called = true;
+                return Task.FromResult(new NodeInvokeResponse { Ok = true, Payload = new { ok = true } });
+            },
+        };
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""tts.speak"",""arguments"":{""text"":42}}}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        Assert.True(called);
+        Assert.False(doc.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ToolsCall_InputValidationOn_RejectsInvalidArgumentsBeforeDispatch()
+    {
+        using var _ = SetMcpInputValidation("1");
+        var called = false;
+        var fake = new FakeCapability("tts", "tts.speak")
+        {
+            OnExecute = _ =>
+            {
+                called = true;
+                return Task.FromResult(new NodeInvokeResponse { Ok = true });
+            },
+        };
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""tts.speak"",""arguments"":{""text"":42}}}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.False(called);
+        Assert.True(result.GetProperty("isError").GetBoolean());
+        Assert.Contains("expected string", result.GetProperty("content")[0].GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task ToolsCall_InputValidationOn_RejectsMissingRequiredArgument()
+    {
+        using var _ = SetMcpInputValidation("1");
+        var fake = new FakeCapability("tts", "tts.speak");
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""tts.speak"",""arguments"":{}}}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.GetProperty("isError").GetBoolean());
+        Assert.Contains("Missing required argument: text", result.GetProperty("content")[0].GetProperty("text").GetString());
+    }
+
+    private static JsonElement FindTool(JsonDocument doc, string name)
+    {
+        foreach (var tool in doc.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray())
+        {
+            if (tool.GetProperty("name").GetString() == name)
+                return tool;
+        }
+
+        throw new InvalidOperationException($"Missing tool {name}");
     }
 
     [Fact]

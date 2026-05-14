@@ -12,7 +12,7 @@ namespace OpenClaw.Shared.Mcp;
 /// <see cref="INodeCapability"/> registry — registering a new capability on
 /// the node client immediately exposes its commands as MCP tools.
 /// </summary>
-public class McpToolBridge
+public partial class McpToolBridge
 {
     private const string ProtocolVersion = "2024-11-05";
 
@@ -155,12 +155,7 @@ public class McpToolBridge
                     description = CommandDescriptions.TryGetValue(cmd, out var desc)
                         ? desc
                         : $"{cap.Category} capability: {cmd}",
-                    inputSchema = new
-                    {
-                        type = "object",
-                        additionalProperties = true,
-                        properties = new { },
-                    },
+                    inputSchema = GetInputSchema(cmd),
                 });
             }
         }
@@ -302,6 +297,9 @@ public class McpToolBridge
         }
         if (capability == null)
             throw new McpToolException($"Unknown tool: {name}");
+
+        if (IsInputValidationEnabled())
+            ValidateToolArguments(name, args);
 
         var request = new NodeInvokeRequest
         {
