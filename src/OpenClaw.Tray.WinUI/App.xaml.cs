@@ -3020,16 +3020,7 @@ public partial class App : Application
         };
 
         // Allowlist of safe settings (no secrets like Token, BootstrapToken, API keys)
-        var safeSettings = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "AutoStart", "GlobalHotkeyEnabled", "ShowNotifications", "NotificationSound",
-            "NotifyHealth", "NotifyUrgent", "NotifyReminder", "NotifyEmail", "NotifyCalendar",
-            "NotifyBuild", "NotifyStock", "NotifyInfo", "NotifyChatResponses",
-            "PreferStructuredCategories",
-            "NodeCanvasEnabled", "NodeScreenEnabled", "NodeCameraEnabled",
-            "NodeLocationEnabled", "NodeBrowserProxyEnabled", "NodeTtsEnabled",
-            "HasSeenActivityStreamTip", "TtsProvider"
-        };
+        var safeSettings = OpenClaw.Shared.Capabilities.AppCapability.RemoteWritableSettings;
 
         app.SettingsGetHandler = (name) =>
         {
