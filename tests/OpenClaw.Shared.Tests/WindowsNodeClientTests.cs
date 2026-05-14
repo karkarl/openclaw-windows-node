@@ -2,7 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using OpenClaw.Shared;
@@ -1221,6 +1225,29 @@ public class WindowsNodeClientTests
         }
     }
 
+    private sealed class ThrowingCapability : INodeCapability
+    {
+        private readonly string _category;
+        private readonly string[] _commands;
+        private readonly string _message;
+
+        public ThrowingCapability(string category, string message, params string[] commands)
+        {
+            _category = category;
+            _message = message;
+            _commands = commands;
+        }
+
+        public string Category => _category;
+        public IReadOnlyList<string> Commands => _commands;
+        public bool CanHandle(string command) => Array.IndexOf(_commands, command) >= 0;
+
+        public Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+        {
+            throw new InvalidOperationException(_message);
+        }
+    }
+
     [Fact]
     public async Task CommandDispatch_RoutesToRegisteredCapability()
     {
@@ -1374,6 +1401,58 @@ public class WindowsNodeClientTests
         }
     }
 
+    [Theory]
+    [InlineData("req")]
+    [InlineData("event")]
+    public async Task CommandDispatch_ThrownCapabilityException_DoesNotLeakExceptionMessage(string wireShape)
+    {
+        const string sentinel = "sensitive-locale-or-path-C1";
+        var json = wireShape == "req"
+            ? """
+                {
+                  "type": "req",
+                  "id": "req-throw-1",
+                  "method": "node.invoke",
+                  "params": {
+                    "requestId": "inv-throw-1",
+                    "command": "mock.throw",
+                    "args": {}
+                  }
+                }
+                """
+            : """
+                {
+                  "type": "event",
+                  "event": "node.invoke.request",
+                  "payload": {
+                    "requestId": "inv-throw-1",
+                    "command": "mock.throw",
+                    "args": {}
+                  }
+                }
+                """;
+
+        var response = await InvokeAndReadWireMessageAsync(
+            json,
+            new ThrowingCapability("mock", $"do not leak {sentinel}", "mock.throw"));
+
+        Assert.DoesNotContain(sentinel, response);
+
+        using var document = JsonDocument.Parse(response);
+        var root = document.RootElement;
+        if (wireShape == "req")
+        {
+            Assert.False(root.GetProperty("ok").GetBoolean());
+            Assert.Equal("capability execution failed", root.GetProperty("error").GetProperty("message").GetString());
+        }
+        else
+        {
+            var parameters = root.GetProperty("params");
+            Assert.False(parameters.GetProperty("ok").GetBoolean());
+            Assert.Equal("capability execution failed", parameters.GetProperty("error").GetProperty("message").GetString());
+        }
+    }
+
     private static async Task InvokeProcessMessageAsync(WindowsNodeClient client, string json)
     {
         var processMethod = typeof(WindowsNodeClient).GetMethod(
@@ -1382,5 +1461,64 @@ public class WindowsNodeClientTests
         Assert.NotNull(processMethod);
         var task = (Task)processMethod!.Invoke(client, [json])!;
         await task;
+    }
+
+    private static async Task<string> InvokeAndReadWireMessageAsync(string json, INodeCapability capability)
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"openclaw-node-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataPath);
+        var port = GetAvailablePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+
+        try
+        {
+            var acceptTask = Task.Run(async () =>
+            {
+                var context = await listener.GetContextAsync();
+                return await context.AcceptWebSocketAsync(null);
+            });
+
+            using var client = new WindowsNodeClient($"ws://127.0.0.1:{port}/", "test-token", dataPath);
+            client.RegisterCapability(capability);
+            await client.ConnectAsync();
+
+            var webSocketContext = await acceptTask.WaitAsync(TimeSpan.FromSeconds(5));
+            using var serverSocket = webSocketContext.WebSocket;
+            await InvokeProcessMessageAsync(client, json);
+            return await ReceiveTextAsync(serverSocket);
+        }
+        finally
+        {
+            listener.Stop();
+            if (Directory.Exists(dataPath))
+                Directory.Delete(dataPath, true);
+        }
+    }
+
+    private static int GetAvailablePort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static async Task<string> ReceiveTextAsync(WebSocket socket)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var buffer = new byte[4096];
+        var builder = new StringBuilder();
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer, timeout.Token);
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new InvalidOperationException("WebSocket closed before a response was received.");
+            builder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+        }
+        while (!result.EndOfMessage);
+
+        return builder.ToString();
     }
 }

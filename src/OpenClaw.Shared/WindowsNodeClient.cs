@@ -15,6 +15,8 @@ namespace OpenClaw.Shared;
 /// </summary>
 public class WindowsNodeClient : WebSocketClientBase
 {
+    private const string CapabilityExecutionFailedMessage = "capability execution failed";
+
     private readonly DeviceIdentity _deviceIdentity;
     
     // Node capabilities registry
@@ -493,9 +495,9 @@ public class WindowsNodeClient : WebSocketClientBase
         catch (Exception ex)
         {
             _logger.Error($"[NODE] Command execution failed: {command}", ex);
-            await SendNodeInvokeResultAsync(requestId, false, null, "Command execution failed");
+            await SendNodeInvokeResultAsync(requestId, false, null, CapabilityExecutionFailedMessage);
             stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+            RaiseInvokeCompleted(requestId, command, false, CapabilityExecutionFailedMessage, stopwatch.Elapsed);
         }
     }
     
@@ -1017,9 +1019,9 @@ public class WindowsNodeClient : WebSocketClientBase
         catch (Exception ex)
         {
             _logger.Error($"Command execution failed: {command}", ex);
-            await SendErrorResponseAsync(requestId, "Command execution failed");
+            await SendErrorResponseAsync(requestId, CapabilityExecutionFailedMessage);
             stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+            RaiseInvokeCompleted(requestId, command, false, CapabilityExecutionFailedMessage, stopwatch.Elapsed);
         }
     }
 
