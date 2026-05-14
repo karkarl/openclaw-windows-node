@@ -181,7 +181,7 @@ public sealed class A2UIRenderingTests
     public async Task RegisteredCustomComponent_UsesRegisteredRenderer()
     {
         const string jsonl =
-            """{"surfaceUpdate":{"surfaceId":"sCustom","components":[{"id":"r","component":{"Frobnicate":{"foo":"bar"}}}]}}""" + "\n" +
+            """{"surfaceUpdate":{"surfaceId":"sCustom","components":[{"id":"r","component":{"CustomTestComponent":{"foo":"bar"}}}]}}""" + "\n" +
             """{"beginRendering":{"surfaceId":"sCustom","root":"r"}}""";
 
         await _ui.PauseAsync("Registered custom component → custom renderer");
@@ -190,14 +190,14 @@ public sealed class A2UIRenderingTests
         {
             var registry = ComponentRendererRegistry.BuildDefault(new MediaResolver(NullLogger.Instance));
             var renderer = new RecordingRenderer();
-            registry.Set("Frobnicate", renderer);
+            registry.Set("CustomTestComponent", renderer);
             var harness = TestSupport.BuildHarness(_ui, registry);
 
             harness.Router.Push(jsonl);
 
             Assert.NotNull(harness.LastSurface);
             Assert.Equal(1, renderer.RenderCount);
-            Assert.Equal("Frobnicate", renderer.LastComponentName);
+            Assert.Equal("CustomTestComponent", renderer.LastComponentName);
             var text = TestSupport.FindLogical<TextBlock>(harness.LastSurface!.RootElement).Single();
             Assert.Equal("custom renderer invoked", text.Text);
         });
@@ -260,7 +260,7 @@ public sealed class A2UIRenderingTests
 
     private sealed class RecordingRenderer : IComponentRenderer
     {
-        public string ComponentName => "Frobnicate";
+        public string ComponentName => "CustomTestComponent";
         public int RenderCount { get; private set; }
         public string? LastComponentName { get; private set; }
 
