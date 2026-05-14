@@ -1501,13 +1501,21 @@ public class WindowsNodeClientTests
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 
     private static async Task<string> ReceiveTextAsync(WebSocket socket)
     {
+        const int BufferSize = 4096;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var buffer = new byte[4096];
+        var buffer = new byte[BufferSize];
         var builder = new StringBuilder();
         WebSocketReceiveResult result;
         do
