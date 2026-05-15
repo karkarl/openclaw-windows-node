@@ -7,6 +7,7 @@ using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using OpenClaw.Shared;
 using OpenClaw.Shared.Audio;
+using OpenClawTray.Helpers;
 
 namespace OpenClawTray.Services;
 
@@ -198,7 +199,7 @@ public sealed class AudioPipeline : IAsyncDisposable
             });
 
             SetState(AudioPipelineState.Listening);
-            try { DiagnosticMessage?.Invoke($"Recording {durationMs / 1000.0:F1}s..."); } catch { }
+            DiagnosticMessage.SafeInvoke($"Recording {durationMs / 1000.0:F1}s...", _logger);
 
             try
             {
@@ -321,7 +322,7 @@ public sealed class AudioPipeline : IAsyncDisposable
         {
             _logger.Error("Error processing audio data", ex);
             if (_dataCallbackCount <= 3)
-                try { DiagnosticMessage?.Invoke($"⚠️ Audio error: {ex.Message}"); } catch { }
+                DiagnosticMessage.SafeInvoke($"⚠️ Audio error: {ex.Message}", _logger);
         }
     }
 
@@ -360,8 +361,8 @@ public sealed class AudioPipeline : IAsyncDisposable
                     _isSpeaking = true;
                     _silenceChunksCount = 0;
                     _speechChunkCount = 0;
-                    try { VoiceActivityChanged?.Invoke(new VadEvent { IsSpeaking = true, Probability = energy }); } catch { }
-                    try { DiagnosticMessage?.Invoke("🗣️ Listening..."); } catch { }
+                    VoiceActivityChanged.SafeInvoke(new VadEvent { IsSpeaking = true, Probability = energy }, _logger);
+                    DiagnosticMessage.SafeInvoke("🗣️ Listening...", _logger);
 
                     // Prepend the pre-buffer so we don't lose the speech onset
                     while (_preBuffer.Count > 0)
@@ -379,7 +380,7 @@ public sealed class AudioPipeline : IAsyncDisposable
                 if (_silenceChunksCount >= _silenceChunksThreshold)
                 {
                     _isSpeaking = false;
-                    try { VoiceActivityChanged?.Invoke(new VadEvent { IsSpeaking = false, Probability = energy }); } catch { }
+                    VoiceActivityChanged.SafeInvoke(new VadEvent { IsSpeaking = false, Probability = energy }, _logger);
 
                     var samples = _speechBuffer.ToArray();
                     _speechBuffer.Clear();
@@ -389,11 +390,11 @@ public sealed class AudioPipeline : IAsyncDisposable
                     var durationSec = (float)samples.Length / VoiceActivityDetector.SampleRate;
                     if (_speechChunkCount < 10) // less than ~320ms of actual speech
                     {
-                        try { DiagnosticMessage?.Invoke("Speak now — I'm listening"); } catch { }
+                        DiagnosticMessage.SafeInvoke("Speak now — I'm listening", _logger);
                     }
                     else
                     {
-                        try { DiagnosticMessage?.Invoke($"Transcribing {durationSec:F1}s of speech..."); } catch { }
+                        DiagnosticMessage.SafeInvoke($"Transcribing {durationSec:F1}s of speech...", _logger);
 
                         // Bounded in-flight count. If Whisper is stuck or
                         // slow, dropping a segment is preferable to letting
@@ -401,7 +402,7 @@ public sealed class AudioPipeline : IAsyncDisposable
                         if (Interlocked.Increment(ref _inFlightTranscriptions) > MaxConcurrentTranscriptions)
                         {
                             Interlocked.Decrement(ref _inFlightTranscriptions);
-                            try { DiagnosticMessage?.Invoke("⚠️ Transcription backlog — segment dropped"); } catch { }
+                            DiagnosticMessage.SafeInvoke("⚠️ Transcription backlog — segment dropped", _logger);
                         }
                         else
                         {
@@ -414,7 +415,7 @@ public sealed class AudioPipeline : IAsyncDisposable
                                 catch (Exception ex)
                                 {
                                     _logger.Error("Transcription task failed", ex);
-                                    try { DiagnosticMessage?.Invoke($"⚠️ Error: {ex.Message}"); } catch { }
+                                    DiagnosticMessage.SafeInvoke($"⚠️ Error: {ex.Message}", _logger);
                                 }
                                 finally
                                 {
@@ -461,7 +462,7 @@ public sealed class AudioPipeline : IAsyncDisposable
 
             if (results.Count == 0)
             {
-                try { DiagnosticMessage?.Invoke("No speech recognized in segment"); } catch { }
+                DiagnosticMessage.SafeInvoke("No speech recognized in segment", _logger);
             }
 
             foreach (var result in results)
@@ -508,7 +509,7 @@ public sealed class AudioPipeline : IAsyncDisposable
             _logger.Error("Transcription failed", ex);
             // Sanitized — the raw ex.Message can include sample lengths,
             // language tags, or other audio-shape detail.
-            try { DiagnosticMessage?.Invoke("⚠️ Transcription error"); } catch { }
+            DiagnosticMessage.SafeInvoke("⚠️ Transcription error", _logger);
         }
         finally
         {

@@ -165,8 +165,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateStatus(ConnectionStatus status)
     {
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
@@ -184,8 +182,6 @@ public sealed partial class HubWindow : WindowEx
                     connectionPage.UpdateStatus(status);
                 }
             });
-        }
-        catch { }
     }
 
     private void UpdateTitleBarStatus(ConnectionStatus status)
@@ -218,8 +214,6 @@ public sealed partial class HubWindow : WindowEx
     public void UpdateGatewaySelf(GatewaySelfInfo self)
     {
         _lastGatewaySelf = self;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
@@ -227,8 +221,6 @@ public sealed partial class HubWindow : WindowEx
                 if (ContentFrame?.Content is AboutPage about)
                     about.RefreshGatewayInfo();
             });
-        }
-        catch { }
     }
 
     public void UpdateSessions(SessionInfo[] sessions)
@@ -300,42 +292,30 @@ public sealed partial class HubWindow : WindowEx
     public void UpdateCronList(System.Text.Json.JsonElement data)
     {
         _lastCronList = data.Clone();
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is CronPage cp) cp.UpdateFromGateway(data);
             });
-        }
-        catch { }
     }
 
     public void UpdateCronStatus(System.Text.Json.JsonElement data)
     {
         _lastCronStatus = data.Clone();
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is CronPage cp) cp.UpdateFromGateway(data);
             });
-        }
-        catch { }
     }
 
     public void UpdateCronRuns(System.Text.Json.JsonElement data)
     {
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is CronPage cp) cp.UpdateCronRuns(data);
             });
-        }
-        catch { }
     }
 
     public void SeedCronData(CronPage page)
@@ -361,21 +341,16 @@ public sealed partial class HubWindow : WindowEx
         var snapshot = schema.Clone();
         LastConfigSchema = snapshot;
         if (IsClosed) return;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is ConfigPage cp) cp.UpdateConfigSchema(snapshot);
             });
-        }
-        catch { }
     }
 
     public void UpdateSkillsStatus(System.Text.Json.JsonElement data)
     {
-        try
-        {
+
             var snapshot = data.Clone();
             LastSkillsData = snapshot;
             DispatcherQueue?.TryEnqueue(() =>
@@ -387,15 +362,11 @@ public sealed partial class HubWindow : WindowEx
                     sp.UpdateFromGateway(snapshot);
                 }
             });
-        }
-        catch { }
-    }
+            }
 
     public void UpdateAgentsList(System.Text.Json.JsonElement data)
     {
         LastAgentsData = data;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
@@ -403,8 +374,6 @@ public sealed partial class HubWindow : WindowEx
                 RebuildAgentNavItems(data);
                 if (ContentFrame?.Content is HomePage home) home.UpdateAgentsList(data);
             });
-        }
-        catch { }
     }
 
     private void RebuildAgentNavItems(System.Text.Json.JsonElement data)
@@ -456,8 +425,7 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateAgentFilesList(System.Text.Json.JsonElement data)
     {
-        try
-        {
+
             var snapshot = data.Clone();
             var responseAgentId = _pendingAgentFilesListAgentId ?? _currentAgentId;
             _pendingAgentFilesListAgentId = null;
@@ -472,23 +440,18 @@ public sealed partial class HubWindow : WindowEx
                     wp.UpdateAgentFilesList(snapshot);
                 }
             });
-        }
-        catch { }
-    }
+            }
 
     public void UpdateAgentFileContent(System.Text.Json.JsonElement data)
     {
-        try
-        {
+
             var snapshot = data.Clone();
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is WorkspacePage wp) wp.UpdateAgentFileContent(snapshot);
             });
-        }
-        catch { }
-    }
+            }
 
     // Agent events ring buffer (max 400, cached centrally)
     // All mutations happen on the UI thread via DispatcherQueue
@@ -528,8 +491,6 @@ public sealed partial class HubWindow : WindowEx
 
     public void UpdateAgentEvent(AgentEventInfo evt)
     {
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
@@ -538,8 +499,6 @@ public sealed partial class HubWindow : WindowEx
                     _agentEvents.RemoveRange(MaxAgentEvents, _agentEvents.Count - MaxAgentEvents);
                 if (ContentFrame?.Content is AgentEventsPage agentEvents) agentEvents.AddEvent(evt);
             });
-        }
-        catch { }
     }
 
     // Pairing data
@@ -550,44 +509,32 @@ public sealed partial class HubWindow : WindowEx
     public void UpdateNodePairList(PairingListInfo data)
     {
         LastNodePairList = data;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is NodesPage np) np.UpdatePairingRequests(data);
             });
-        }
-        catch { }
     }
 
     public void UpdateDevicePairList(DevicePairingListInfo data)
     {
         LastDevicePairList = data;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is NodesPage np) np.UpdateDevicePairingRequests(data);
                 if (ContentFrame?.Content is ConnectionPage cp) cp.UpdateDevicePairingRequests(data);
             });
-        }
-        catch { }
     }
 
     public void UpdateModelsList(ModelsListInfo data)
     {
         LastModelsList = data;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is SessionsPage sp) sp.UpdateModelsList(data);
             });
-        }
-        catch { }
     }
 
     public PresenceEntry[]? LastPresence { get; private set; }
@@ -596,16 +543,12 @@ public sealed partial class HubWindow : WindowEx
     public void UpdatePresence(PresenceEntry[] data)
     {
         LastPresence = data;
-        try
-        {
             DispatcherQueue?.TryEnqueue(() =>
             {
                 if (IsClosed) return;
                 if (ContentFrame?.Content is InstancesPage ip) ip.UpdatePresenceData(data);
                 if (ContentFrame?.Content is NodesPage np) np.UpdatePresence(data);
             });
-        }
-        catch { }
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
