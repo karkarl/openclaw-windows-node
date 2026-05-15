@@ -30,6 +30,9 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
     private string? _activeGatewayRecordId; // gateway record ID for node credential resolution
     private bool _disposed;
     private bool _gatewayNeedsV2Signature; // remembered across reconnects
+    private int _v2SuccessCount;          // consecutive successful v2 handshakes
+    private int _v2ProbeThreshold = 3;    // probe v3 after this many v2 successes (doubles on each probe failure)
+    private bool _v3ProbeActive;          // true when we cleared _gatewayNeedsV2Signature to probe v3
     private string? _lastAutoApprovedRequestId; // prevent auto-approve loops
     private string? _autoApproveInFlight; // atomic guard against concurrent approval of same requestId
 
@@ -234,7 +237,20 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
             };
             lifecycle.DataClient.V2SignatureFallback += (s, _) =>
             {
+                // v3 signature rejected — reinstate v2.
+                // Only double the probe threshold if this was a v3 probe (not the initial v3→v2 fallback).
                 _gatewayNeedsV2Signature = true;
+                _v2SuccessCount = 0;
+                if (_v3ProbeActive)
+                {
+                    _v2ProbeThreshold = Math.Min(_v2ProbeThreshold * 2, 96); // exponential backoff, cap at 96
+                    _logger.Warn($"[ConnMgr] v3 probe rejected — staying on v2 (next probe after {_v2ProbeThreshold} successes)");
+                }
+                else
+                {
+                    _logger.Warn("[ConnMgr] Initial v3 signature rejected — falling back to v2");
+                }
+                _v3ProbeActive = false;
             };
 
             // If we already know this gateway needs v2, tell the client upfront
@@ -316,6 +332,9 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
                 catch (Exception ex) { _logger.Warn($"[ConnMgr] Tunnel stop error on gateway switch: {ex.Message}"); }
             }
             _gatewayNeedsV2Signature = false; // new gateway might support v3
+            _v2SuccessCount = 0;
+            _v2ProbeThreshold = 3;
+            _v3ProbeActive = false;
             _registry.SetActive(gatewayId);
             await ConnectCoreAsync(gatewayId);
         }
@@ -346,7 +365,12 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         // New gateway URL → reset v2 signature flag (new gateway might support v3)
         var isNewGateway = _registry.FindByUrl(gatewayUrl) == null;
         if (isNewGateway)
+        {
             _gatewayNeedsV2Signature = false;
+            _v2SuccessCount = 0;
+            _v2ProbeThreshold = 3;
+            _v3ProbeActive = false;
+        }
 
         // 4. Create or update gateway record
         var existing = _registry.FindByUrl(gatewayUrl);
@@ -469,6 +493,27 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
 
             // Stamp LastConnected so auto-reconnect on next startup can use this gateway.
             // Uses the atomic Update helper to avoid overwriting concurrent registry changes.
+
+            // If connected using v2 signature, count successes and probe v3 after threshold.
+            // If a v3 probe succeeded, reset the probe threshold back to default.
+            if (_v3ProbeActive)
+            {
+                // v3 probe succeeded — gateway now accepts v3 again
+                _v3ProbeActive = false;
+                _v2ProbeThreshold = 3;
+                _logger.Info("[ConnMgr] v3 probe succeeded — gateway back on v3");
+            }
+            else if (_gatewayNeedsV2Signature)
+            {
+                _v2SuccessCount++;
+                if (_v2SuccessCount >= _v2ProbeThreshold)
+                {
+                    _v2SuccessCount = 0;
+                    _gatewayNeedsV2Signature = false; // probe v3 on next reconnect
+                    _v3ProbeActive = true;
+                    _logger.Info($"[ConnMgr] {_v2ProbeThreshold} consecutive v2 successes — will probe v3 on next reconnect");
+                }
+            }
             if (_activeGatewayRecordId != null)
             {
                 try

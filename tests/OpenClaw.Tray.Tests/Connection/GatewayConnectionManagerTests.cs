@@ -276,6 +276,9 @@ public class GatewayConnectionManagerTests : IDisposable
         public void SimulateAuthFailed(string msg) =>
             AuthenticationFailed?.Invoke(this, msg);
 
+        public void SimulateV2SignatureFallback() =>
+            _client.SimulateV2SignatureFallback();
+
         public void SimulateHandshake() =>
             _client.SimulateHandshakeSucceeded();
 
@@ -292,6 +295,19 @@ public class GatewayConnectionManagerTests : IDisposable
         {
             // Fire the HandshakeSucceeded event to trigger the manager's handler
             OnHandshakeSucceeded();
+        }
+
+        /// <summary>Simulate the gateway rejecting the v3 device signature, triggering v2 fallback.</summary>
+        public void SimulateV2SignatureFallback()
+        {
+            var field = typeof(OpenClawGatewayClient).GetField(
+                nameof(V2SignatureFallback),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            if (field != null)
+            {
+                var handler = field.GetValue(this) as EventHandler;
+                handler?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         // Protected invoker — OpenClawGatewayClient.HandshakeSucceeded is a public event.
@@ -353,6 +369,138 @@ public class GatewayConnectionManagerTests : IDisposable
         Assert.True(record.LastConnected.HasValue);
         Assert.Equal("shared-tok", record.SharedGatewayToken);
         Assert.Equal("TestGW", record.FriendlyName);
+    }
+
+    [Fact]
+    public async Task V2SignatureFallback_NewConnectionUsesV2()
+    {
+        // After V2SignatureFallback fires, the next reconnect should have UseV2Signature = true.
+        SetupGateway("gw-1", "wss://test");
+        _resolver.OperatorCredential = new GatewayCredential("tok", false, "test");
+
+        await _manager.ConnectAsync("gw-1");
+        var first = _factory.CreatedClients[0];
+
+        // Initially v3 (default)
+        Assert.False(first.DataClient.UseV2Signature);
+
+        // Simulate gateway rejecting v3
+        first.SimulateV2SignatureFallback();
+
+        // Reconnect — second client should be told to use v2
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+
+        Assert.Equal(2, _factory.CreatedClients.Count);
+        Assert.True(_factory.CreatedClients[1].DataClient.UseV2Signature);
+    }
+
+    [Fact]
+    public async Task V2SignatureFallback_AfterThresholdSuccesses_ProbesV3()
+    {
+        // After the default threshold (3) successful v2 handshakes, the next reconnect
+        // should probe v3 (UseV2Signature = false).
+        SetupGateway("gw-1", "wss://test");
+        _resolver.OperatorCredential = new GatewayCredential("tok", false, "test");
+
+        await _manager.ConnectAsync("gw-1");
+        var first = _factory.CreatedClients[0];
+        first.SimulateV2SignatureFallback();
+
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+        var second = _factory.CreatedClients[1];
+        Assert.True(second.DataClient.UseV2Signature); // using v2
+
+        // Simulate 3 successful v2 handshakes — should trigger probe reset
+        second.SimulateHandshake();
+        second.SimulateHandshake();
+        second.SimulateHandshake();
+        await Task.Delay(500); // generous delay for fire-and-forget async handlers
+
+        // Verify the private state has been reset before reconnecting
+        var needsV2Field = typeof(GatewayConnectionManager).GetField("_gatewayNeedsV2Signature",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var countField = typeof(GatewayConnectionManager).GetField("_v2SuccessCount",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.False((bool)(needsV2Field!.GetValue(_manager)!),
+            $"_gatewayNeedsV2Signature should be false after 3 successes; _v2SuccessCount={countField!.GetValue(_manager)}");
+
+        // Next reconnect should probe v3
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+
+        Assert.Equal(3, _factory.CreatedClients.Count);
+        Assert.False(_factory.CreatedClients[2].DataClient.UseV2Signature); // v3 probe
+    }
+
+    [Fact]
+    public async Task V2SignatureFallback_DoublesThresholdOnProbeFailure()
+    {
+        // After a v3 probe fails (V2SignatureFallback fires again), the threshold doubles.
+        // This test verifies only 3 successes (not 6) don't trigger a probe yet.
+        SetupGateway("gw-1", "wss://test");
+        _resolver.OperatorCredential = new GatewayCredential("tok", false, "test");
+
+        await _manager.ConnectAsync("gw-1");
+        _factory.CreatedClients[0].SimulateV2SignatureFallback();
+
+        // Succeed threshold (3) times to trigger v3 probe
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+        var v2Client = _factory.CreatedClients[1];
+        v2Client.SimulateHandshake();
+        v2Client.SimulateHandshake();
+        v2Client.SimulateHandshake();
+        await Task.Delay(100);
+
+        // v3 probe — fires V2SignatureFallback again (gateway still rejects v3)
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+        _factory.CreatedClients[2].SimulateV2SignatureFallback(); // probe failed, threshold now 6
+
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+        var afterDoubled = _factory.CreatedClients[3];
+        Assert.True(afterDoubled.DataClient.UseV2Signature); // back to v2
+
+        // 3 successes (< 6 threshold) should NOT trigger a probe yet
+        afterDoubled.SimulateHandshake();
+        afterDoubled.SimulateHandshake();
+        afterDoubled.SimulateHandshake();
+        await Task.Delay(100);
+
+        await _manager.DisconnectAsync();
+        await _manager.ConnectAsync("gw-1");
+        await Task.Delay(50);
+
+        Assert.Equal(5, _factory.CreatedClients.Count);
+        Assert.True(_factory.CreatedClients[4].DataClient.UseV2Signature); // still v2; need 6 successes
+    }
+
+    [Fact]
+    public async Task SwitchGateway_ResetsV2ProbeState()
+    {
+        // Switching to a new gateway resets the v2 signature state entirely.
+        SetupGateway("gw-1", "wss://test1");
+        SetupGateway("gw-2", "wss://test2");
+        _resolver.OperatorCredential = new GatewayCredential("tok", false, "test");
+
+        await _manager.ConnectAsync("gw-1");
+        _factory.CreatedClients[0].SimulateV2SignatureFallback();
+
+        await _manager.SwitchGatewayAsync("gw-2");
+        await Task.Delay(50);
+
+        // New gateway should start fresh with v3
+        var newClient = _factory.CreatedClients.Last();
+        Assert.False(newClient.DataClient.UseV2Signature);
     }
 
     private sealed class CountingNodeConnector : INodeConnector
