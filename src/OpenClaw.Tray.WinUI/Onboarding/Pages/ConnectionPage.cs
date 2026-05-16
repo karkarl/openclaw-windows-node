@@ -172,7 +172,9 @@ public sealed class ConnectionPage : Component<OnboardingState>
             setUrl(v);
             Props.Settings.GatewayUrl = v;
             Props.ConnectionTested = false;
-            setStatusMsg("");
+            setStatusMsg(GatewayUrlHelper.IsInsecureRemoteGatewayUrl(v)
+                ? GatewayUrlHelper.InsecureRemoteWarning
+                : "");
         }
 
         void OnTokenChanged(string v)

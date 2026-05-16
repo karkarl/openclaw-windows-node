@@ -1,17 +1,80 @@
 using System;
 using System.Buffers;
+using System.Net;
 
 namespace OpenClaw.Shared;
 
 public static class GatewayUrlHelper
 {
     public const string ValidationMessage = "Gateway URL must be a valid URL (ws://, wss://, http://, or https://).";
+    public const string InsecureRemoteWarning = "⚠️ Non-TLS gateway URL: traffic may be intercepted on shared networks. Use wss:// for remote gateways.";
 
     private static readonly SearchValues<char> s_authorityTerminators =
         SearchValues.Create("/?#");
 
     public static bool IsValidGatewayUrl(string? gatewayUrl) =>
         TryNormalizeWebSocketUrl(gatewayUrl, out _);
+
+    /// <summary>
+    /// Returns true when the URL is a plain ws:// (non-TLS) connection to a non-loopback,
+    /// non-private-network host — a configuration that is safe only for local development.
+    /// </summary>
+    public static bool IsInsecureRemoteGatewayUrl(string? gatewayUrl)
+    {
+        if (string.IsNullOrWhiteSpace(gatewayUrl))
+            return false;
+
+        if (!Uri.TryCreate(gatewayUrl.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        if (!uri.Scheme.Equals("ws", StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return !IsLocalHost(uri.Host);
+    }
+
+    private static bool IsLocalHost(string host)
+    {
+        if (string.IsNullOrEmpty(host))
+            return false;
+
+        // Explicit loopback names
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!IPAddress.TryParse(host, out var addr))
+            return false;
+
+        // IPv6 loopback (::1)
+        if (IPAddress.IsLoopback(addr))
+            return true;
+
+        var bytes = addr.GetAddressBytes();
+        if (bytes.Length == 4)
+        {
+            // 127.x.x.x
+            if (bytes[0] == 127)
+                return true;
+            // 10.x.x.x
+            if (bytes[0] == 10)
+                return true;
+            // 172.16-31.x.x
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                return true;
+            // 192.168.x.x
+            if (bytes[0] == 192 && bytes[1] == 168)
+                return true;
+        }
+        else if (bytes.Length == 16)
+        {
+            // fc00::/7 (ULA — unique local addresses)
+            if ((bytes[0] & 0xFE) == 0xFC)
+                return true;
+        }
+
+        return false;
+    }
 
     public static string NormalizeForWebSocket(string? gatewayUrl) =>
         TryNormalizeWebSocketUrl(gatewayUrl, out var normalizedUrl)

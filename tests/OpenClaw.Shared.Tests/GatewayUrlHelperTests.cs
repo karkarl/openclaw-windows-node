@@ -204,4 +204,33 @@ public class GatewayUrlHelperTests
         Assert.NotNull(decoded);
         Assert.NotEmpty(decoded);
     }
+
+    [Theory]
+    [InlineData("ws://example.com", true)]
+    [InlineData("ws://8.8.8.8", true)]
+    [InlineData("http://remote-gateway.io", true)]
+    [InlineData("ws://[2001:db8::1]", true)]
+    public void IsInsecureRemoteGatewayUrl_TrueForRemotePlainWebSocket(string url, bool expected)
+    {
+        Assert.Equal(expected, GatewayUrlHelper.IsInsecureRemoteGatewayUrl(url));
+    }
+
+    [Theory]
+    [InlineData("wss://example.com")]       // TLS — safe
+    [InlineData("wss://remote-gateway.io")] // TLS — safe
+    [InlineData("ws://localhost:18789")]     // loopback by name
+    [InlineData("ws://127.0.0.1:18789")]     // loopback 127.x
+    [InlineData("ws://127.5.0.1")]           // loopback 127.x range
+    [InlineData("ws://10.0.0.1")]            // RFC1918 10.x
+    [InlineData("ws://172.16.0.1")]          // RFC1918 172.16-31
+    [InlineData("ws://172.31.255.255")]      // RFC1918 172.31
+    [InlineData("ws://192.168.1.1")]         // RFC1918 192.168.x
+    [InlineData("https://remote.io")]        // TLS — safe
+    [InlineData(null)]                       // null — not insecure
+    [InlineData("")]                         // empty — not insecure
+    [InlineData("invalid-url")]              // unparseable — not insecure
+    public void IsInsecureRemoteGatewayUrl_FalseForSecureOrLocalUrls(string? url)
+    {
+        Assert.False(GatewayUrlHelper.IsInsecureRemoteGatewayUrl(url));
+    }
 }
