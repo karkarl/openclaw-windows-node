@@ -11,6 +11,14 @@
     <!-- Audit all package dependencies (direct + transitive) for known CVEs during restore.
          Defaults to "direct" in the SDK; "all" provides broader security coverage. -->
     <NuGetAuditMode>all</NuGetAuditMode>
+
+    <!-- Enable .NET Roslyn analyzers for OpenClaw.Shared, OpenClaw.Tray.WinUI, and OpenClaw.Cli.
+         (CommandPalette has its own Directory.Build.props and already enables these.)
+         AnalysisMode=Recommended activates the CA/IDE rules that catch real bugs without
+         being excessively noisy — see https://learn.microsoft.com/dotnet/core/project-sdk/msbuild-props#analysismode.
+         Addresses: https://github.com/openclaw/openclaw-windows-node/issues/362 -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisMode>Recommended</AnalysisMode>
   </PropertyGroup>
 
 </Project>
