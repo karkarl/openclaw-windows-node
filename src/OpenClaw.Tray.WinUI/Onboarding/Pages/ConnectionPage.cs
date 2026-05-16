@@ -192,7 +192,7 @@ public sealed class ConnectionPage : Component<OnboardingState>
         {
             try
             {
-                App.CopyTextToClipboard(command);
+                ClipboardHelper.CopyText(command);
                 return true;
             }
             catch (Exception ex)

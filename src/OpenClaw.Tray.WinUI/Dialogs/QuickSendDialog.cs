@@ -290,7 +290,7 @@ public sealed class QuickSendDialog : WindowEx
                 // Genuine NOT_PAIRED on the live current client — clipboard
                 // remediation MUST still fire (Mike explicitly does not want
                 // this case suppressed; RubberDucky closure condition #3).
-                CopyTextToClipboard(pr.Commands);
+                ClipboardHelper.CopyText(pr.Commands);
                 ShowErrorDetails($"Pairing approval required\n\n{pr.Commands}");
                 new ToastContentBuilder()
                     .AddText("Quick Send device approval required")
@@ -300,7 +300,7 @@ public sealed class QuickSendDialog : WindowEx
                 break;
 
             case QuickSendOutcome.MissingScope ms:
-                CopyTextToClipboard(ms.Commands);
+                ClipboardHelper.CopyText(ms.Commands);
                 ShowErrorDetails($"Missing scope: {ms.Scope}\n\n{ms.Commands}");
                 new ToastContentBuilder()
                     .AddText("Quick Send permission required")
@@ -339,11 +339,6 @@ public sealed class QuickSendDialog : WindowEx
         _errorDetailsTextBox.Text = details;
         _errorDetailsTextBox.Visibility = Visibility.Visible;
         this.SetWindowSize(500, 320 + TitleBarHeight);
-    }
-
-    private static void CopyTextToClipboard(string text)
-    {
-        ClipboardHelper.CopyText(text);
     }
 
     private void QueueFocusMessageInput()

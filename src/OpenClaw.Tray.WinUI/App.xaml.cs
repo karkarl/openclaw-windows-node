@@ -1105,7 +1105,7 @@ public partial class App : Application
         
         try
         {
-            CopyTextToClipboard(_nodeService.FullDeviceId);
+            ClipboardHelper.CopyText(_nodeService.FullDeviceId);
             
             // Show toast confirming copy
             ShowToast(new ToastContentBuilder()
@@ -1132,7 +1132,7 @@ public partial class App : Application
             });
             var summary = string.Join(Environment.NewLine, lines);
 
-            CopyTextToClipboard(summary);
+            ClipboardHelper.CopyText(summary);
 
             ShowToast(new ToastContentBuilder()
                 .AddText(LocalizationHelper.GetString("Toast_NodeSummaryCopied"))
@@ -4742,7 +4742,7 @@ public partial class App : Application
     {
         try
         {
-            CopyTextToClipboard(format(BuildCommandCenterState()));
+            ClipboardHelper.CopyText(format(BuildCommandCenterState()));
             Logger.Info($"Copied {label} from deep link");
         }
         catch (Exception ex)
@@ -5093,7 +5093,7 @@ public partial class App : Application
                         ShowActivityStream();
                         break;
                     case "copy_pairing_command" when arguments.TryGetValue("command", out var command):
-                        CopyTextToClipboard(command);
+                        ClipboardHelper.CopyText(command);
                         ShowToast(new ToastContentBuilder()
                             .AddText(LocalizationHelper.GetString("Toast_PairingCommandCopied"))
                             .AddText(command));
@@ -5101,11 +5101,6 @@ public partial class App : Application
                 }
             });
         }
-    }
-
-    public static void CopyTextToClipboard(string text)
-    {
-        ClipboardHelper.CopyText(text);
     }
 
     #endregion
