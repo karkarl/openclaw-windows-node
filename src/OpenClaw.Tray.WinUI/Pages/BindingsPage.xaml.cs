@@ -11,6 +11,7 @@ public sealed partial class BindingsPage : Page
 {
     private static App CurrentApp => (App)Microsoft.UI.Xaml.Application.Current;
     private AppState? _appState;
+    private readonly AsyncListLoadingState _bindingsLoading = new();
 
     public BindingsPage()
     {
@@ -23,14 +24,31 @@ public sealed partial class BindingsPage : Page
 
     public void Initialize()
     {
+        if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
         _appState = CurrentApp.AppState;
         _appState.PropertyChanged += OnAppStateChanged;
         // Use cached config if available
         if (_appState?.Config.HasValue == true)
+        {
             ParseBindings(_appState.Config.Value);
+        }
+        else
+        {
+            _bindingsLoading.BeginInitialRefresh();
+            ApplyBindingsLoadingState();
+        }
         // Request fresh config
         if (CurrentApp.GatewayClient != null)
+        {
+            _bindingsLoading.BeginRefresh();
+            ApplyBindingsLoadingState();
             _ = CurrentApp.GatewayClient.RequestConfigAsync();
+        }
+        else
+        {
+            _bindingsLoading.Fail();
+            ApplyBindingsLoadingState();
+        }
     }
 
     private void OnAppStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -91,14 +109,27 @@ public sealed partial class BindingsPage : Page
             SingleAgentInfoBar.IsOpen = false;
             BindingsList.ItemsSource = bindings;
         }
+        _bindingsLoading.Complete(bindings.Count);
+        ApplyBindingsLoadingState();
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         if (CurrentApp.GatewayClient != null)
         {
+            _bindingsLoading.BeginRefresh();
+            ApplyBindingsLoadingState();
             _ = CurrentApp.GatewayClient.RequestConfigAsync();
         }
+    }
+
+    private void ApplyBindingsLoadingState()
+    {
+        LoadingState.Visibility = _bindingsLoading.ShouldShowLoading ? Visibility.Visible : Visibility.Collapsed;
+        BindingsList.Visibility = _bindingsLoading.ShouldShowContent ? Visibility.Visible : Visibility.Collapsed;
+        SingleAgentInfoBar.IsOpen = _bindingsLoading.ShouldShowEmpty;
+        BindingsList.IsEnabled = _bindingsLoading.CanEdit;
+        RefreshButton.IsEnabled = _bindingsLoading.CanEdit;
     }
 
     private class BindingViewModel

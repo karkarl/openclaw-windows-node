@@ -19,6 +19,7 @@ public sealed partial class SessionsPage : Page
     private SessionInfo[]? _allSessions;
     private string _activeChannel = "all";
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _refreshTimer;
+    private readonly AsyncListLoadingState _sessionsLoading = new();
 
     public SessionsPage()
     {
@@ -47,14 +48,30 @@ public sealed partial class SessionsPage : Page
 
         if (CurrentApp.GatewayClient == null)
         {
+            _sessionsLoading.Fail();
+            ApplySessionsLoadingState();
             EmptyState.Visibility = Visibility.Collapsed;
             SessionListView.ItemsSource = null;
             return;
         }
 
-        if (_appState?.Sessions != null)
-            UpdateSessions(_appState.Sessions);
+        if (_allSessions != null)
+        {
+            _sessionsLoading.Complete(_allSessions.Length);
+            ApplyFilter();
+        }
+        else if (_appState?.Sessions is { Length: > 0 } cachedSessions)
+        {
+            UpdateSessions(cachedSessions);
+        }
+        else
+        {
+            _sessionsLoading.BeginInitialRefresh();
+            ApplySessionsLoadingState();
+        }
 
+        _sessionsLoading.BeginRefresh();
+        ApplyFilter();
         _ = CurrentApp.GatewayClient.RequestSessionsAsync();
         _ = CurrentApp.GatewayClient.RequestModelsListAsync();
     }
@@ -65,6 +82,7 @@ public sealed partial class SessionsPage : Page
     public void UpdateSessions(SessionInfo[] sessions)
     {
         _allSessions = sessions;
+        _sessionsLoading.Complete(sessions.Length);
         RebuildChannelTabs();
         ApplyFilter();
     }
@@ -95,11 +113,9 @@ public sealed partial class SessionsPage : Page
         if (_allSessions == null || _allSessions.Length == 0)
         {
             SessionListView.ItemsSource = null;
-            EmptyState.Visibility = Visibility.Visible;
+            ApplySessionsLoadingState(0);
             return;
         }
-
-        EmptyState.Visibility = Visibility.Collapsed;
 
         IEnumerable<SessionInfo> filtered = _allSessions;
 
@@ -117,12 +133,13 @@ public sealed partial class SessionsPage : Page
         if (viewModels.Count == 0)
         {
             SessionListView.ItemsSource = null;
-            EmptyState.Visibility = Visibility.Visible;
         }
         else
         {
             SessionListView.ItemsSource = viewModels;
         }
+
+        ApplySessionsLoadingState(viewModels.Count);
     }
 
     private void OnAppStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -178,6 +195,7 @@ public sealed partial class SessionsPage : Page
 
     private async void OnResetSession(object sender, RoutedEventArgs e)
     {
+        if (!_sessionsLoading.CanEdit) return;
         if (sender is Button btn && btn.Tag is string key)
         {
             var client = CurrentApp.GatewayClient;
@@ -189,6 +207,7 @@ public sealed partial class SessionsPage : Page
 
     private async void OnDeleteSession(object sender, RoutedEventArgs e)
     {
+        if (!_sessionsLoading.CanEdit) return;
         if (sender is Button btn && btn.Tag is string key)
         {
             var client = CurrentApp.GatewayClient;
@@ -200,6 +219,7 @@ public sealed partial class SessionsPage : Page
 
     private async void OnCompactSession(object sender, RoutedEventArgs e)
     {
+        if (!_sessionsLoading.CanEdit) return;
         if (sender is Button btn && btn.Tag is string key)
         {
             var client = CurrentApp.GatewayClient;
@@ -214,6 +234,8 @@ public sealed partial class SessionsPage : Page
         var client = CurrentApp.GatewayClient;
         if (client != null)
         {
+            _sessionsLoading.BeginRefresh();
+            ApplyFilter();
             _ = client.RequestSessionsAsync();
             _ = client.RequestModelsListAsync();
         }
@@ -239,6 +261,17 @@ public sealed partial class SessionsPage : Page
         if (n >= 1_000_000) return $"{n / 1_000_000.0:0.#}M";
         if (n >= 1_000) return $"{n / 1_000.0:0.#}K";
         return n.ToString();
+    }
+
+    private void ApplySessionsLoadingState(int? visibleItemCount = null)
+    {
+        var visibleCount = visibleItemCount ?? _sessionsLoading.ItemCount;
+        LoadingState.Visibility = _sessionsLoading.ShouldShowLoading ? Visibility.Visible : Visibility.Collapsed;
+        SessionListView.Visibility = _sessionsLoading.HasLoaded && visibleCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyState.Visibility = _sessionsLoading.HasLoaded && visibleCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ChannelSelector.IsEnabled = _sessionsLoading.CanEdit;
+        RefreshButton.IsEnabled = _sessionsLoading.CanEdit;
+        SessionListView.IsEnabled = _sessionsLoading.CanEdit;
     }
 }
 

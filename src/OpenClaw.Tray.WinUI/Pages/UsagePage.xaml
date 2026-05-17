@@ -122,7 +122,20 @@
                         </SelectorBar>
                     </Grid>
                     <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"/>
-                    <ListView x:Name="DailyListView" SelectionMode="None">
+                    <StackPanel x:Name="DailyLoadingPanel" Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Center" Padding="0,24,0,16"
+                                Visibility="Collapsed">
+                        <ProgressRing IsActive="True" Width="20" Height="20"/>
+                        <TextBlock Text="Loading daily costs…"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="DailyEmptyText"
+                               Text="No daily cost data"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center" Padding="0,24,0,16"
+                               Visibility="Collapsed"/>
+                    <ListView x:Name="DailyListView" SelectionMode="None" Visibility="Collapsed">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Grid Padding="4,6">

@@ -49,6 +49,16 @@
             <SelectorBarItem x:Name="AllTab" Text="All" IsSelected="True"/>
         </SelectorBar>
 
+        <!-- Loading state -->
+        <StackPanel x:Name="LoadingState" Grid.Row="4" Spacing="8"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="Collapsed">
+            <ProgressRing IsActive="True" Width="24" Height="24" HorizontalAlignment="Center"/>
+            <TextBlock Text="Loading sessions…"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+
         <!-- Empty state -->
         <StackPanel x:Name="EmptyState" Grid.Row="4" Spacing="8"
                     HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -16,6 +16,8 @@ public sealed partial class UsagePage : Page
     private AppState? _appState;
     // Default matches the XAML-selected Period7DaysItem (IsSelected="True").
     private int _currentPeriodDays = 7;
+    private readonly AsyncListLoadingState _dailyCostLoading = new();
+    private readonly AsyncListLoadingState _providerLoading = new();
 
     public UsagePage()
     {
@@ -28,6 +30,7 @@ public sealed partial class UsagePage : Page
 
     public void Initialize()
     {
+        if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
         _appState = CurrentApp.AppState;
         _appState.PropertyChanged += OnAppStateChanged;
         if (CurrentApp.GatewayClient != null)
@@ -41,7 +44,21 @@ public sealed partial class UsagePage : Page
             {
                 UpdateUsageCost(_appState.UsageCost);
             }
+            else
+            {
+                _dailyCostLoading.BeginInitialRefresh();
+                ApplyDailyCostLoadingState();
+            }
             if (_appState?.UsageStatus != null) UpdateUsageStatus(_appState.UsageStatus);
+            else
+            {
+                _providerLoading.BeginInitialRefresh();
+                ApplyProviderLoadingState();
+            }
+            _dailyCostLoading.BeginRefresh();
+            _providerLoading.BeginRefresh();
+            ApplyDailyCostLoadingState();
+            ApplyProviderLoadingState();
             _ = CurrentApp.GatewayClient.RequestUsageAsync();
             _ = CurrentApp.GatewayClient.RequestUsageCostAsync(_currentPeriodDays);
             _ = CurrentApp.GatewayClient.RequestUsageStatusAsync();
@@ -49,7 +66,10 @@ public sealed partial class UsagePage : Page
         else
         {
             // Not connected — nothing to load, hide the loading skeleton.
-            ProviderLoadingPanel.Visibility = Visibility.Collapsed;
+            _dailyCostLoading.Fail();
+            _providerLoading.Fail();
+            ApplyDailyCostLoadingState();
+            ApplyProviderLoadingState();
         }
     }
 
@@ -61,7 +81,8 @@ public sealed partial class UsagePage : Page
                 if (_appState?.Usage != null) UpdateUsage(_appState.Usage);
                 break;
             case nameof(AppState.UsageCost):
-                if (_appState?.UsageCost != null) UpdateUsageCost(_appState.UsageCost);
+                if (_appState?.UsageCost != null && _appState.UsageCost.Days == _currentPeriodDays)
+                    UpdateUsageCost(_appState.UsageCost);
                 break;
             case nameof(AppState.UsageStatus):
                 if (_appState?.UsageStatus != null) UpdateUsageStatus(_appState.UsageStatus);
@@ -88,6 +109,8 @@ public sealed partial class UsagePage : Page
             Date = d.Date,
             Cost = $"${d.TotalCost:F2}",
         }).ToList();
+        _dailyCostLoading.Complete(cost.Daily.Count);
+        ApplyDailyCostLoadingState();
     }
 
     public void UpdateUsageStatus(GatewayUsageStatusInfo status)
@@ -101,10 +124,8 @@ public sealed partial class UsagePage : Page
             Status = p.Error ?? "",
         }).ToList();
 
-        bool hasProviders = status.Providers.Count > 0;
-        ProviderLoadingPanel.Visibility = Visibility.Collapsed;
-        ProviderListView.Visibility = hasProviders ? Visibility.Visible : Visibility.Collapsed;
-        ProviderEmptyText.Visibility = hasProviders ? Visibility.Collapsed : Visibility.Visible;
+        _providerLoading.Complete(status.Providers.Count);
+        ApplyProviderLoadingState();
     }
 
     private void OnPeriodSelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
@@ -120,6 +141,8 @@ public sealed partial class UsagePage : Page
 
         if (CurrentApp.GatewayClient != null)
         {
+            _dailyCostLoading.BeginInitialRefresh();
+            ApplyDailyCostLoadingState();
             _ = CurrentApp.GatewayClient.RequestUsageCostAsync(days);
         }
     }
@@ -129,6 +152,23 @@ public sealed partial class UsagePage : Page
         if (n >= 1_000_000) return (n / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture) + "M";
         if (n >= 1_000) return (n / 1_000.0).ToString("F1", CultureInfo.InvariantCulture) + "K";
         return n.ToString();
+    }
+
+    private void ApplyDailyCostLoadingState()
+    {
+        DailyLoadingPanel.Visibility = _dailyCostLoading.ShouldShowLoading ? Visibility.Visible : Visibility.Collapsed;
+        DailyListView.Visibility = _dailyCostLoading.ShouldShowContent ? Visibility.Visible : Visibility.Collapsed;
+        DailyEmptyText.Visibility = _dailyCostLoading.ShouldShowEmpty ? Visibility.Visible : Visibility.Collapsed;
+        DailyListView.IsEnabled = _dailyCostLoading.CanEdit;
+        PeriodSelector.IsEnabled = _dailyCostLoading.CanEdit;
+    }
+
+    private void ApplyProviderLoadingState()
+    {
+        ProviderLoadingPanel.Visibility = _providerLoading.ShouldShowLoading ? Visibility.Visible : Visibility.Collapsed;
+        ProviderListView.Visibility = _providerLoading.ShouldShowContent ? Visibility.Visible : Visibility.Collapsed;
+        ProviderEmptyText.Visibility = _providerLoading.ShouldShowEmpty ? Visibility.Visible : Visibility.Collapsed;
+        ProviderListView.IsEnabled = _providerLoading.CanEdit;
     }
 
     private class ProviderRow

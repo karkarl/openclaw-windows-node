@@ -26,6 +26,7 @@ public sealed partial class CronPage : Page
     private HashSet<string> _removedJobIds = new(); // jobs user explicitly removed (suppress auto-delete notification)
     private HashSet<string> _expandedJobIds = new(); // persisted expanded state
     private CancellationTokenSource? _infoDismissCts = null; // auto-dismiss timer for InfoBar
+    private readonly AsyncListLoadingState _jobsLoading = new();
 
     public CronPage()
     {
@@ -38,12 +39,28 @@ public sealed partial class CronPage : Page
 
     public void Initialize()
     {
+        if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
         _appState = CurrentApp.AppState;
         _appState.PropertyChanged += OnAppStateChanged;
         if (CurrentApp.GatewayClient != null)
         {
+            if (_appState.CronList.HasValue)
+            {
+                UpdateFromGateway(_appState.CronList.Value, keepRefreshing: true);
+            }
+            else
+            {
+                _jobsLoading.BeginInitialRefresh();
+                ApplyJobsLoadingState();
+            }
+
             _ = CurrentApp.GatewayClient.RequestCronListAsync();
             _ = CurrentApp.GatewayClient.RequestCronStatusAsync();
+        }
+        else
+        {
+            _jobsLoading.Fail();
+            ApplyJobsLoadingState();
         }
     }
 
@@ -65,12 +82,15 @@ public sealed partial class CronPage : Page
 
     private void OnRunNowClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         var btn = sender as Button;
         var jobId = btn?.Tag as string;
         if (string.IsNullOrEmpty(jobId) || CurrentApp.GatewayClient == null) return;
         var vm = _jobs.Find(j => j.Id == jobId);
         if (vm != null && !vm.IsEnabled) return;
         _runningJobIds.Add(jobId);
+        _jobsLoading.BeginRefresh();
+        ApplyJobsLoadingState();
         btn!.Content = "Running...";
         btn.IsEnabled = false;
 
@@ -104,21 +124,27 @@ public sealed partial class CronPage : Page
 
     private void OnRemoveClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         var jobId = (sender as Button)?.Tag as string;
         if (string.IsNullOrEmpty(jobId) || CurrentApp.GatewayClient == null) return;
         _removedJobIds.Add(jobId);
+        _jobsLoading.BeginRefresh();
+        ApplyJobsLoadingState();
         // Gateway client's HandleKnownResponse refreshes the list automatically on cron.remove
         _ = CurrentApp.GatewayClient.RemoveCronJobAsync(jobId);
     }
 
     private void OnToggleEnabledClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         var jobId = (sender as Button)?.Tag as string;
         if (string.IsNullOrEmpty(jobId) || CurrentApp.GatewayClient == null) return;
 
         var vm = _jobs.Find(j => j.Id == jobId);
         if (vm != null)
         {
+            _jobsLoading.BeginRefresh();
+            ApplyJobsLoadingState();
             _ = CurrentApp.GatewayClient.UpdateCronJobAsync(jobId, new { enabled = !vm.IsEnabled });
         }
     }
@@ -128,6 +154,7 @@ public sealed partial class CronPage : Page
 
     private void OnNewJobClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         _editingJobId = null;
         RestoreFormFromInline(); // ensure form is back in its home position
         ResetForm();
@@ -138,6 +165,7 @@ public sealed partial class CronPage : Page
 
     private void OnEditJobClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         var jobId = (sender as Button)?.Tag as string;
         if (string.IsNullOrEmpty(jobId)) return;
         var vm = _jobs.Find(j => j.Id == jobId);
@@ -206,6 +234,7 @@ public sealed partial class CronPage : Page
 
     private void OnFormSaveClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         // Validate
         var name = FormName.Text?.Trim();
         if (string.IsNullOrEmpty(name))
@@ -305,6 +334,8 @@ public sealed partial class CronPage : Page
             if (kind == "at")
                 patch["deleteAfterRun"] = FormDeleteAfterRun.IsChecked == true;
 
+            _jobsLoading.BeginRefresh();
+            ApplyJobsLoadingState();
             _ = CurrentApp.GatewayClient.UpdateCronJobAsync(_editingJobId, patch);
         }
         else
@@ -327,6 +358,8 @@ public sealed partial class CronPage : Page
             if (kind == "at")
                 job["deleteAfterRun"] = FormDeleteAfterRun.IsChecked == true;
 
+            _jobsLoading.BeginRefresh();
+            ApplyJobsLoadingState();
             _ = CurrentApp.GatewayClient.AddCronJobAsync(job);
         }
 
@@ -471,19 +504,19 @@ public sealed partial class CronPage : Page
         }
     }
 
-    public void UpdateFromGateway(JsonElement data)
+    public void UpdateFromGateway(JsonElement data, bool keepRefreshing = false)
     {
         // The gateway client passes the payload directly (not wrapped)
         if (data.ValueKind == JsonValueKind.Array)
         {
-            ParseCronList(data);
+            ParseCronList(data, keepRefreshing);
         }
         else if (data.ValueKind == JsonValueKind.Object)
         {
             // cron.list returns { jobs: [...], total, offset, limit, hasMore, ... }
             if (data.TryGetProperty("jobs", out var jobsEl) && jobsEl.ValueKind == JsonValueKind.Array)
             {
-                ParseCronList(jobsEl);
+                ParseCronList(jobsEl, keepRefreshing);
             }
             // cron.status returns { enabled, storePath, jobs (count), nextWakeAtMs }
             else if (data.TryGetProperty("nextWakeAtMs", out _) || data.TryGetProperty("storePath", out _))
@@ -493,7 +526,7 @@ public sealed partial class CronPage : Page
         }
     }
 
-    private void ParseCronList(JsonElement payload)
+    private void ParseCronList(JsonElement payload, bool keepRefreshing = false)
     {
         var jobs = new List<CronJobViewModel>();
 
@@ -727,6 +760,9 @@ public sealed partial class CronPage : Page
             }
 
             _jobs = jobs;
+            _jobsLoading.Complete(jobs.Count);
+            if (keepRefreshing)
+                _jobsLoading.BeginRefresh();
 
             // Restore expanded state from persisted set
             foreach (var vm in _jobs)
@@ -749,6 +785,7 @@ public sealed partial class CronPage : Page
                 JobsListPanel.Visibility = Visibility.Collapsed;
                 EmptyState.Visibility = Visibility.Visible;
             }
+            ApplyJobsLoadingState();
         });
     }
 
@@ -1242,6 +1279,7 @@ public sealed partial class CronPage : Page
 
     private void OnHistoryClick(object sender, RoutedEventArgs e)
     {
+        if (!_jobsLoading.CanEdit) return;
         var jobId = (sender as Button)?.Tag as string;
         if (string.IsNullOrEmpty(jobId) || CurrentApp.GatewayClient == null) return;
         var vm = _jobs.Find(j => j.Id == jobId);
@@ -1608,6 +1646,30 @@ public sealed partial class CronPage : Page
         if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m";
         if (span.TotalHours < 24) return span.Minutes > 0 ? $"{(int)span.TotalHours}h {span.Minutes}m" : $"{(int)span.TotalHours}h";
         return $"{(int)span.TotalDays}d {span.Hours}h";
+    }
+
+    private void ApplyJobsLoadingState()
+    {
+        LoadingState.Visibility = _jobsLoading.ShouldShowLoading ? Visibility.Visible : Visibility.Collapsed;
+        JobsListPanel.Visibility = _jobsLoading.ShouldShowContent ? Visibility.Visible : Visibility.Collapsed;
+        EmptyState.Visibility = _jobsLoading.ShouldShowEmpty ? Visibility.Visible : Visibility.Collapsed;
+        NewJobButton.IsEnabled = _jobsLoading.CanEdit && CurrentApp.GatewayClient != null;
+        SetDescendantControlsEnabled(JobsListPanel, _jobsLoading.CanEdit);
+        SetDescendantControlsEnabled(JobFormPanel, _jobsLoading.CanEdit);
+        JobsListPanel.Opacity = _jobsLoading.CanEdit ? 1.0 : 0.7;
+        JobFormPanel.Opacity = _jobsLoading.CanEdit ? 1.0 : 0.7;
+    }
+
+    private static void SetDescendantControlsEnabled(DependencyObject parent, bool isEnabled)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is Control control)
+                control.IsEnabled = isEnabled;
+            SetDescendantControlsEnabled(child, isEnabled);
+        }
     }
 
     private class CronJobViewModel

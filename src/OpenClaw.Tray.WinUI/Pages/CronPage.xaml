@@ -263,6 +263,16 @@
         <!-- Notification for completed one-shot jobs -->
         <InfoBar x:Name="JobCompletedInfoBar" Grid.Row="3" IsOpen="False" Severity="Success" IsClosable="True" Margin="0,0,0,8"/>
 
+        <!-- Loading state -->
+        <StackPanel x:Name="LoadingState" Grid.Row="4"
+                    VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
+                    Visibility="Collapsed">
+            <ProgressRing IsActive="True" Width="24" Height="24" HorizontalAlignment="Center"/>
+            <TextBlock Text="Loading cron jobs…"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+
         <!-- Jobs list (manually managed for inline editing) -->
         <StackPanel x:Name="JobsListPanel" Grid.Row="4" Spacing="4" Visibility="Collapsed"/>
 
