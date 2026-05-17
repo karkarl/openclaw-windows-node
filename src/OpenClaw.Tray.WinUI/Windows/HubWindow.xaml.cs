@@ -57,6 +57,7 @@ public sealed partial class HubWindow : WindowEx
         if (AppModel != null)
         {
             AppModel.PropertyChanged += OnAppModelChanged;
+            UpdateTitleBarStatus(AppModel.Status);
             UpdateGatewayNavVisibility(AppModel.Status == ConnectionStatus.Connected);
         }
     }
