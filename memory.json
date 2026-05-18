@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-17T12:38:24Z",
-  "run_id": "25991045819",
+  "last_run": "2026-05-18T01:20:05Z",
+  "run_id": "26008447880",
   "comments_made": {
     "pr_419": {"date":"2026-05-16","note":"Review: watchdog, empty catch, _pendingNavigationOrigin"},
     "pr_327": {"date":"2026-05-13"},
@@ -16,7 +16,7 @@
     "issue_191": {"date":"2026-04-21"},
     "issue_357": {"date":"2026-05-14"},
     "issue_350": {"date":"2026-05-15","note":"v3 probe PR #408"},
-    "issue_363": {"date":"2026-05-17","note":"fire-and-forget fix PR branch fix-hol-blocking-363"},
+    "issue_363": {"date":"2026-05-17","note":"fire-and-forget fix PR #426"},
     "issue_365": {"date":"2026-05-15","note":"SafeDispatch PR #406"},
     "issue_349": {"date":"2026-05-16","note":"ws:// warning PR #416"},
     "issue_364": {"date":"2026-05-16","note":"clipboard PR #417"},
@@ -24,10 +24,12 @@
     "issue_371": {"date":"2026-05-17","note":"Loopback check: 3 distinct questions, GatewayChatUrlBuilder idiomatic"},
     "issue_367": {"date":"2026-05-17","note":"SignatureNegotiationState sketch, cross-reconnect seed concern"},
     "issue_369": {"date":"2026-05-17","note":"IDispatchRegistry type-shape concern, source-gen alternative"},
-    "issue_370": {"date":"2026-05-17","note":"JsonOptions.cs structure, Wire default WhenWritingNull, MCP/Utf8JsonWriter caveats"}
+    "issue_370": {"date":"2026-05-17","note":"JsonOptions.cs structure, Wire default WhenWritingNull, MCP/Utf8JsonWriter caveats"},
+    "issue_432": {"date":"2026-05-18","note":"Confirmed TFM hardcode bug, fix PR submitted (branch fix-wsl-validation-tfm-path-432)"}
   },
   "fix_attempts": {
-    "hol_363": {"status":"pr_pending","branch":"repo-assist/fix-hol-blocking-363","date":"2026-05-17","note":"SemaphoreSlim(8) fire-and-forget. 1613 passed."},
+    "wsl_tfm_432": {"status":"pr_pending","branch":"repo-assist/fix-wsl-validation-tfm-path-432","date":"2026-05-18","note":"Derive TargetFramework from csproj instead of hardcoding net10.0-windows10.0.19041.0"},
+    "hol_363": {"status":"pr_pending","pr":426,"branch":"repo-assist/fix-hol-blocking-363","date":"2026-05-17","note":"SemaphoreSlim(8) fire-and-forget. 1613 passed."},
     "analyzers_362": {"status":"pr_pending","branch":"repo-assist/eng-enable-analyzers-src-362","date":"2026-05-16"},
     "insecure_349": {"status":"pr_pending","pr":416,"branch":"repo-assist/fix-insecure-gateway-url-warning-349","date":"2026-05-16"},
     "clipboard_364": {"status":"pr_pending","pr":417,"date":"2026-05-16"},
@@ -37,8 +39,10 @@
     "v2_downgrade_350": {"status":"pr_pending","pr":408,"date":"2026-05-15"},
     "dotnet_format_362": {"status":"pr_pending","branch":"repo-assist/eng-dotnet-format-ci-2026-05-17","date":"2026-05-17","note":"dotnet format CI + .gitattributes eol=crlf + 16-file whitespace fix. Partially closes #362 step 2."}
   },
-  "backlog_cursor": "issue_375",
-  "notes": "This run: dotnet format CI PR (step 2 of #362), comments #367/#369/#370. Not yet: #372 (tracking issue). Future: remaining ~80 empty catches, Tier 2 #349, analyzers PR still pending.",
+  "backlog_cursor": "issue_432",
+  "monthly_summary_issue": null,
+  "monthly_summary_month": "2026-05",
+  "notes": "Previous monthly summary #254 closed by shanselman 2026-05-18. New summary created this run. PR #433 (CommandPalette BuildTools align) merged by shanselman — resolves issue #311. Many deep-review PRs (#406, #408, #416, #417) still pending review. PR #426 (HOL fix) still open.",
   "test_baseline": {
     "shared": "1613 passed, 28 skipped, 7 pre-existing failures",
     "tray": "897 passed, 48 skipped, 8 pre-existing failures",
