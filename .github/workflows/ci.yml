@@ -207,7 +207,7 @@ jobs:
 
     - name: Sign Executable
       if: startsWith(github.ref, 'refs/tags/v') && matrix.rid != 'win-arm64'
-      uses: azure/trusted-signing-action@v1
+      uses: azure/trusted-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -315,7 +315,7 @@ jobs:
 
     - name: Sign MSIX Package
       if: startsWith(github.ref, 'refs/tags/v') && matrix.rid != 'win-arm64'
-      uses: azure/trusted-signing-action@v1
+      uses: azure/trusted-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -436,7 +436,7 @@ jobs:
         creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
 
     - name: Sign ARM64 Executables
-      uses: azure/trusted-signing-action@v1
+      uses: azure/trusted-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -452,7 +452,7 @@ jobs:
 
     - name: Sign ARM64 MSIX
       if: steps.msix-arm64.outcome == 'success'
-      uses: azure/trusted-signing-action@v1
+      uses: azure/trusted-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -509,7 +509,7 @@ jobs:
         creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
 
     - name: Sign Installer
-      uses: azure/trusted-signing-action@v1
+      uses: azure/trusted-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
