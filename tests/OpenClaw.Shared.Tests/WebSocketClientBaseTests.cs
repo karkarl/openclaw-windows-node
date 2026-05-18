@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -19,9 +20,18 @@ public class TestWebSocketClient : WebSocketClientBase
     public Exception? LastError { get; private set; }
     public int OnDisposingCallCount { get; private set; }
     public bool AutoReconnectEnabled { get; set; } = true;
+    private readonly TaskCompletionSource _firstSendEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _releaseSends = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _activeSends;
+    private int _maxConcurrentSends;
+    private int _sendCallCount;
 
     protected override int ReceiveBufferSize => 8192;
     protected override string ClientRole => "test";
+    public bool SimulateOpenSocket { get; set; }
+    public int MaxConcurrentSends => Volatile.Read(ref _maxConcurrentSends);
+    public int SendCallCount => Volatile.Read(ref _sendCallCount);
+    public Task FirstSendEntered => _firstSendEntered.Task;
 
     public TestWebSocketClient(string gatewayUrl, string token, IOpenClawLogger? logger = null)
         : base(gatewayUrl, token, logger) { }
@@ -56,9 +66,42 @@ public class TestWebSocketClient : WebSocketClientBase
 
     protected override bool ShouldAutoReconnect() => AutoReconnectEnabled;
 
+    protected override bool CanSendRaw => SimulateOpenSocket;
+
+    protected override async ValueTask SendWebSocketTextAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _sendCallCount);
+        var active = Interlocked.Increment(ref _activeSends);
+        UpdateMaxConcurrentSends(active);
+        _firstSendEntered.TrySetResult();
+
+        try
+        {
+            await _releaseSends.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeSends);
+        }
+    }
+
+    private void UpdateMaxConcurrentSends(int active)
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref _maxConcurrentSends);
+            if (active <= current) return;
+            if (Interlocked.CompareExchange(ref _maxConcurrentSends, active, current) == current) return;
+        }
+    }
+
+    public void ReleaseSends() => _releaseSends.TrySetResult();
+
     // Expose protected members for testing
     public void TestRaiseStatusChanged(ConnectionStatus status)
         => RaiseStatusChanged(status);
+
+    public Task TestSendRawAsync(string message) => SendRawAsync(message);
 
     public bool TestIsDisposed => IsDisposed;
     public string TestGatewayUrlForDisplay => GatewayUrlForDisplay;
@@ -197,6 +240,45 @@ public class WebSocketClientBaseTests
         Assert.Equal(2, statuses.Count);
         Assert.All(statuses, s => Assert.Equal(ConnectionStatus.Error, s));
         client.Dispose();
+    }
+
+    [Fact]
+    public async Task SendRawAsync_SerializesConcurrentSends()
+    {
+        var client = new TestWebSocketClient("ws://localhost:18789", "token", _logger)
+        {
+            SimulateOpenSocket = true
+        };
+
+        var first = client.TestSendRawAsync("one");
+        await client.FirstSendEntered.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var second = client.TestSendRawAsync("two");
+        await Task.Delay(100);
+
+        Assert.Equal(1, client.SendCallCount);
+        Assert.Equal(1, client.MaxConcurrentSends);
+
+        client.ReleaseSends();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(2, client.SendCallCount);
+        Assert.Equal(1, client.MaxConcurrentSends);
+        client.Dispose();
+    }
+
+    [Fact]
+    public async Task SendRawAsync_HonorsClientCancellation()
+    {
+        var client = new TestWebSocketClient("ws://localhost:18789", "token", _logger)
+        {
+            SimulateOpenSocket = true
+        };
+
+        client.Dispose();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.TestSendRawAsync("message"));
     }
 
     [Fact]

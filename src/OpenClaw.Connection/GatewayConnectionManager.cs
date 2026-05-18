@@ -254,7 +254,10 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
-                    _logger.Error($"[ConnMgr] Connect failed: {ex.Message}");
+                    if (Interlocked.Read(ref _generation) == gen)
+                    {
+                        _logger.Error($"[ConnMgr] Connect failed: {ex.Message}");
+                    }
                 }
             }, ct);
     }
@@ -276,6 +279,11 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
     /// <summary>Core disconnect logic. Caller must hold <see cref="_transitionSemaphore"/>.</summary>
     private void DisconnectCore()
     {
+        Interlocked.Increment(ref _generation);
+        var oldCts = Interlocked.Exchange(ref _operationCts, null);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+
         var prev = _stateMachine.Current.OverallState;
         DisposeActiveClient();
         _stateMachine.TryTransition(ConnectionTrigger.DisconnectRequested);
@@ -533,7 +541,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         // Start node connection outside the semaphore to avoid deadlocks
         if (_nodeConnector != null && ShouldStartNodeConnection())
         {
-            await StartNodeConnectionAsync();
+            await StartNodeConnectionAsync(gen);
         }
     }
 
@@ -653,7 +661,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         StateChanged += Handler;
         try
         {
-            var startAttempted = await StartNodeConnectionAsync();
+            var startAttempted = await StartNodeConnectionAsync(Interlocked.Read(ref _generation));
 
             if (!startAttempted)
             {
@@ -706,11 +714,18 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         return _isNodeEnabled?.Invoke() ?? false;
     }
 
-    private async Task<bool> StartNodeConnectionAsync()
-    {
-        if (_nodeConnector == null || _activeGatewayRecordId == null || _activeIdentityPath == null) return false;
+    private bool IsGenerationStale(long? generation)
+        => generation.HasValue && Interlocked.Read(ref _generation) != generation.Value;
 
-        var record = _registry.GetById(_activeGatewayRecordId);
+    private async Task<bool> StartNodeConnectionAsync(long? generation = null)
+    {
+        if (IsGenerationStale(generation)) return false;
+
+        var activeGatewayRecordId = _activeGatewayRecordId;
+        var activeIdentityPath = _activeIdentityPath;
+        if (_nodeConnector == null || activeGatewayRecordId == null || activeIdentityPath == null) return false;
+
+        var record = _registry.GetById(activeGatewayRecordId);
         if (record == null)
         {
             _logger.Warn("[ConnMgr] Cannot start node — gateway record not found");
@@ -718,7 +733,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         }
 
         // Use root identity path — clients always read/write from root, not per-gateway
-        var nodeCredential = _credentialResolver.ResolveNode(record, _activeIdentityPath!);
+        var nodeCredential = _credentialResolver.ResolveNode(record, activeIdentityPath);
         if (nodeCredential == null)
         {
             _logger.Warn("[ConnMgr] No node credential available — skipping node connection");
@@ -731,6 +746,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         await _transitionSemaphore.WaitAsync();
         try
         {
+            if (IsGenerationStale(generation)) return false;
             _stateMachine.SetNodeEnabled(true);
         }
         finally
@@ -747,7 +763,9 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
 
         try
         {
-            await _nodeConnector.ConnectAsync(nodeConnectUrl, nodeCredential, _activeIdentityPath,
+            if (IsGenerationStale(generation)) return false;
+
+            await _nodeConnector.ConnectAsync(nodeConnectUrl, nodeCredential, activeIdentityPath,
                 useV2Signature: _gatewayNeedsV2Signature);
         }
         catch (Exception ex)
@@ -809,6 +827,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
 
     private async void OnNodePairingStatusChanged(object? sender, PairingStatusEventArgs e)
     {
+        var handlerGeneration = Interlocked.Read(ref _generation);
         _diagnostics.Record("node", $"Node pairing: {e.Status}");
 
         await _transitionSemaphore.WaitAsync();
@@ -871,7 +890,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
                                 _lastAutoApprovedRequestId = e.RequestId;
                                 _diagnostics.Record("node", "Node pairing auto-approved — reconnecting node");
                                 await Task.Delay(1000); // brief delay for gateway to process
-                                await StartNodeConnectionAsync();
+                                await StartNodeConnectionAsync(handlerGeneration);
                             }
                             else
                             {

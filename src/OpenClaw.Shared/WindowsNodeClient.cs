@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared;
@@ -36,6 +38,9 @@ public class WindowsNodeClient : WebSocketClientBase
     private volatile bool _rateLimited;
     private bool _useV2Signature; // true after v3 signature rejected by gateway
     public bool UseV2Signature { get => _useV2Signature; set => _useV2Signature = value; }
+    private const int InvokeDispatchQueueCapacity = 32;
+    private readonly Channel<NodeInvokeDispatchItem> _invokeDispatchQueue;
+    private readonly Task _invokeDispatchTask;
     // Bug 3: source-side idempotency for PairingStatusChanged. HandleHelloOk runs on every
     // WS reconnect and re-fires PairingStatus.Paired even when nothing changed, causing a
     // toast storm in the tray UI. Track the last emitted status and only fire on transitions.
@@ -98,6 +103,17 @@ public class WindowsNodeClient : WebSocketClientBase
 
     protected override int ReceiveBufferSize => 65536;
     protected override string ClientRole => "node";
+
+    private enum NodeInvokeResponseKind
+    {
+        RequestResponse,
+        EventResult
+    }
+
+    private sealed record NodeInvokeDispatchItem(
+        NodeInvokeRequest Request,
+        INodeCapability Capability,
+        NodeInvokeResponseKind ResponseKind);
     
     public WindowsNodeClient(string gatewayUrl, string token, string dataPath, IOpenClawLogger? logger = null, string? bootstrapToken = null)
         : base(gatewayUrl, ResolveRequiredCredential(token, bootstrapToken, dataPath, logger), logger)
@@ -117,6 +133,15 @@ public class WindowsNodeClient : WebSocketClientBase
             Platform = "windows",
             DisplayName = $"Windows Node ({Environment.MachineName})"
         };
+
+        _invokeDispatchQueue = Channel.CreateBounded<NodeInvokeDispatchItem>(
+            new BoundedChannelOptions(InvokeDispatchQueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            });
+        _invokeDispatchTask = Task.Run(() => InvokeDispatchLoopAsync(CancellationToken));
     }
 
     private static string NormalizeOptionalCredential(string? credential)
@@ -476,26 +501,13 @@ public class WindowsNodeClient : WebSocketClientBase
             return;
         }
         
-        var stopwatch = Stopwatch.StartNew();
-        try
+        if (!TryEnqueueNodeInvoke(
+            new NodeInvokeDispatchItem(request, capability, NodeInvokeResponseKind.EventResult),
+            requestId,
+            command))
         {
-            // Raise event for UI notification
-            InvokeReceived?.Invoke(this, request);
-            
-            // Execute the command
-            var response = await capability.ExecuteAsync(request);
-            response.Id = requestId;
-             
-            await SendNodeInvokeResultAsync(requestId, response.Ok, response.Payload, response.Error);
-            stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"[NODE] Command execution failed: {command}", ex);
-            await SendNodeInvokeResultAsync(requestId, false, null, "Command execution failed");
-            stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+            await SendNodeInvokeResultAsync(requestId, false, null, "Node is busy; try again shortly");
+            RaiseInvokeCompleted(requestId, command, false, "Node is busy; try again shortly", TimeSpan.Zero);
         }
     }
     
@@ -1000,27 +1012,106 @@ public class WindowsNodeClient : WebSocketClientBase
             return;
         }
         
-        var stopwatch = Stopwatch.StartNew();
+        if (!TryEnqueueNodeInvoke(
+            new NodeInvokeDispatchItem(request, capability, NodeInvokeResponseKind.RequestResponse),
+            requestId,
+            command))
+        {
+            await SendErrorResponseAsync(requestId, "Node is busy; try again shortly");
+            RaiseInvokeCompleted(requestId, command, false, "Node is busy; try again shortly", TimeSpan.Zero);
+        }
+    }
+
+    private bool TryEnqueueNodeInvoke(NodeInvokeDispatchItem item, string requestId, string command)
+    {
+        if (IsDisposed || CancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn($"[NODE] Dropping node.invoke {requestId} for {command}: node is shutting down");
+            return false;
+        }
+
+        if (_invokeDispatchQueue.Writer.TryWrite(item))
+        {
+            return true;
+        }
+
+        _logger.Warn($"[NODE] Invoke dispatcher busy; rejecting {requestId} for {command}");
+        return false;
+    }
+
+    private async Task InvokeDispatchLoopAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            // Raise event for UI notification
-            InvokeReceived?.Invoke(this, request);
-            
-            // Execute the command
-            var response = await capability.ExecuteAsync(request);
-            response.Id = requestId;
-             
-            await SendInvokeResponseAsync(response);
-            stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
+            while (await _invokeDispatchQueue.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (_invokeDispatchQueue.Reader.TryRead(out var item))
+                {
+                    try
+                    {
+                        await ExecuteNodeInvokeAsync(item);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"[NODE] Invoke dispatcher item failed: {item.Request.Command}", ex);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
-            _logger.Error($"Command execution failed: {command}", ex);
-            await SendErrorResponseAsync(requestId, "Command execution failed");
-            stopwatch.Stop();
-            RaiseInvokeCompleted(requestId, command, false, "Command execution failed", stopwatch.Elapsed);
+            _logger.Error("[NODE] Invoke dispatcher stopped unexpectedly", ex);
         }
+    }
+
+    private async Task ExecuteNodeInvokeAsync(NodeInvokeDispatchItem item)
+    {
+        var request = item.Request;
+        var command = request.Command;
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            InvokeReceived?.Invoke(this, request);
+
+            var response = await item.Capability.ExecuteAsync(request);
+            response.Id = request.Id;
+
+            await SendDispatchResponseAsync(item, response);
+            stopwatch.Stop();
+            RaiseInvokeCompleted(request.Id, command, response.Ok, response.Error, stopwatch.Elapsed);
+        }
+        catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"[NODE] Command execution failed: {command}", ex);
+            await SendDispatchErrorAsync(item, "Command execution failed");
+            stopwatch.Stop();
+            RaiseInvokeCompleted(request.Id, command, false, "Command execution failed", stopwatch.Elapsed);
+        }
+    }
+
+    private Task SendDispatchResponseAsync(NodeInvokeDispatchItem item, NodeInvokeResponse response)
+    {
+        return item.ResponseKind == NodeInvokeResponseKind.EventResult
+            ? SendNodeInvokeResultAsync(item.Request.Id, response.Ok, response.Payload, response.Error)
+            : SendInvokeResponseAsync(response);
+    }
+
+    private Task SendDispatchErrorAsync(NodeInvokeDispatchItem item, string error)
+    {
+        return item.ResponseKind == NodeInvokeResponseKind.EventResult
+            ? SendNodeInvokeResultAsync(item.Request.Id, false, null, error)
+            : SendErrorResponseAsync(item.Request.Id, error);
     }
 
     private void RaiseInvokeCompleted(string requestId, string command, bool ok, string? error, TimeSpan duration)
@@ -1156,5 +1247,10 @@ public class WindowsNodeClient : WebSocketClientBase
             _isPendingApproval = false;
             _isPaired = false;
         }
+    }
+
+    protected override void OnDisposing()
+    {
+        _invokeDispatchQueue.Writer.TryComplete();
     }
 }

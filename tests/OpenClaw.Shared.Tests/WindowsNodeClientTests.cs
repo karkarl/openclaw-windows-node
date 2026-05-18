@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using OpenClaw.Shared;
 using OpenClaw.Shared.Capabilities;
@@ -1221,6 +1222,70 @@ public class WindowsNodeClientTests
         }
     }
 
+    private sealed class BlockingCapability : INodeCapability
+    {
+        private readonly TaskCompletionSource<NodeInvokeResponse> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int StartedCount;
+        public bool IsCompleted => _completion.Task.IsCompleted;
+        public string Category => "blocking";
+        public IReadOnlyList<string> Commands { get; } = ["blocking.wait"];
+        public bool CanHandle(string command) => command == "blocking.wait";
+
+        public Task<NodeInvokeResponse> ExecuteAsync(NodeInvokeRequest request)
+        {
+            Interlocked.Increment(ref StartedCount);
+            return _completion.Task;
+        }
+
+        public void Complete() =>
+            _completion.TrySetResult(new NodeInvokeResponse { Ok = true, Payload = new { done = true } });
+    }
+
+    [Fact]
+    public async Task CommandDispatch_ReturnsBeforeCapabilityCompletes()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"openclaw-node-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dataPath);
+
+        try
+        {
+            using var client = new WindowsNodeClient("ws://localhost:18789", "test-token", dataPath);
+            var cap = new BlockingCapability();
+            client.RegisterCapability(cap);
+
+            var json = """
+                {
+                  "type": "req",
+                  "id": "req-blocking",
+                  "method": "node.invoke",
+                  "params": {
+                    "command": "blocking.wait",
+                    "args": {}
+                  }
+                }
+                """;
+
+            var processTask = InvokeProcessMessageAsync(client, json);
+            var completed = await Task.WhenAny(processTask, Task.Delay(250));
+
+            Assert.Same(processTask, completed);
+            Assert.False(cap.IsCompleted);
+
+            await WaitForConditionAsync(
+                () => Volatile.Read(ref cap.StartedCount) == 1,
+                TimeSpan.FromSeconds(1));
+
+            cap.Complete();
+        }
+        finally
+        {
+            if (Directory.Exists(dataPath))
+                Directory.Delete(dataPath, true);
+        }
+    }
+
     [Fact]
     public async Task CommandDispatch_RoutesToRegisteredCapability()
     {
@@ -1248,6 +1313,7 @@ public class WindowsNodeClientTests
                 """;
 
             await InvokeProcessMessageAsync(client, json);
+            await WaitForConditionAsync(() => cap.ExecuteCount == 1, TimeSpan.FromSeconds(1));
 
             Assert.Equal(1, cap.ExecuteCount);
             Assert.Equal("mock.ping", cap.LastCommand);
@@ -1325,6 +1391,7 @@ public class WindowsNodeClientTests
                 """;
 
             await InvokeProcessMessageAsync(client, json);
+            await WaitForConditionAsync(() => first.ExecuteCount == 1, TimeSpan.FromSeconds(1));
 
             Assert.Equal(1, first.ExecuteCount);
             Assert.Equal(0, second.ExecuteCount);
@@ -1363,6 +1430,7 @@ public class WindowsNodeClientTests
                 """;
 
             await InvokeProcessMessageAsync(client, json);
+            await WaitForConditionAsync(() => cap.ExecuteCount == 1, TimeSpan.FromSeconds(1));
 
             Assert.Equal(1, cap.ExecuteCount);
             Assert.Equal("mock.ping", cap.LastCommand);
@@ -1382,5 +1450,17 @@ public class WindowsNodeClientTests
         Assert.NotNull(processMethod);
         var task = (Task)processMethod!.Invoke(client, [json])!;
         await task;
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var start = DateTime.UtcNow;
+        while (!predicate())
+        {
+            if (DateTime.UtcNow - start > timeout)
+                throw new TimeoutException("Condition was not met before the timeout.");
+
+            await Task.Delay(25);
+        }
     }
 }

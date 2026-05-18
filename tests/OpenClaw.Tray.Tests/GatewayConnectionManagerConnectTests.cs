@@ -44,6 +44,26 @@ public sealed class GatewayConnectionManagerConnectTests : IDisposable
         Assert.Equal(OverallConnectionState.Connecting, _manager.CurrentSnapshot.OverallState);
     }
 
+    [Fact]
+    public async Task DisconnectAsync_CancelsInFlightLifecycleConnect()
+    {
+        _registry.AddOrUpdate(new GatewayRecord { Id = "gw-1", Url = "ws://localhost:18789", IsLocal = true });
+        _registry.SetActive("gw-1");
+        _resolver.OperatorCredential = new GatewayCredential("operator-token", IsBootstrapToken: false, Source: "test");
+
+        await _manager.ConnectAsync("gw-1");
+        var lifecycle = _factory.CreatedClients.Single();
+        var token = await lifecycle.ConnectStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(token.IsCancellationRequested);
+
+        await _manager.DisconnectAsync();
+
+        await WaitForConditionAsync(
+            () => token.IsCancellationRequested,
+            TimeSpan.FromSeconds(1));
+    }
+
     private sealed class FakeCredentialResolver : ICredentialResolver
     {
         public GatewayCredential? OperatorCredential { get; set; }
@@ -69,14 +89,32 @@ public sealed class GatewayConnectionManagerConnectTests : IDisposable
     {
         public OpenClawGatewayClient DataClient { get; } = new(gatewayUrl, "mock-token", NullLogger.Instance);
         public bool IsDisposed { get; private set; }
+        public TaskCompletionSource<CancellationToken> ConnectStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 #pragma warning disable CS0067 // Events required by interface but not fired in this regression test.
         public event EventHandler<ConnectionStatus>? StatusChanged;
         public event EventHandler<string>? AuthenticationFailed;
 #pragma warning restore CS0067
 
-        public Task ConnectAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task ConnectAsync(CancellationToken ct)
+        {
+            ConnectStarted.TrySetResult(ct);
+            return Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        }
 
         public void Dispose() => IsDisposed = true;
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var start = DateTime.UtcNow;
+        while (!predicate())
+        {
+            if (DateTime.UtcNow - start > timeout)
+                throw new TimeoutException("Condition was not met before the timeout.");
+
+            await Task.Delay(25);
+        }
     }
 }

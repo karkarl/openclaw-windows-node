@@ -46,7 +46,7 @@ internal sealed class GatewayClientLifecycleAdapter : IGatewayClientLifecycle
     public event EventHandler<ConnectionStatus>? StatusChanged;
     public event EventHandler<string>? AuthenticationFailed;
 
-    public Task ConnectAsync(CancellationToken ct) => _client.ConnectAsync();
+    public Task ConnectAsync(CancellationToken ct) => _client.ConnectAsync(ct);
 
     public void Dispose() => _client.Dispose();
 }
