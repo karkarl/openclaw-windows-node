@@ -5,7 +5,7 @@ namespace OpenClaw.Connection;
 
 /// <summary>
 /// Pure data catalog of known gateway endpoints. Persistence only — no runtime state.
-/// Thread-safe: lock-protected internal list; events fire outside the lock.
+/// Thread-safe: lock-protected internal list and lookup index; events fire outside the lock.
 /// </summary>
 public sealed class GatewayRegistry
 {
@@ -14,6 +14,7 @@ public sealed class GatewayRegistry
     private readonly string _gatewaysDir;
     private readonly IFileSystem _fs;
     private List<GatewayRecord> _records = [];
+    private Dictionary<string, int> _recordIndexes = new(StringComparer.Ordinal);
     private string? _activeId;
 
     private static readonly JsonSerializerOptions s_jsonOptions = new()
@@ -45,12 +46,20 @@ public sealed class GatewayRegistry
 
     public GatewayRecord? GetById(string id)
     {
-        lock (_lock) return _records.Find(r => r.Id == id);
+        lock (_lock)
+        {
+            return _recordIndexes.TryGetValue(id, out var idx) ? _records[idx] : null;
+        }
     }
 
     public GatewayRecord? GetActive()
     {
-        lock (_lock) return _activeId != null ? _records.Find(r => r.Id == _activeId) : null;
+        lock (_lock)
+        {
+            return _activeId != null && _recordIndexes.TryGetValue(_activeId, out var idx)
+                ? _records[idx]
+                : null;
+        }
     }
 
     public string? ActiveGatewayId
@@ -73,11 +82,15 @@ public sealed class GatewayRegistry
         List<GatewayRecord> snapshot;
         lock (_lock)
         {
-            var idx = _records.FindIndex(r => r.Id == record.Id);
-            if (idx >= 0)
+            if (_recordIndexes.TryGetValue(record.Id, out var idx))
+            {
                 _records[idx] = record;
+            }
             else
+            {
+                _recordIndexes[record.Id] = _records.Count;
                 _records.Add(record);
+            }
             snapshot = _records.ToList();
         }
         Changed?.Invoke(this, new GatewayRegistryChangedEventArgs(snapshot));
@@ -89,7 +102,11 @@ public sealed class GatewayRegistry
         List<GatewayRecord> snapshot;
         lock (_lock)
         {
-            _records.RemoveAll(r => r.Id == id);
+            if (_recordIndexes.ContainsKey(id))
+            {
+                _records.RemoveAll(r => r.Id == id);
+                RebuildIndexes();
+            }
             if (_activeId == id) _activeId = null;
             snapshot = _records.ToList();
         }
@@ -113,11 +130,14 @@ public sealed class GatewayRegistry
         List<GatewayRecord> snapshot;
         lock (_lock)
         {
-            var idx = _records.FindIndex(r => r.Id == id);
-            if (idx < 0) return null;
+            if (!_recordIndexes.TryGetValue(id, out var idx)) return null;
             updated = updater(_records[idx]);
             ArgumentNullException.ThrowIfNull(updated, nameof(updater));
             _records[idx] = updated;
+            if (!string.Equals(id, updated.Id, StringComparison.Ordinal))
+            {
+                RebuildIndexes();
+            }
             snapshot = _records.ToList();
         }
         Changed?.Invoke(this, new GatewayRegistryChangedEventArgs(snapshot));
@@ -160,6 +180,7 @@ public sealed class GatewayRegistry
                 lock (_lock)
                 {
                     _records = data.Gateways ?? [];
+                    RebuildIndexes();
                     _activeId = data.ActiveId;
                 }
             }
@@ -251,6 +272,15 @@ public sealed class GatewayRegistry
     {
         public List<GatewayRecord>? Gateways { get; set; }
         public string? ActiveId { get; set; }
+    }
+
+    private void RebuildIndexes()
+    {
+        _recordIndexes = new Dictionary<string, int>(_records.Count, StringComparer.Ordinal);
+        for (var i = 0; i < _records.Count; i++)
+        {
+            _recordIndexes.TryAdd(_records[i].Id, i);
+        }
     }
 }
 
