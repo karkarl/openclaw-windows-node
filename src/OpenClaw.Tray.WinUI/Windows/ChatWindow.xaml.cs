@@ -1,6 +1,7 @@
 using OpenClaw.Chat;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using OpenClaw.Shared;
@@ -11,7 +12,10 @@ using OpenClawTray.Services;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
+using OpenClaw.Shared.Audio;
+using OpenClaw.Shared.Capabilities;
 using WinUIEx;
 
 namespace OpenClawTray.Windows;
@@ -21,7 +25,7 @@ public sealed partial class ChatWindow : WindowEx
     private string _gatewayUrl;
     private string _token;
     private string _chatUrl;
-    private IDisposable? _functionalHost;
+    private MountedFunctionalChat? _functionalHost;
     private IChatDataProvider? _mountedProvider;
     private bool _webViewInitialized;
     private bool _webViewMode;
@@ -117,6 +121,7 @@ public sealed partial class ChatWindow : WindowEx
         {
             app.SettingsChanged += OnAppSettingsChanged;
             app.ChatProviderChanged += OnAppChatProviderChanged;
+            app.SpeakerMuteChanged += OnSpeakerMuteChanged;
         }
 
         // Per-surface debug override (DebugPage > "Debug Overrides").
@@ -136,6 +141,11 @@ public sealed partial class ChatWindow : WindowEx
     private const int DefaultChatHeight = 640;
 
     private void OnAppSettingsChanged(object? sender, EventArgs e) => ApplyChatSurface();
+
+    private void OnSpeakerMuteChanged(bool muted)
+    {
+        DispatcherQueue?.TryEnqueue(() => _functionalHost?.SetSpeakerMuted(muted));
+    }
 
     private void OnAppChatProviderChanged(object? sender, EventArgs e)
     {
@@ -438,10 +448,16 @@ public sealed partial class ChatWindow : WindowEx
 
         PlaceholderPanel.Visibility = Visibility.Collapsed;
         ChatHost.Visibility = Visibility.Visible;
+        var appInstance = App.Current as App;
         _functionalHost = ((Window)this).MountFunctionalChat(
             ChatHost,
             provider,
-            onReadAloud: readAloud);
+            onReadAloud: readAloud,
+            onVoiceRequest: VoiceTranscribeAsync,
+            onAttachClick: OnAttachClicked,
+            onSettingsClick: () => appInstance?.ShowHub("voice"),
+            onSpeakerMuteChanged: muted => appInstance?.SetChatSpeakerMuted(muted),
+            initialMuted: appInstance?.Settings?.VoiceTtsEnabled == false);
         _mountedProvider = provider;
     }
 
@@ -451,6 +467,91 @@ public sealed partial class ChatWindow : WindowEx
         _functionalHost = null;
         _mountedProvider = null;
         try { host?.Dispose(); } catch { /* tear-down race — non-fatal */ }
+    }
+
+    private void OnAttachClicked()
+    {
+        _ = PickAndAttachFileAsync();
+    }
+
+    private async Task<string?> VoiceTranscribeAsync(CancellationToken cancellationToken)
+    {
+        var voiceService = (App.Current as App)?.VoiceServiceInstance;
+        var host = _functionalHost;
+        if (voiceService is null) return null;
+
+        void OnTranscription(string text) => host?.SetVoiceTranscript(text);
+        void OnAudioLevel(float level) => host?.SetVoiceAudioLevel(level);
+
+        voiceService.TranscriptionReceived += OnTranscription;
+        voiceService.AudioLevelChanged += OnAudioLevel;
+        try
+        {
+            var args = new SttListenArgs
+            {
+                TimeoutMs = 10_000,
+                Language = ""
+            };
+            var result = await voiceService.ListenOnceAsync(args, cancellationToken);
+            return result?.Text;
+        }
+        finally
+        {
+            voiceService.TranscriptionReceived -= OnTranscription;
+            voiceService.AudioLevelChanged -= OnAudioLevel;
+            host?.SetVoiceTranscript(null);
+            host?.SetVoiceAudioLevel(0f);
+        }
+    }
+
+    private async Task PickAndAttachFileAsync()
+    {
+        var wasPinned = ChatWindowPinState.IsPinned;
+        try
+        {
+            // Pin the window so the light-dismiss handler doesn't hide it
+            // when the file picker dialog takes focus.
+            ChatWindowPinState.IsPinned = true;
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle((Window)this);
+            var path = await Win32FilePickerHelper.PickSingleFileAsync(hwnd, "Attach file");
+            if (path is null) return;
+            Logger.Info($"[ChatWindow] File selected: {path}");
+
+            Logger.Info($"[ChatWindow] File selected: {path}");
+            var attachment = await ChatAttachment.FromFileAsync(path);
+            _functionalHost?.AttachFile(attachment);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.Warn($"[ChatWindow] Attachment rejected: {ex.Message}");
+            await ShowAttachmentErrorAsync(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[ChatWindow] File picker error: {ex}");
+        }
+        finally
+        {
+            ChatWindowPinState.IsPinned = wasPinned;
+        }
+    }
+
+    private async Task ShowAttachmentErrorAsync(string message)
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Cannot attach file",
+                Content = message,
+                CloseButtonText = "OK",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Content?.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        catch { /* dialog display failed, already logged */ }
     }
 
     private static string BuildChatUrl(string gatewayUrl, string token)
@@ -565,6 +666,7 @@ public sealed partial class ChatWindow : WindowEx
         {
             app.SettingsChanged -= OnAppSettingsChanged;
             app.ChatProviderChanged -= OnAppChatProviderChanged;
+            app.SpeakerMuteChanged -= OnSpeakerMuteChanged;
         }
         OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed -= OnDebugOverrideChanged;
         ChatExplorationState.Changed -= OnExplorationChanged;

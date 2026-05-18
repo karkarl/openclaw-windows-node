@@ -24,7 +24,7 @@ public class OpenClawChatDataProviderTests
         public SessionInfo[] GetSessionList() => Sessions;
         public ModelsListInfo? GetCurrentModelsList() => CurrentModels;
 
-        public Task SendChatMessageAsync(string message, string? sessionKey, string? sessionId)
+        public Task SendChatMessageAsync(string message, string? sessionKey, string? sessionId, IReadOnlyList<ChatAttachment>? attachments = null)
         {
             SentMessages.Add(message);
             SentSessionKeys.Add(sessionKey);
@@ -32,13 +32,16 @@ public class OpenClawChatDataProviderTests
             return SendBehavior?.Invoke(message, sessionKey, sessionId) ?? Task.CompletedTask;
         }
 
+        public Task PatchSessionModelAsync(string sessionKey, string model) => Task.CompletedTask;
+        public Task PatchSessionThinkingLevelAsync(string sessionKey, string thinkingLevel) => Task.CompletedTask;
+
         public Task<ChatHistoryInfo> RequestChatHistoryAsync(string? sessionKey)
         {
             return HistoryBehavior?.Invoke(sessionKey)
                 ?? Task.FromResult(new ChatHistoryInfo { SessionKey = sessionKey ?? "" });
         }
 
-        public Task SendChatAbortAsync(string runId)
+        public Task SendChatAbortAsync(string runId, string? sessionKey = null)
         {
             AbortedRunIds.Add(runId);
             return AbortBehavior?.Invoke(runId) ?? Task.CompletedTask;
@@ -1016,7 +1019,7 @@ public class OpenClawChatDataProviderTests
         });
 
         Assert.Equal(
-            new[] { "GPT-5.4", "Claude Sonnet 4.6", "ollama-only-id" },
+            new[] { "gpt-5.4", "claude-sonnet-4.6", "ollama-only-id" },
             snapshots[^1].AvailableModels);
     }
 
@@ -1035,8 +1038,10 @@ public class OpenClawChatDataProviderTests
             }
         });
 
-        Assert.Single(snapshots[^1].AvailableModels);
-        Assert.Equal("GPT-5.4", snapshots[^1].AvailableModels[0]);
+        // IDs are distinct ("gpt-5.4" vs "gpt-5.4-mirror"), so both appear.
+        Assert.Equal(2, snapshots[^1].AvailableModels.Length);
+        Assert.Equal("gpt-5.4", snapshots[^1].AvailableModels[0]);
+        Assert.Equal("gpt-5.4-mirror", snapshots[^1].AvailableModels[1]);
     }
 
     [Fact]
@@ -1054,7 +1059,7 @@ public class OpenClawChatDataProviderTests
 
         var snap = await provider.LoadAsync();
 
-        Assert.Equal(new[] { "X" }, snap.AvailableModels);
+        Assert.Equal(new[] { "x" }, snap.AvailableModels);
     }
 
     // ── Iteration 4: per-entry metadata (timestamp + model) ──
@@ -1613,5 +1618,77 @@ public class OpenClawChatDataProviderTests
             var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
             Assert.True(bytes <= OpenClawChatDataProvider.MaxEntryTextBytes);
         }
+    }
+
+    [Fact]
+    public async Task StopResponseAsync_FailedAbort_ClearsSuppression()
+    {
+        var (bridge, provider, snapshots, notifications) = CreateProvider(new[] { MainSession() });
+        bridge.AbortBehavior = _ => throw new Exception("Network error");
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        // Send a message to get a turn active
+        await provider.SendMessageAsync("main", "Hello");
+        // Simulate lifecycle.start with a runId
+        bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", "main", "run-1"));
+
+        // Now stop — the abort will fail
+        await provider.StopResponseAsync("main");
+
+        // The failed abort should generate an error notification
+        Assert.Contains(notifications, n => n.Kind == ChatProviderNotificationKind.Error);
+
+        // Crucially: sending a new message should work (thread not permanently suppressed)
+        snapshots.Clear();
+        await provider.SendMessageAsync("main", "Try again");
+        Assert.True(snapshots.Count > 0, "Sending after failed abort should succeed");
+        Assert.Contains(bridge.SentMessages, m => m == "Try again");
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_ClearsPendingAbortCounts()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+        snapshots.Clear();
+
+        // Send a message
+        await provider.SendMessageAsync("main", "First");
+        // Stop before lifecycle.start (creates a pending abort)
+        await provider.StopResponseAsync("main");
+
+        // Now send another message — this should clear pending aborts
+        await provider.SendMessageAsync("main", "Second");
+
+        // Simulate lifecycle.start arriving for the second message
+        bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", "main", "run-2"));
+
+        // The pending abort should NOT have fired (cleared by second send)
+        Assert.DoesNotContain("run-2", bridge.AbortedRunIds);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithAttachment_SendsThroughInterface()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        await provider.LoadAsync();
+
+        var attachment = new ChatAttachment
+        {
+            Type = "file",
+            MimeType = "text/plain",
+            FileName = "test.txt",
+            Content = Convert.ToBase64String(new byte[] { 72, 101, 108, 108, 111 }),
+            SizeBytes = 5
+        };
+
+        await provider.SendMessageAsync("main", "Check this", default, new[] { attachment });
+
+        Assert.Contains(bridge.SentMessages, m => m == "Check this");
+        // The display text in the timeline should include the attachment indicator
+        var timeline = snapshots[^1].Timelines["main"];
+        var userEntry = timeline.Entries.Last(e => e.Kind == ChatTimelineItemKind.User);
+        Assert.Contains("test.txt", userEntry.Text);
     }
 }

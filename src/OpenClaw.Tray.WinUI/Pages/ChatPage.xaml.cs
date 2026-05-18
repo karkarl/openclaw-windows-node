@@ -3,9 +3,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using OpenClaw.Chat;
 using OpenClaw.Shared;
+using OpenClaw.Shared.Capabilities;
 using OpenClawTray.Chat;
 using OpenClawTray.Helpers;
 using OpenClawTray.Services;
+using OpenClawTray.Windows;
 using OpenClaw.Connection;
 using System;
 using System.Diagnostics;
@@ -21,7 +23,8 @@ namespace OpenClawTray.Pages;
 public sealed partial class ChatPage : Page
 {
     private static App CurrentApp => (App)Microsoft.UI.Xaml.Application.Current;
-    private IDisposable? _functionalHost;
+    private HubWindow? _hub;
+    private MountedFunctionalChat? _functionalHost;
     private IChatDataProvider? _mountedProvider;
     private string? _chatUrl;
     private bool _webViewInitialized;
@@ -61,14 +64,48 @@ public sealed partial class ChatPage : Page
         if (App.Current is App app)
             app.ChatProviderChanged -= OnAppChatProviderChanged;
 
+        if (App.Current is App app2)
+            app2.SpeakerMuteChanged -= OnSpeakerMuteChanged;
+
         // MEDIUM 6: detach the static debug-override subscription so that
         // an unloaded ChatPage doesn't keep responding to overrides changes
         // (the page keeps the static handler alive otherwise).
         OpenClawTray.Chat.DebugChatSurfaceOverrides.Changed -= OnDebugOverrideChanged;
     }
 
+    /// <summary>Trigger voice recording programmatically (e.g. from V hotkey).</summary>
+    public void TriggerAutoStartVoice()
+    {
+        if (_functionalHost?.HasVoiceTrigger == true)
+        {
+            _functionalHost.TriggerVoiceRecording();
+            return;
+        }
+        // Composer may not have rendered yet — retry until trigger is registered
+        RetryTriggerVoice(retries: 15, delayMs: 100);
+    }
+
+    private void RetryTriggerVoice(int retries, int delayMs)
+    {
+        if (retries <= 0) return;
+        DispatcherQueue?.TryEnqueue(async () =>
+        {
+            await Task.Delay(delayMs);
+            if (_functionalHost?.HasVoiceTrigger == true)
+            {
+                _functionalHost.TriggerVoiceRecording();
+            }
+            else
+            {
+                RetryTriggerVoice(retries - 1, delayMs);
+            }
+        });
+    }
+
     public void Initialize()
     {
+        _hub = CurrentApp.ActiveHubWindow as HubWindow;
+
         // Compute a "open in browser" URL once so the toolbar button works
         // even when the gateway isn't fully reachable yet.
         if (CurrentApp.Settings is not null)
@@ -89,6 +126,8 @@ public sealed partial class ChatPage : Page
         {
             app.ChatProviderChanged -= OnAppChatProviderChanged;
             app.ChatProviderChanged += OnAppChatProviderChanged;
+            app.SpeakerMuteChanged -= OnSpeakerMuteChanged;
+            app.SpeakerMuteChanged += OnSpeakerMuteChanged;
         }
 
         // Also react to the per-surface debug override picked from DebugPage.
@@ -101,6 +140,11 @@ public sealed partial class ChatPage : Page
     private void OnSettingsSaved(object? sender, EventArgs e) => ApplyChatSurface();
 
     private void OnDebugOverrideChanged(object? sender, EventArgs e) => ApplyChatSurface();
+
+    private void OnSpeakerMuteChanged(bool muted)
+    {
+        DispatcherQueue?.TryEnqueue(() => _functionalHost?.SetSpeakerMuted(muted));
+    }
 
     private void OnAppChatProviderChanged(object? sender, EventArgs e)
     {
@@ -173,6 +217,12 @@ public sealed partial class ChatPage : Page
         {
             PlaceholderPanel.Visibility = Visibility.Collapsed;
             ChatHost.Visibility = Visibility.Visible;
+            // Check for pending auto-start voice even when already mounted
+            if (_hub?.PendingAutoStartVoice == true)
+            {
+                _hub.PendingAutoStartVoice = false;
+                _functionalHost.TriggerVoiceRecording();
+            }
             return;
         }
 
@@ -190,8 +240,25 @@ public sealed partial class ChatPage : Page
         _functionalHost = CurrentApp.ActiveHubWindow!.MountFunctionalChat(
             ChatHost,
             provider,
-            onReadAloud: readAloud);
+            onReadAloud: readAloud,
+            onVoiceRequest: VoiceTranscribeAsync,
+            onAttachClick: OnAttachClicked,
+            onSettingsClick: () => _hub?.NavigateTo("voice"),
+            onSpeakerMuteChanged: muted => (App.Current as App)?.SetChatSpeakerMuted(muted),
+            initialMuted: CurrentApp.Settings?.VoiceTtsEnabled == false);
         _mountedProvider = provider;
+
+        // If the V hotkey (or another caller) requested auto-start voice,
+        // trigger it after the UI thread processes the mount (composer needs
+        // to render first so TriggerVoiceRecording is registered).
+        if (_hub.PendingAutoStartVoice)
+        {
+            _hub.PendingAutoStartVoice = false;
+            DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                _functionalHost?.TriggerVoiceRecording();
+            });
+        }
     }
 
     private void ShowWebViewSurface(bool forceNavigate = false)
@@ -565,5 +632,93 @@ public sealed partial class ChatPage : Page
         LoadingRing.IsActive = true;
         LoadingRing.Visibility = Visibility.Visible;
         _ = NavigateWhenChatReadyAsync(_connectionManager, CurrentApp.Registry?.GetById(CurrentApp.Registry.ActiveGatewayId ?? "")?.Url ?? "gateway", _navigationCts.Token);
+    }
+
+    private async Task<string?> VoiceTranscribeAsync(CancellationToken cancellationToken)
+    {
+        var voiceService = _hub?.VoiceServiceInstance;
+        var host = _functionalHost;
+        if (voiceService is null) return null;
+
+        // Subscribe to streaming events during recording
+        void OnTranscription(string text) => host?.SetVoiceTranscript(text);
+        void OnAudioLevel(float level) => host?.SetVoiceAudioLevel(level);
+
+        voiceService.TranscriptionReceived += OnTranscription;
+        voiceService.AudioLevelChanged += OnAudioLevel;
+        try
+        {
+            var args = new SttListenArgs
+            {
+                TimeoutMs = 120_000,
+                Language = ""
+            };
+            var result = await voiceService.ListenOnceAsync(args, cancellationToken);
+            return result?.Text;
+        }
+        finally
+        {
+            voiceService.TranscriptionReceived -= OnTranscription;
+            voiceService.AudioLevelChanged -= OnAudioLevel;
+            host?.SetVoiceTranscript(null);
+            host?.SetVoiceAudioLevel(0f);
+        }
+    }
+
+    private void OnAttachClicked()
+    {
+        Logger.Info("[ChatPage] OnAttachClicked invoked");
+        _ = PickAndAttachFileAsync();
+    }
+
+    private async Task PickAndAttachFileAsync()
+    {
+        try
+        {
+            if (_hub is null)
+            {
+                Logger.Warn("[ChatPage] PickAndAttachFileAsync: _hub is null, cannot open picker");
+                return;
+            }
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle((Window)_hub!);
+            var path = await Win32FilePickerHelper.PickSingleFileAsync(hwnd, "Attach file");
+
+            if (path is null)
+            {
+                Logger.Info("[ChatPage] File picker cancelled by user");
+                return;
+            }
+
+            Logger.Info($"[ChatPage] File selected: {path}");
+            var attachment = await ChatAttachment.FromFileAsync(path);
+            _functionalHost?.AttachFile(attachment);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.Warn($"[ChatPage] Attachment rejected: {ex.Message}");
+            await ShowAttachmentErrorAsync(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[ChatPage] File picker error: {ex}");
+        }
+    }
+
+    private async Task ShowAttachmentErrorAsync(string message)
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Cannot attach file",
+                Content = message,
+                CloseButtonText = "OK",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        catch { /* dialog display failed, already logged */ }
     }
 }

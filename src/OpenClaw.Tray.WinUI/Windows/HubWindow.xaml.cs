@@ -23,6 +23,47 @@ public sealed partial class HubWindow : WindowEx
     private string _currentAgentId = "main";
     public string CurrentAgentId => _currentAgentId;
 
+    // Legacy compatibility alias
+    public string SelectedAgentId => _currentAgentId;
+    public Action<string?>? OpenDashboardAction { get; set; }
+    public Action? CheckForUpdatesAction { get; set; }
+    public Action? ConnectAction { get; set; }
+    public Action? DisconnectAction { get; set; }
+    public Action? ReconnectAction { get; set; }
+    public Action? OpenSetupAction { get; set; }
+    public Action? OpenConnectionStatusAction { get; set; }
+    public Action? OpenVoiceAction { get; set; }
+    public OpenClaw.Connection.IGatewayConnectionManager? ConnectionManager { get; set; }
+    public OpenClaw.Connection.GatewayRegistry? GatewayRegistry { get; set; }
+
+    // Node service state (set by App.xaml.cs in ShowHub)
+    public bool NodeIsConnected { get; set; }
+    public bool NodeIsPaired { get; set; }
+    public bool NodeIsPendingApproval { get; set; }
+    public string? LastAuthError { get; set; }
+    public string? NodeShortDeviceId { get; set; }
+    public VoiceService? VoiceServiceInstance { get; set; }
+    /// <summary>When true, ChatPage should auto-start voice recording on next navigation. Consumed (reset to false) by ChatPage.</summary>
+    public bool PendingAutoStartVoice { get; set; }
+    public string? NodeFullDeviceId { get; set; }
+
+    // Cached gateway data — pages read these on navigation
+    public SessionInfo[]? LastSessions { get; private set; }
+    public ChannelHealth[]? LastChannels { get; private set; }
+    public GatewayUsageInfo? LastUsage { get; private set; }
+    public GatewayCostUsageInfo? LastUsageCost { get; private set; }
+    public GatewayUsageStatusInfo? LastUsageStatus { get; private set; }
+    public GatewayNodeInfo[]? LastNodes { get; private set; }
+
+    public System.Text.Json.JsonElement? LastConfig { get; private set; }
+    public System.Text.Json.JsonElement? LastConfigSchema { get; private set; }
+    public System.Text.Json.JsonElement? LastSkillsData { get; private set; }
+    public string? LastSkillsAgentId { get; private set; }
+    public System.Text.Json.JsonElement? LastAgentFilesList { get; private set; }
+    public string? LastAgentFilesListAgentId { get; private set; }
+    private string? _pendingAgentFilesListAgentId;
+
+
     // Event for settings saved (App.xaml.cs subscribes)
     public event EventHandler? SettingsSaved;
 
@@ -146,6 +187,9 @@ public sealed partial class HubWindow : WindowEx
             NavigateTo("connection");
         }
     }
+
+    /// <summary>Returns the currently displayed page in the content frame.</summary>
+    public object? CurrentPage => ContentFrame?.Content;
 
     // Canonical tag of the page currently shown in ContentFrame; tracked here
     // (rather than relying on NavView.SelectedItem) so navigation identity

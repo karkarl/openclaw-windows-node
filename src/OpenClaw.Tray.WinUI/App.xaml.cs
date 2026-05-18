@@ -946,9 +946,20 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         ShowHub("connection");
     }
 
-    private VoiceOverlayWindow? _voiceOverlayWindow;
+    // Voice overlay disabled — inline chat voice mode is used instead.
+    // private VoiceOverlayWindow? _voiceOverlayWindow;
     private VoiceService? _standaloneVoiceService;
 
+    /// <summary>
+    /// Gets the current VoiceService instance (from the node service or standalone).
+    /// Returns null if STT is not enabled.
+    /// </summary>
+    public VoiceService? VoiceServiceInstance =>
+        _nodeService?.VoiceService ?? _standaloneVoiceService;
+
+    // Voice overlay disabled — inline chat voice mode is used instead.
+    // Kept for potential future re-enablement.
+    /*
     private void ShowVoiceOverlay()
     {
         var voiceService = _nodeService?.VoiceService ?? EnsureStandaloneVoiceService();
@@ -981,6 +992,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
         _voiceOverlayWindow.Activate();
     }
+    */
 
     private VoiceService? EnsureStandaloneVoiceService()
     {
@@ -1044,8 +1056,8 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             case "permissions": ShowHub("permissions"); break;
             case "dashboard": OpenDashboard(); break;
             case "canvas": ShowCanvasWindow(); break;
-            case "openchat": ShowChatWindow(); break;
-            case "voice": ShowVoiceOverlay(); break;
+            case "openchat": ShowHub("chat"); break;
+            case "voice": ShowHub("voice"); break; // was: ShowVoiceOverlay()
             case "webchat": ShowWebChat(); break;
             case "hub": ShowHub(); break;
             case "companion":
@@ -2176,6 +2188,31 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         if (status == ConnectionStatus.Connected)
         {
             _ = RunHealthCheckAsync();
+            // For local gateways, the NodeConnector is suppressed because NodeService
+            // owns the identity. Connect the NodeService directly after operator connects.
+            _ = TryConnectLocalNodeServiceAsync();
+        }
+    }
+
+    /// <summary>
+    /// Connects the local NodeService to the active gateway when the operator connection
+    /// is established. This handles the restart case where the NodeConnector is suppressed
+    /// for local gateways (LocalNodeServiceOwnsIdentityFor returns true) but the NodeService
+    /// was never told to connect.
+    /// </summary>
+    private async Task TryConnectLocalNodeServiceAsync()
+    {
+        if (_connectionManager == null)
+            return;
+
+        Logger.Info("[App] Auto-connecting local NodeService via EnsureNodeConnectedAsync");
+        try
+        {
+            await _connectionManager.EnsureNodeConnectedAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[App] Local NodeService auto-connect failed: {ex.Message}");
         }
     }
 
@@ -2238,17 +2275,22 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // if the user enabled "Read responses aloud".
         if (notification.IsChat && !string.IsNullOrEmpty(notification.Message))
         {
-            if (_voiceOverlayWindow != null)
-            {
-                OnUiThread(() =>
-                {
-                    try
-                    {
-                        _voiceOverlayWindow?.AddAgentResponse(notification.Message);
-                    }
-                    catch { }
-                });
-            }
+            // Suppress TTS/voice overlay when the user has aborted the response.
+            if (ChatProvider?.IsResponseSuppressed == true)
+                return;
+
+            // Voice overlay disabled — agent responses no longer routed to overlay window.
+            // if (_voiceOverlayWindow != null)
+            // {
+            //     OnUiThread(() =>
+            //     {
+            //         try
+            //         {
+            //             _voiceOverlayWindow?.AddAgentResponse(notification.Message);
+            //         }
+            //         catch { }
+            //     });
+            // }
 
             // TTS: read response aloud whenever the toggle is on (any chat surface).
             if (_settings?.VoiceTtsEnabled == true)
@@ -2514,6 +2556,34 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             _hubWindow.AppModel = _appState;
             _hubWindow.ApplyNavPaneState(_settings!);
             _hubWindow.QuickSendAction = () => ShowQuickSend();
+            _hubWindow.OpenSetupAction = () => _ = ShowOnboardingAsync();
+            _hubWindow.OpenConnectionStatusAction = ShowConnectionStatusWindow;
+            _hubWindow.OpenVoiceAction = () => ShowHub("voice"); // was: ShowVoiceOverlay()
+            _hubWindow.ConnectionManager = _connectionManager;
+            _hubWindow.GatewayRegistry = _gatewayRegistry;
+            _hubWindow.ConnectAction = () =>
+            {
+                _ = _connectionManager?.ReconnectAsync();
+            };
+            _hubWindow.DisconnectAction = () =>
+            {
+                _ = _connectionManager?.DisconnectAsync();
+                // Status is updated by OnManagerStateChanged when disconnect completes.
+                UpdateTrayIcon();
+            };
+            _hubWindow.ReconnectAction = () =>
+            {
+                _ = _connectionManager?.ReconnectAsync();
+            };
+            if (_nodeService != null)
+            {
+                _hubWindow.NodeIsConnected = _nodeService.IsConnected;
+                _hubWindow.NodeIsPaired = _nodeService.IsPaired;
+                _hubWindow.NodeIsPendingApproval = _nodeService.IsPendingApproval;
+                _hubWindow.NodeShortDeviceId = _nodeService.ShortDeviceId;
+                _hubWindow.NodeFullDeviceId = _nodeService.FullDeviceId;
+            }
+            _hubWindow.VoiceServiceInstance = _nodeService?.VoiceService ?? _standaloneVoiceService;
             _hubWindow.SettingsSaved += OnSettingsSaved;
             _hubWindow.Closed += (s, e) =>
             {
@@ -3025,7 +3095,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         _ = _connectionManager?.DisconnectAsync();
         UpdateTrayIcon();
     }
-    void IAppCommands.ShowVoiceOverlay() => ShowVoiceOverlay();
+    void IAppCommands.ShowVoiceOverlay() => ShowHub("voice");
     void IAppCommands.ShowChat() => ShowChatWindow();
     void IAppCommands.ShowQuickSend() => ShowQuickSend();
     void IAppCommands.CheckForUpdates() => _ = CheckForUpdatesUserInitiatedAsync();
@@ -3137,7 +3207,35 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     private void OnVoiceHotkeyPressed(object? sender, EventArgs e)
     {
-        OnUiThread(() => ShowVoiceOverlay());
+        if (_dispatcherQueue == null) return;
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            // Always set the flag first — ChatPage checks it during navigation
+            var hubExisted = _hubWindow != null;
+            ShowHub("chat");
+            if (_hubWindow == null) return;
+
+            if (_hubWindow.CurrentPage is Pages.ChatPage chatPage)
+            {
+                // Chat page is already visible — trigger voice directly
+                chatPage.TriggerAutoStartVoice();
+            }
+            else
+            {
+                // Chat page is being created — set the flag for ChatPage.Initialize to pick up.
+                // Also schedule a delayed trigger in case the flag isn't consumed during navigation.
+                _hubWindow.PendingAutoStartVoice = true;
+                _dispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    if (_hubWindow?.PendingAutoStartVoice == true &&
+                        _hubWindow.CurrentPage is Pages.ChatPage cp)
+                    {
+                        _hubWindow.PendingAutoStartVoice = false;
+                        cp.TriggerAutoStartVoice();
+                    }
+                });
+            }
+        });
     }
 
     private void OnSettingsHotkeyPressed(object? sender, EventArgs e)
@@ -3456,7 +3554,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             OpenDashboard = OpenDashboard,
             OpenQuickSend = ShowQuickSend,
             OpenHub = (page) => ShowHub(page),
-            OpenVoice = () => ShowVoiceOverlay(),
+            OpenVoice = () => ShowHub("voice"), // was: ShowVoiceOverlay()
             StopVoice = () => _ = StopVoiceAsync(),
             SendMessage = async (msg) =>
             {
@@ -3478,6 +3576,22 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     public Task SpeakChatTextAsync(string text) =>
         _chatCoordinator?.SpeakChatTextAsync(text) ?? Task.CompletedTask;
+
+    /// <summary>Raised when speaker mute state changes from any source (composer, settings, etc.).</summary>
+    public event Action<bool>? SpeakerMuteChanged;
+
+    public void SetChatSpeakerMuted(bool muted)
+    {
+        if (_chatCoordinator is { } c) c.IsMuted = muted;
+        // Persist to settings
+        if (_settings != null)
+        {
+            _settings.VoiceTtsEnabled = !muted;
+            _settings.Save();
+        }
+        // Broadcast to all subscribers
+        SpeakerMuteChanged?.Invoke(muted);
+    }
 
     private static void SendDeepLinkToRunningInstance(string uri)
     {

@@ -56,6 +56,7 @@ public record ChatThread
     public string? Compute { get; init; }
     public string? ProfileName { get; init; }
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
     public int? HistoryCursor { get; init; }
     public DateTimeOffset? CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
@@ -158,10 +159,13 @@ public interface IChatDataProvider : IAsyncDisposable
     Task<ChatDataSnapshot> LoadAsync(CancellationToken cancellationToken = default);
     Task<ChatThread> CreateThreadAsync(string? initialMessage = null, CancellationToken cancellationToken = default);
     Task SendMessageAsync(string threadId, string message, CancellationToken cancellationToken = default);
+    Task SendMessageAsync(string threadId, string message, CancellationToken cancellationToken, IReadOnlyList<OpenClaw.Shared.ChatAttachment>? attachments) =>
+        SendMessageAsync(threadId, message, cancellationToken);
     Task StopResponseAsync(string threadId, CancellationToken cancellationToken = default);
     Task SetThreadSuspendedAsync(string threadId, bool suspended, CancellationToken cancellationToken = default);
     Task DeleteThreadAsync(string threadId, CancellationToken cancellationToken = default);
     Task SetModelAsync(string threadId, string model, CancellationToken cancellationToken = default);
+    Task SetThinkingLevelAsync(string threadId, string thinkingLevel, CancellationToken cancellationToken = default);
     Task SetPermissionModeAsync(string threadId, bool allowAll, CancellationToken cancellationToken = default);
     Task RespondToPermissionAsync(string threadId, string requestId, bool allow, CancellationToken cancellationToken = default);
 }
