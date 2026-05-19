@@ -72,9 +72,9 @@ public class NodePairAutoApproveTests : IDisposable
             _nodeConnector.FireStatusChanged(ConnectionStatus.Connecting));
 
         // Pending WITHOUT a requestId — auto-approval should not trigger.
-        // Brief delay is acceptable here: we're asserting nothing happened.
+        var decisionDone = WaitForAutoApproveDecisionAsync(manager);
         _nodeConnector.FirePairingStatusChanged(PairingStatus.Pending, requestId: null);
-        await Task.Delay(200);
+        await decisionDone;
 
         Assert.Empty(lifecycle.TrackingClient.ApprovalMethodsCalled);
     }
@@ -92,8 +92,9 @@ public class NodePairAutoApproveTests : IDisposable
             _nodeConnector.FireStatusChanged(ConnectionStatus.Connecting));
 
         // Insufficient scope — auto-approval should not trigger.
+        var decisionDone = WaitForAutoApproveDecisionAsync(manager);
         _nodeConnector.FirePairingStatusChanged(PairingStatus.Pending, requestId: "req-123");
-        await Task.Delay(200);
+        await decisionDone;
 
         Assert.Empty(lifecycle.TrackingClient.ApprovalMethodsCalled);
     }
@@ -119,12 +120,13 @@ public class NodePairAutoApproveTests : IDisposable
         await firstEntered; // First call has entered NodePairApproveAsync but is blocked
 
         // Fire second event while first is still in-flight — CAS guard should reject
+        var secondDecision = WaitForAutoApproveDecisionAsync(manager);
         _nodeConnector.FirePairingStatusChanged(PairingStatus.Pending, requestId: "req-same");
-        await Task.Delay(200); // brief wait for the second handler to run and be rejected
+        await secondDecision; // second handler has been rejected by CAS guard
 
         // Release the blocked first approval
         lifecycle.TrackingClient.ReleaseApproveGate();
-        await Task.Delay(200); // let it complete
+        await Task.Delay(50); // let it complete
 
         // Only one approval call should have been made
         Assert.Equal(1, lifecycle.TrackingClient.ApprovalMethodsCalled
@@ -182,6 +184,7 @@ public class NodePairAutoApproveTests : IDisposable
         lifecycle.TrackingClient.SetIsConnected(true);
         _nodeConnector.NodeDeviceId = "f52d5187...own";
 
+        var decisionDone = WaitForAutoApproveDecisionAsync(manager);
         lifecycle.TrackingClient.FireNodePairListUpdated(new PairingListInfo
         {
             Pending =
@@ -189,7 +192,7 @@ public class NodePairAutoApproveTests : IDisposable
                 new PairingRequest { RequestId = "req-someone-else", NodeId = "different-node-id" }
             ]
         });
-        await Task.Delay(200);
+        await decisionDone;
 
         Assert.Empty(lifecycle.TrackingClient.ApprovalMethodsCalled);
     }
@@ -204,6 +207,7 @@ public class NodePairAutoApproveTests : IDisposable
         lifecycle.TrackingClient.SetIsConnected(true);
         _nodeConnector.NodeDeviceId = "own-id";
 
+        var decisionDone = WaitForAutoApproveDecisionAsync(manager);
         lifecycle.TrackingClient.FireNodePairListUpdated(new PairingListInfo
         {
             Pending =
@@ -211,7 +215,7 @@ public class NodePairAutoApproveTests : IDisposable
                 new PairingRequest { RequestId = "req-no-scope", NodeId = "own-id" }
             ]
         });
-        await Task.Delay(200);
+        await decisionDone;
 
         Assert.Empty(lifecycle.TrackingClient.ApprovalMethodsCalled);
     }
@@ -229,8 +233,9 @@ public class NodePairAutoApproveTests : IDisposable
         await FireAndWait(manager, () =>
             _nodeConnector.FireStatusChanged(ConnectionStatus.Connecting));
 
+        var firstDecision = WaitForAutoApproveDecisionAsync(manager);
         _nodeConnector.FirePairingStatusChanged(PairingStatus.Pending, requestId: "req-same-later-scope");
-        await Task.Delay(200);
+        await firstDecision;
         Assert.Empty(lifecycle.TrackingClient.ApprovalMethodsCalled);
 
         lifecycle.TrackingClient.SetGrantedScopes(["operator.admin"]);
@@ -255,21 +260,23 @@ public class NodePairAutoApproveTests : IDisposable
         _nodeConnector.NodeDeviceId = "own-id";
 
         var firstDone = lifecycle.TrackingClient.WaitForApprovalCallAsync();
+        var firstDecision = WaitForAutoApproveDecisionAsync(manager);
         lifecycle.TrackingClient.FireNodePairListUpdated(new PairingListInfo
         {
             Pending = [new PairingRequest { RequestId = "dedupe-1", NodeId = "own-id" }]
         });
         await firstDone;
-        // Wait for the post-approve sequence to complete before firing the
-        // second event; _lastAutoApprovedRequestId must be set first.
-        await Task.Delay(1100);
+        // Wait for the full post-approve sequence (including _lastAutoApprovedRequestId being set)
+        // before firing the second event. With postApproveDelay:Zero this completes immediately.
+        await firstDecision;
 
         // Re-broadcast (same id) — must be skipped via _lastAutoApprovedRequestId.
+        var secondDecision = WaitForAutoApproveDecisionAsync(manager);
         lifecycle.TrackingClient.FireNodePairListUpdated(new PairingListInfo
         {
             Pending = [new PairingRequest { RequestId = "dedupe-1", NodeId = "own-id" }]
         });
-        await Task.Delay(200);
+        await secondDecision;
 
         Assert.Equal(1, lifecycle.TrackingClient.ApprovalMethodsCalled
             .Count(m => m == "node.pair.approve"));
@@ -289,10 +296,28 @@ public class NodePairAutoApproveTests : IDisposable
         var manager = new GatewayConnectionManager(
             _resolver, _factory, _registry, NullLogger.Instance,
             nodeConnector: _nodeConnector,
-            isNodeEnabled: () => true);
+            isNodeEnabled: () => true,
+            postApproveDelay: TimeSpan.Zero);
 
         manager.ConnectAsync("gw1").GetAwaiter().GetResult();
         return manager;
+    }
+
+    /// <summary>
+    /// Returns a task that completes when the manager's next auto-approve decision handler
+    /// fires <see cref="GatewayConnectionManager.AutoApproveDecisionCompleted"/>.
+    /// Use instead of <c>Task.Delay</c> for deterministic negative-assertion synchronisation.
+    /// </summary>
+    private static Task WaitForAutoApproveDecisionAsync(GatewayConnectionManager manager, int timeoutMs = 5000)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(object? _, EventArgs __)
+        {
+            manager.AutoApproveDecisionCompleted -= Handler;
+            tcs.TrySetResult();
+        }
+        manager.AutoApproveDecisionCompleted += Handler;
+        return tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(timeoutMs));
     }
 
     private static async Task<GatewayConnectionSnapshot> FireAndWait(

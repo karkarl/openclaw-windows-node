@@ -32,10 +32,18 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
     private bool _gatewayNeedsV2Signature; // remembered across reconnects
     private string? _lastAutoApprovedRequestId; // prevent auto-approve loops
     private string? _autoApproveInFlight; // atomic guard against concurrent approval of same requestId
+    private readonly TimeSpan _postApproveDelay;
 
     public event EventHandler<GatewayConnectionSnapshot>? StateChanged;
     public event EventHandler<ConnectionDiagnosticEvent>? DiagnosticEvent;
     public event EventHandler<OperatorClientChangedEventArgs>? OperatorClientChanged;
+
+    /// <summary>
+    /// Fired after each auto-approve decision handler completes (regardless of whether an
+    /// approval was attempted or granted). Exposed internally for test synchronisation so
+    /// tests can replace <c>Task.Delay</c> waits with a deterministic signal.
+    /// </summary>
+    internal event EventHandler? AutoApproveDecisionCompleted;
 
     public GatewayConnectionManager(
         ICredentialResolver credentialResolver,
@@ -48,7 +56,8 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         Func<bool>? isNodeEnabled = null,
         ConnectionDiagnostics? diagnostics = null,
         ISshTunnelManager? tunnelManager = null,
-        Func<GatewayRecord, string, bool>? shouldStartNodeConnection = null)
+        Func<GatewayRecord, string, bool>? shouldStartNodeConnection = null,
+        TimeSpan postApproveDelay = default)
     {
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
@@ -62,6 +71,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         _shouldStartNodeConnection = shouldStartNodeConnection;
         _diagnostics = diagnostics ?? new ConnectionDiagnostics(clock: clock);
         _diagnostics.EventRecorded += (_, e) => DiagnosticEvent?.Invoke(this, e);
+        _postApproveDelay = postApproveDelay == default ? TimeSpan.FromSeconds(1) : postApproveDelay;
 
         if (_nodeConnector != null)
         {
@@ -249,10 +259,17 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
             // This complements (not replaces) the node-side flow on line ~810
             // which still handles the case where the node knows it's pending
             // before any operator event lands.
-            lifecycle.DataClient.NodePairListUpdated += (s, info) =>
+            lifecycle.DataClient.NodePairListUpdated += async (s, info) =>
             {
                 if (Interlocked.Read(ref _generation) != gen) return;
-                _ = TryOperatorAutoApproveOwnNodePairAsync(info, gen);
+                try
+                {
+                    await TryOperatorAutoApproveOwnNodePairAsync(info, gen);
+                }
+                finally
+                {
+                    AutoApproveDecisionCompleted?.Invoke(this, EventArgs.Empty);
+                }
             };
 
             // If we already know this gateway needs v2, tell the client upfront
@@ -857,6 +874,18 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
             _transitionSemaphore.Release();
         }
 
+        try
+        {
+            await RunNodeSideAutoApproveAsync(e);
+        }
+        finally
+        {
+            AutoApproveDecisionCompleted?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private async Task RunNodeSideAutoApproveAsync(PairingStatusEventArgs e)
+    {
         // Auto-approve node pairing if operator has admin/pairing scope.
         // _autoApproveInFlight is a CAS guard scoped to JUST the approve RPC —
         // we release it before the reconnect delay so unrelated approvals
@@ -916,7 +945,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
             if (approved)
             {
                 _diagnostics.Record("node", "Node pairing auto-approved — reconnecting node");
-                await Task.Delay(1000); // brief delay for gateway to process
+                await Task.Delay(_postApproveDelay); // brief delay for gateway to process
                 if (Interlocked.Read(ref _generation) == approvalGeneration)
                     await StartNodeConnectionAsync();
             }
@@ -1010,7 +1039,7 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
         if (lastApprovedRequestId is not null)
         {
             _diagnostics.Record("node", $"Operator-side approved {lastApprovedRequestId} — reconnecting node so caps propagate");
-            await Task.Delay(1000);
+            await Task.Delay(_postApproveDelay);
             if (Interlocked.Read(ref _generation) == gen)
                 await StartNodeConnectionAsync();
         }
