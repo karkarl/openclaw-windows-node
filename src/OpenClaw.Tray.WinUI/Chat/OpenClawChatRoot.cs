@@ -455,6 +455,7 @@ public sealed class OpenClawChatRoot : Component
                 VoiceTranscript: voiceTranscript.Value,
                 VoiceAudioLevel: voiceAudioLevel.Value,
                 RegisterVoiceStarter: starter => TriggerVoiceRecording = starter,
+                OnAttachmentPasted: att => pendingAttachment.Set(att),
                 IsCompact: _isCompact))
             : Empty();
 
