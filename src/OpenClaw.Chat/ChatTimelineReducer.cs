@@ -90,7 +90,7 @@ public static class ChatTimelineReducer
         {
             Entries = state.Entries.Add(new(id, ChatTimelineItemKind.ToolCall, e.Text,
                 ToolName: e.ToolName, ToolResult: ChatToolCallStatus.InProgress,
-                IntentSummary: e.Text, ToolArgs: e.ToolArgs)),
+                IntentSummary: e.Text, ToolArgs: e.ToolArgs, ToolCallId: e.ToolCallId)),
             NextId = state.NextId + 1,
             // Only update legacy positional slot for events without a correlation ID.
             ActiveToolCallId = e.ToolCallId is null ? id : state.ActiveToolCallId,

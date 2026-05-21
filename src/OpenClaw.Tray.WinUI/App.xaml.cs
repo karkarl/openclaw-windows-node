@@ -992,7 +992,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     /// Returns null if STT is not enabled.
     /// </summary>
     public VoiceService? VoiceServiceInstance =>
-        _nodeService?.VoiceService ?? _standaloneVoiceService;
+        _nodeService?.VoiceService ?? EnsureStandaloneVoiceService();
 
     // Voice overlay disabled — inline chat voice mode is used instead.
     // Kept for potential future re-enablement.
@@ -1400,7 +1400,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         {
             CurrentStatus = _appState!.Status,
             AuthFailureMessage = _appState?.AuthFailureMessage,
-            GatewayUrl = _settings?.GetEffectiveGatewayUrl(),
+            GatewayUrl = _gatewayRegistry?.GetActive()?.Url ?? _settings?.GetEffectiveGatewayUrl(),
             GatewaySelf = _appState?.GatewaySelf,
             Presence = _appState?.Presence,
             EnableNodeMode = _settings?.EnableNodeMode == true && _nodeService != null,
@@ -3695,6 +3695,8 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     public Task SpeakChatTextAsync(string text) =>
         _chatCoordinator?.SpeakChatTextAsync(text) ?? Task.CompletedTask;
+
+    public void StopChatSpeaking() => _chatCoordinator?.StopSpeaking();
 
     /// <summary>Raised when speaker mute state changes from any source (composer, settings, etc.).</summary>
     public event Action<bool>? SpeakerMuteChanged;

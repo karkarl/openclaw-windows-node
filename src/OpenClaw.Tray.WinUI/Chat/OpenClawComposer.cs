@@ -53,7 +53,7 @@ public record OpenClawComposerProps(
     Action<string> OnModelChanged,
     Action<string> OnThinkingLevelChanged,
     Action<bool> OnPermissionsChanged,
-    Func<CancellationToken, Task<string?>>? OnVoiceRequest = null,
+    Func<CancellationToken, Action?, Task<string?>>? OnVoiceRequest = null,
     Action? OnAttachClick = null,
     ChatAttachment? PendingAttachment = null,
     Action? OnAttachmentRemoved = null,
@@ -63,7 +63,8 @@ public record OpenClawComposerProps(
     string? VoiceTranscript = null,
     float VoiceAudioLevel = 0f,
     Action<Action>? RegisterVoiceStarter = null,
-    Action<ChatAttachment>? OnAttachmentPasted = null);
+    Action<ChatAttachment>? OnAttachmentPasted = null,
+    bool IsCompact = false);
 
 public sealed class OpenClawComposer : Component<OpenClawComposerProps>
 {
@@ -124,12 +125,13 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             var cts = new CancellationTokenSource();
             voiceCtsRef.Current = cts;
             voiceStoppedRef.Current = false;
-            isRecording.Set(true);
+            // Don't set isRecording yet — the request may show a dialog
+            // (e.g. STT model not installed) and return null immediately.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var text = await Props.OnVoiceRequest(cts.Token);
+                    var text = await Props.OnVoiceRequest(cts.Token, () => isRecording.Set(true));
                     // Keep transcript if we got text (either natural completion
                     // or user pressed stop). Discard only on explicit cancel.
                     if (!string.IsNullOrEmpty(text)
@@ -205,7 +207,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             .Set(cb =>
             {
                 cb.MinWidth = 0;
-                cb.MaxWidth = 150;
+                cb.Width = Props.IsCompact ? 180 : 200;
                 cb.Height = 28;
                 cb.FontSize = 11;
                 cb.Padding = new Thickness(8, 0, 4, 0);
@@ -224,8 +226,8 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 Props.OnModelChanged(models[idx]);
         }).Set(cb =>
         {
-            cb.Width = 160;
             cb.MinWidth = 0;
+            cb.Width = Props.IsCompact ? 170 : 200;
             cb.Height = 28;
             cb.FontSize = 11;
             cb.Padding = new Thickness(8, 0, 4, 0);
@@ -244,7 +246,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             .Set(cb =>
             {
                 cb.MinWidth = 0;
-                cb.MaxWidth = 150;
+                cb.Width = Props.IsCompact ? 95 : 160;
                 cb.Height = 28;
                 cb.FontSize = 11;
                 cb.Padding = new Thickness(8, 0, 4, 0);

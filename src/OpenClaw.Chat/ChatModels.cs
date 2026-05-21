@@ -75,7 +75,8 @@ public record ChatTimelineItem(
     string? ToolOutput = null,
     string? IntentSummary = null,
     JsonObject? ToolArgs = null,
-    ChatTone? Tone = null);
+    ChatTone? Tone = null,
+    string? ToolCallId = null);
 
 public record ChatPermissionRequest(string RequestId, string PermissionKind, string ToolName, string Detail);
 
