@@ -862,7 +862,7 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
         // (and left indent) stay exactly parallel as the bubble grows
         // with content. Single-element Border[] used as a mutable slot
         // since these are local functions (no nested class allowed).
-        Element RenderAssistantEntry(ChatTimelineItem entry, bool startsBurst, bool endsBurst, bool showAvatar, Microsoft.UI.Xaml.Controls.Border[]? bubbleSlot = null)
+        Element RenderAssistantEntry(ChatTimelineItem entry, bool startsBurst, bool endsBurst, bool showAvatar, Microsoft.UI.Xaml.Controls.Border[]? bubbleSlot = null, Element[]? footerSlot = null)
         {
             if (string.IsNullOrEmpty(entry.Text))
                 return Empty();
@@ -915,6 +915,15 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 var leftInset = (showAssistAvatar && showAvatar) ? (36 + bubbleSideMargin) : 0;
                 leftInset += (int)bubblePadding.Left;
                 footer = footer.Margin(leftInset, 2, 0, 0);
+                // When a footerSlot is supplied, the caller is deferring the
+                // timestamp/model/tokens line to render BELOW the tool burst
+                // (so the timestamp sits at the very bottom of the turn).
+                // Hand the footer over and emit Empty() in its inline slot.
+                if (footerSlot != null)
+                {
+                    footerSlot[0] = footer;
+                    footer = Empty();
+                }
             }
 
             var topMargin = startsBurst ? 4.0 : 1.0;
@@ -1747,6 +1756,28 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
         // rendered below it in the same turn. Reset at each User entry.
         Microsoft.UI.Xaml.Controls.Border[]? currentBubbleSlot = null;
 
+        // Pre-compute the last orderedIdx position of the turn containing each
+        // entry. Used to (a) decide whether to defer an assistant footer past
+        // a following tool burst and (b) know where to splice the deferred
+        // footer back into the timeline so the timestamp sits at the very
+        // bottom of the turn.
+        var turnEndAt = new int[orderedIdx.Length];
+        {
+            int ts = 0;
+            for (int k = 1; k < orderedIdx.Length; k++)
+            {
+                if (Props.Entries[orderedIdx[k]].Kind == ChatTimelineItemKind.User)
+                {
+                    for (int j = ts; j < k; j++) turnEndAt[j] = k - 1;
+                    ts = k;
+                }
+            }
+            for (int j = ts; j < orderedIdx.Length; j++) turnEndAt[j] = orderedIdx.Length - 1;
+        }
+
+        // Map: insert these deferred-footer elements right AFTER orderedIdx[k].
+        var deferredFooterAfter = new System.Collections.Generic.Dictionary<int, Element>();
+
         for (int k = 0; k < orderedIdx.Length; k++)
         {
             int i = orderedIdx[k];
@@ -1791,7 +1822,31 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             if (entry.Kind == ChatTimelineItemKind.Assistant)
             {
                 currentBubbleSlot ??= new Microsoft.UI.Xaml.Controls.Border[1];
-                renderedEntries[k] = RenderAssistantEntry(entry, startsBurst, endsBurst, showAvatar, currentBubbleSlot).WithKey(entry.Id);
+
+                // Does a ToolCall follow this assistant entry in the same turn?
+                // If yes, defer the assistant footer (timestamp/model/tokens)
+                // so it renders BELOW the tool card(s), keeping the timestamp
+                // at the very bottom of the turn.
+                bool hasToolAfter = false;
+                int turnEnd = turnEndAt[k];
+                for (int kj = k + 1; kj <= turnEnd; kj++)
+                {
+                    if (Props.Entries[orderedIdx[kj]].Kind == ChatTimelineItemKind.ToolCall)
+                    {
+                        hasToolAfter = true;
+                        break;
+                    }
+                }
+
+                Element[]? footerSlot = (hasToolAfter && endsBurst && showTimestamps) ? new Element[1] : null;
+                renderedEntries[k] = RenderAssistantEntry(entry, startsBurst, endsBurst, showAvatar, currentBubbleSlot, footerSlot).WithKey(entry.Id);
+
+                if (footerSlot != null && footerSlot[0] != null)
+                {
+                    // Splice the deferred footer in right after the last
+                    // entry of this turn (which will be the tail tool burst).
+                    deferredFooterAfter[turnEnd] = footerSlot[0]!;
+                }
                 continue;
             }
 
@@ -1827,26 +1882,33 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
         // Build the final element list, splicing the thinking indicator
         // inline RIGHT AFTER the most recent User entry so tool bursts that
         // follow it visually hang below "Agent is thinking…" (and below the
-        // assistant reply once one streams in).
+        // assistant reply once one streams in). Also splice any deferred
+        // assistant footers (timestamp/model/tokens) AFTER the last entry of
+        // their turn so the timestamp sits at the very bottom — under the
+        // tool card(s).
         Element[] timelineRows;
-        if (Props.ShowThinkingIndicator && renderedEntries.Length > 0)
+        if ((Props.ShowThinkingIndicator && renderedEntries.Length > 0) || deferredFooterAfter.Count > 0)
         {
             int insertAfter = -1;
-            for (int k = orderedIdx.Length - 1; k >= 0; k--)
+            if (Props.ShowThinkingIndicator)
             {
-                if (Props.Entries[orderedIdx[k]].Kind == ChatTimelineItemKind.User)
+                for (int k = orderedIdx.Length - 1; k >= 0; k--)
                 {
-                    insertAfter = k;
-                    break;
+                    if (Props.Entries[orderedIdx[k]].Kind == ChatTimelineItemKind.User)
+                    {
+                        insertAfter = k;
+                        break;
+                    }
                 }
             }
-            var spliced = new System.Collections.Generic.List<Element>(renderedEntries.Length + 1);
+            var spliced = new System.Collections.Generic.List<Element>(renderedEntries.Length + 1 + deferredFooterAfter.Count);
             for (int k = 0; k < renderedEntries.Length; k++)
             {
                 spliced.Add(renderedEntries[k]);
-                if (k == insertAfter) spliced.Add(thinkingIndicator);
+                if (Props.ShowThinkingIndicator && k == insertAfter) spliced.Add(thinkingIndicator);
+                if (deferredFooterAfter.TryGetValue(k, out var deferred)) spliced.Add(deferred);
             }
-            if (insertAfter < 0) spliced.Insert(0, thinkingIndicator);
+            if (Props.ShowThinkingIndicator && insertAfter < 0) spliced.Insert(0, thinkingIndicator);
             timelineRows = spliced.ToArray();
         }
         else
