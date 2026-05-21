@@ -856,8 +856,7 @@ public sealed class LocalGatewayUninstall
         && p.LocalGatewayRecordsAbsent
         && p.LocalGatewayIdentityDirsAbsent
         && p.KeepalivesAbsent
-        && p.VhdDirAbsent
-        && p.WslParentDirAbsent;
+        && p.VhdDirAbsent;
 
     private static bool IsLocalGatewayRecordForUninstall(GatewayRecord record)
     {
@@ -893,8 +892,6 @@ public sealed class LocalGatewayUninstall
             _errors.Add("Postcondition failed: keepalive process still running.");
         if (!p.VhdDirAbsent)
             _errors.Add("Postcondition failed: VHD directory still present.");
-        if (!p.WslParentDirAbsent)
-            _errors.Add("Postcondition failed: wsl\\ parent directory still present (may contain unexpected files).");
     }
 
     private LocalGatewayUninstallResult BuildResult(
