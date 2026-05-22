@@ -11,6 +11,7 @@ using OpenClawTray.FunctionalUI.Core;
 using OpenClawTray.Chat.Explorations;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Windows.UI;
 using static OpenClawTray.FunctionalUI.Factories;
@@ -37,12 +38,15 @@ namespace OpenClawTray.Chat;
 /// banner that <c>InputBar</c> used to render are preserved here above the
 /// composer.
 /// </summary>
+public record ChannelGroup(string AgentLabel, (string Id, string Title)[] Sessions);
+
 public record OpenClawComposerProps(
     string ConnectionState,
     bool TurnActive,
     ChatPermissionRequest? PendingPermission,
     string ChannelLabel,
-    string[] AvailableChannels,
+    string? ChannelId,
+    ChannelGroup[] AvailableChannels,
     string[] AvailableModels,
     string? CurrentModel,
     string? CurrentThinkingLevel,
@@ -200,25 +204,66 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         };
 
         // ── Row 1: three compact dropdowns ─────────────────────────────
-        var channelOptions = Props.AvailableChannels is { Length: > 0 }
-            ? Props.AvailableChannels
-            : new[] { Props.ChannelLabel ?? "main" };
-        var channelIndex = Array.IndexOf(channelOptions, Props.ChannelLabel ?? "");
-        if (channelIndex < 0) channelIndex = 0;
-        var channelCombo = ComboBox(channelOptions, channelIndex, idx =>
+        // Build grouped session ComboBox directly (bypassing the FunctionalUI
+        // ComboBox helper which only supports flat string[] items).
+        var groups = Props.AvailableChannels;
+        var channelCombo = Border()
+            .Set(border =>
             {
-                if (idx >= 0 && idx < channelOptions.Length)
-                    Props.OnChannelChanged(channelOptions[idx]);
-            })
-            .Set(cb =>
-            {
-                cb.MinWidth = 0;
-                cb.Width = Props.IsCompact ? 180 : 200;
-                cb.Height = 28;
-                cb.FontSize = 11;
-                cb.Padding = new Thickness(8, 0, 4, 0);
-                cb.CornerRadius = composerCornerRadius;
-            }).VAlign(VerticalAlignment.Center);
+                var cb = new ComboBox
+                {
+                    MinWidth = 0,
+                    Width = Props.IsCompact ? 180 : 200,
+                    Height = 28,
+                    FontSize = 11,
+                    Padding = new Thickness(8, 0, 4, 0),
+                    CornerRadius = composerCornerRadius,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+
+                ComboBoxItem? selectedItem = null;
+                foreach (var group in groups)
+                {
+                    if (groups.Length > 1)
+                    {
+                        cb.Items.Add(new ComboBoxItem
+                        {
+                            Content = group.AgentLabel,
+                            IsEnabled = false,
+                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                            FontSize = 10,
+                            Padding = new Thickness(4, 2, 4, 2),
+                            IsHitTestVisible = false,
+                        });
+                    }
+                    foreach (var session in group.Sessions)
+                    {
+                        var item = new ComboBoxItem
+                        {
+                            Content = session.Title,
+                            Tag = session.Id,
+                            Padding = groups.Length > 1
+                                ? new Thickness(16, 4, 4, 4)
+                                : new Thickness(8, 4, 4, 4),
+                        };
+                        cb.Items.Add(item);
+                        if (session.Id == (Props.ChannelId ?? ""))
+                            selectedItem = item;
+                    }
+                }
+
+                if (selectedItem != null)
+                    cb.SelectedItem = selectedItem;
+
+                var onChanged = Props.OnChannelChanged;
+                cb.SelectionChanged += (_, _) =>
+                {
+                    if (cb.SelectedItem is ComboBoxItem { Tag: string id })
+                        onChanged(id);
+                };
+
+                border.Child = cb;
+            });
 
         var models = Props.AvailableModels;
         var modelIndex = models is { Length: > 0 } && Props.CurrentModel is { } cur
@@ -886,14 +931,26 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             var headerWeight = Microsoft.UI.Text.FontWeights.SemiBold;
 
             menuItems.Add(MenuItem("Channel") with { IsEnabled = false, Padding = headerPad, FontWeight = headerWeight });
-            foreach (var ch in channelOptions)
+            foreach (var group in Props.AvailableChannels)
             {
-                var name = ch;
-                menuItems.Add(RadioMenuItem(
-                    name,
-                    "channel",
-                    isChecked: name == channelLabel,
-                    onClick: () => Props.OnChannelChanged(name)));
+                if (Props.AvailableChannels.Length > 1)
+                {
+                    menuItems.Add(MenuItem($"  {group.AgentLabel}") with
+                    {
+                        IsEnabled = false,
+                        Padding = new Thickness(0, 2, 8, 0),
+                        FontWeight = Microsoft.UI.Text.FontWeights.Normal,
+                    });
+                }
+                foreach (var ch in group.Sessions)
+                {
+                    var id = ch.Id;
+                    menuItems.Add(RadioMenuItem(
+                        ch.Title,
+                        "channel",
+                        isChecked: id == (Props.ChannelId ?? ""),
+                        onClick: () => Props.OnChannelChanged(id)));
+                }
             }
 
             menuItems.Add(MenuSeparator());

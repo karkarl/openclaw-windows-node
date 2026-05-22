@@ -102,6 +102,10 @@ public sealed partial class HubWindow : WindowEx
             AppModel.PropertyChanged += OnAppModelChanged;
             UpdateTitleBarStatus(AppModel.Status);
             ScheduleGatewayNavVisibilityForStatus(AppModel.Status, debounceDisconnected: false);
+
+            // Apply agents list that may have arrived before this window opened.
+            if (AppModel.AgentsList.HasValue)
+                RebuildAgentNavItems(AppModel.AgentsList.Value);
         }
     }
 
