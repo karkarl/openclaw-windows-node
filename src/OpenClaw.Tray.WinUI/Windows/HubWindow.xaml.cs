@@ -428,6 +428,7 @@ public sealed partial class HubWindow : WindowEx
             NavSkills.Visibility = vis;
             NavChannels.Visibility = vis;
             NavInstances.Visibility = vis;
+            NavCron.Visibility = vis;
             NavAdvanced.Visibility = vis;
             NavGatewaySeparator.Visibility = vis;
 

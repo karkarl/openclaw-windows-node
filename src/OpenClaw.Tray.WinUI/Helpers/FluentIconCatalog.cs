@@ -92,6 +92,7 @@ public static class FluentIconCatalog
     public const string Reset = "\uE72C";          // Refresh (alias) — Reconfigure / start over
     public const string Clear = "\uE74D";          // Delete — clear/reset a buffer
     public const string Develop = "\uE943";        // Code — engineering / explorations action
+    public const string Cron = "\uE787";           // Calendar — Cron / scheduled jobs (matches HubWindow search mapping)
 
     /// <summary>
     /// Builds a <see cref="FontIcon"/> for the given PUA glyph using the
