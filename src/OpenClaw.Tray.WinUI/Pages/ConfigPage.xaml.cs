@@ -190,9 +190,8 @@ public sealed partial class ConfigPage : Page
     }
 
     /// <summary>
-    /// Reconciles which of the three Row 2 surfaces is visible:
-    /// the Editor card, the Raw JSON card, or the "no schema" fallback.
-    /// Called whenever schema state or the SelectorBar selection changes.
+    /// Reconciles which Row 2 surface is visible: Editor, Raw JSON, or
+    /// the "no schema" fallback.
     /// </summary>
     private void ApplyPaneVisibility()
     {
@@ -371,9 +370,6 @@ public sealed partial class ConfigPage : Page
 
     private void UpdateRawJson()
     {
-        // RawJsonText lives inside the Raw JSON pane; it's always realized
-        // (we just toggle Visibility), but keep the null guard for safety
-        // in case this is called before InitializeComponent finishes.
         if (RawJsonText is null) return;
 
         if (_lastConfig.HasValue)

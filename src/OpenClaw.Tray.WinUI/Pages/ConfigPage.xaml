@@ -6,10 +6,8 @@
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     xmlns:local="using:OpenClawTray.Controls">
 
-    <!-- Win11 Settings pattern: content is capped at a comfortable reading
-         width. Stretch + MaxWidth keeps every pane at the same width so the
-         layout doesn't shift when toggling Editor / Raw JSON or when the
-         selected field's detail content changes. -->
+    <!-- Cap content width and stretch so panes don't shift size when toggling
+         Editor / Raw JSON or when the selected field changes. -->
     <Grid Padding="24,16,24,16" RowSpacing="12"
           MaxWidth="900" HorizontalAlignment="Stretch">
         <Grid.RowDefinitions>
@@ -55,8 +53,6 @@
         </controls:SelectorBar>
 
         <!-- ───────── Editor pane ───────── -->
-        <!-- Single card with internal 1px vertical divider so the tree and
-             the detail editor read as one surface (no 12px gutter). -->
         <Border Grid.Row="2" x:Name="EditorPane"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
