@@ -37,7 +37,8 @@
                     BorderThickness="0" CornerRadius="4">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <FontIcon x:Name="EnabledChevron" Glyph="&#xE70E;" FontSize="10" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="EnabledHeaderText" Text="Enabled" FontWeight="SemiBold" FontSize="13"
+                    <TextBlock x:Name="EnabledHeaderText" Text="Enabled"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
                                VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
@@ -54,7 +55,8 @@
                             BorderThickness="0" CornerRadius="4" Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon x:Name="DisabledChevron" Glyph="&#xE70E;" FontSize="10" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="DisabledHeaderText" Text="Disabled" FontWeight="SemiBold" FontSize="13"
+                            <TextBlock x:Name="DisabledHeaderText" Text="Disabled"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
@@ -76,7 +78,8 @@
         <!-- Empty State -->
         <StackPanel x:Name="EmptyState" Grid.Row="1" Visibility="Collapsed"
                     VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-            <TextBlock Text="🧩" FontSize="48" HorizontalAlignment="Center"/>
+            <FontIcon Glyph="&#xEA86;" FontSize="48" HorizontalAlignment="Center"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <TextBlock Text="No skills installed"
                        Style="{StaticResource SubtitleTextBlockStyle}"
                        HorizontalAlignment="Center"/>
