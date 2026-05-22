@@ -85,6 +85,14 @@ public enum ChatPreviewState
     Thinking,
     /// <summary>Composer shows the tool-permission banner with Allow/Deny.</summary>
     PendingPermission,
+    /// <summary>
+    /// Force the pre-connect "Reconnecting to your last conversation…"
+    /// banner that <see cref="OpenClaw.Tray.WinUI.Chat.OpenClawChatRoot"/>
+    /// renders when <c>effectiveThread</c> is null because the gateway
+    /// handshake hasn't completed yet. Lets designers see the banner
+    /// without having to actually disconnect.
+    /// </summary>
+    Reconnecting,
 }
 
 public enum ChatComposerLayout

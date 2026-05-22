@@ -114,6 +114,14 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     // <see cref="ChatTimelineItem"/> record.
     private readonly Dictionary<string, Dictionary<string, ChatEntryMetadata>> _entryMeta = new();
     private SessionInfo[] _sessions = Array.Empty<SessionInfo>();
+    // True once the gateway has delivered a sessions list (even an empty
+    // one) for the current connection. Used to gate the synthetic
+    // compose-only thread so the UI doesn't briefly render the welcome
+    // zero-state in the window between hello-ok (HasHandshakeSnapshot)
+    // and the first sessions.list — at that point the gateway may still
+    // be about to deliver real sessions for a returning user. Reset to
+    // false on disconnect alongside `_status`.
+    private bool _sessionsListReceived;
     private string[] _availableModels = Array.Empty<string>();
     private ConnectionStatus _status;
     private bool _disposed;
@@ -852,6 +860,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                                    && _status == ConnectionStatus.Connected;
             _status = status;
 
+            // Reset the sessions-list-received gate whenever we leave the
+            // Connected state. Any cached sessions belong to the previous
+            // connection; the UI must treat the composer as not-yet-ready
+            // until the next sessions.list arrives.
+            if (status != ConnectionStatus.Connected)
+                _sessionsListReceived = false;
+
             // On (re)connect, reload any thread that either previously loaded
             // successfully or has a timeline but never completed loading.
             // The second case covers initial connect: the UI may have created
@@ -920,6 +935,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         lock (_gate)
         {
             _sessions = sessions ?? Array.Empty<SessionInfo>();
+            _sessionsListReceived = true;
             EnsureTimelinesForSessionsLocked();
             snapshot = BuildSnapshotLocked();
 
@@ -2101,7 +2117,12 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     {
         if (!_timelines.TryGetValue(threadId, out var current))
         {
-            current = ChatTimelineState.Initial() with { HistoryLoaded = true };
+            // HistoryLoaded stays false until LoadHistoryAsync rebuilds
+            // the timeline from the gateway. The UI relies on this flag
+            // to distinguish "session exists, history still fetching"
+            // (show reconnecting view) from "session truly empty"
+            // (show welcome zero-state).
+            current = ChatTimelineState.Initial();
             _timelines[threadId] = current;
         }
         return current;
@@ -2113,7 +2134,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         {
             if (string.IsNullOrEmpty(s.Key)) continue;
             if (!_timelines.ContainsKey(s.Key))
-                _timelines[s.Key] = ChatTimelineState.Initial() with { HistoryLoaded = true };
+                _timelines[s.Key] = ChatTimelineState.Initial();
         }
     }
 
@@ -2131,7 +2152,12 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         var composeKey = _bridge.MainSessionKey;
         var composeReady = _bridge.HasHandshakeSnapshot
             && !string.IsNullOrWhiteSpace(composeKey)
-            && _status == ConnectionStatus.Connected;
+            && _status == ConnectionStatus.Connected
+            // Wait until sessions.list has been delivered for this
+            // connection — otherwise the UI may synthesize a compose-only
+            // thread (and render the welcome zero-state) in the brief
+            // window before a returning user's real sessions arrive.
+            && _sessionsListReceived;
 
         // If the compose target hasn't materialized as a real session yet but
         // already has an optimistic timeline (because the user sent a message

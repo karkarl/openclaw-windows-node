@@ -215,7 +215,8 @@ public class ChatExplorationsPanel : Component
                 ChatPreviewState.Loading,
                 ChatPreviewState.Empty,
                 ChatPreviewState.Thinking,
-                ChatPreviewState.PendingPermission)
+                ChatPreviewState.PendingPermission,
+                ChatPreviewState.Reconnecting)
         );
 
         // ── H. Tool burst (multi-step task framing) ──────────────────
