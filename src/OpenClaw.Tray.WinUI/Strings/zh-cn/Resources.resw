@@ -1603,18 +1603,18 @@
     <value>ç½‘å…³å·²è¿žæŽ¥ï¼›èŠå¤©ç•Œé¢ä»åœ¨ä¸Šçº¿ä¸­ã€‚</value>
   </data>
   <data name="ConfigPage_TextBlock_17.Text" xml:space="preserve">
-    <value>⚙️ 配置</value>
+    <value>é…ç½®</value>
   </data>
   <data name="ConfigPage_TextBlock_21.Text" xml:space="preserve">
     <value>åˆ·æ–°</value>
   </data>
-  <data name="ConfigPage_TabViewItem_34.Header" xml:space="preserve">
+  <data name="ConfigPage_TabViewItem_34.Text" xml:space="preserve">
     <value>ç¼–è¾‘å™¨</value>
   </data>
   <data name="DetailPath.Text" xml:space="preserve">
     <value>é€‰æ‹©é…ç½®éƒ¨åˆ†</value>
   </data>
-  <data name="ConfigPage_TabViewItem_82.Header" xml:space="preserve">
+<data name="ConfigPage_TabViewItem_82.Text" xml:space="preserve">
     <value>åŽŸå§‹ JSON</value>
   </data>
   <data name="ConfigPage_TextBlock_95.Text" xml:space="preserve">
@@ -4430,5 +4430,5 @@
   </data>
   <data name="HubWindow_Advanced.Content" xml:space="preserve">
     <value>é«˜çº§</value>
-  </data>
-</root>
+  </data></root>
+
