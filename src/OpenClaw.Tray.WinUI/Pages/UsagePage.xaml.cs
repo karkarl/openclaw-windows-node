@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using OpenClaw.Connection;
 using OpenClaw.Shared;
 using OpenClawTray.Services;
 using System;
@@ -31,6 +32,8 @@ public sealed partial class UsagePage : Page
         Unloaded += (_, _) =>
         {
             if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
+            if (CurrentApp.ConnectionManager != null)
+                CurrentApp.ConnectionManager.OperatorClientChanged -= OnOperatorClientChanged;
             DetachClient();
         };
     }
@@ -40,6 +43,11 @@ public sealed partial class UsagePage : Page
         if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
         _appState = CurrentApp.AppState;
         _appState.PropertyChanged += OnAppStateChanged;
+        if (CurrentApp.ConnectionManager != null)
+        {
+            CurrentApp.ConnectionManager.OperatorClientChanged -= OnOperatorClientChanged;
+            CurrentApp.ConnectionManager.OperatorClientChanged += OnOperatorClientChanged;
+        }
 
         var client = CurrentApp.GatewayClient;
         AttachClient(client);
@@ -114,14 +122,42 @@ public sealed partial class UsagePage : Page
         dispatcher.TryEnqueue(() =>
         {
             if (_trackedClient != client) return;
-            ConnectionInfoBar.IsOpen = false;
-            if (!_dailyCostLoading.HasLoaded) _dailyCostLoading.BeginInitialRefresh();
-            else _dailyCostLoading.BeginRefresh();
-            if (!_providerLoading.HasLoaded) _providerLoading.BeginInitialRefresh();
-            UpdateDailyCostLoadingVisuals();
-            UpdateProviderLoadingVisuals();
-            RequestRefresh(client);
+            RecoverConnectedClient(client);
         });
+    }
+
+    private void OnOperatorClientChanged(object? sender, OperatorClientChangedEventArgs e)
+    {
+        var dispatcher = DispatcherQueue;
+        if (dispatcher == null) return;
+        dispatcher.TryEnqueue(() =>
+        {
+            AttachClient(e.NewClient);
+            if (e.NewClient is { IsConnectedToGateway: true })
+            {
+                RecoverConnectedClient(e.NewClient);
+            }
+            else
+            {
+                _providerLoading.Fail();
+                _dailyCostLoading.Fail();
+                ShowDisconnected();
+                UpdateProviderLoadingVisuals();
+                UpdateDailyCostLoadingVisuals();
+            }
+        });
+    }
+
+    private void RecoverConnectedClient(IOperatorGatewayClient client)
+    {
+        ConnectionInfoBar.IsOpen = false;
+        if (!_dailyCostLoading.HasLoaded) _dailyCostLoading.BeginInitialRefresh();
+        else _dailyCostLoading.BeginRefresh();
+        if (!_providerLoading.HasLoaded) _providerLoading.BeginInitialRefresh();
+        else _providerLoading.BeginRefresh();
+        UpdateDailyCostLoadingVisuals();
+        UpdateProviderLoadingVisuals();
+        RequestRefresh(client);
     }
 
     private void RequestRefresh(IOperatorGatewayClient client)
