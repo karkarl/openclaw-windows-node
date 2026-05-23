@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-23T01:15:00Z",
-  "last_run_id": "26319494565",
+  "last_run": "2026-05-23T12:52:00Z",
+  "last_run_id": "26332886314",
   "backlog_cursor": {
     "issue_number": 462,
     "comment_cursor": 462
@@ -45,17 +45,20 @@
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
     "node-capability-gating-tests": {"pr": 495, "branch": "repo-assist/improve-nodecapabilitygating-tests-2026-05-21", "status": "merged", "date": "2026-05-21"},
-    "appversioninfo-tests-and-coverage": {"pr": null, "branch": "repo-assist/improve-appversioninfo-tests-and-coverage-doc-2026-05-22", "status": "unknown-check-github", "date": "2026-05-22"},
-    "chattimeline-reducer-tests": {"pr": null, "branch": "repo-assist/improve-chattimeline-reducer-tests-2026-05-22", "status": "unknown-check-github", "date": "2026-05-22"},
-    "menuhelpers-tests": {"pr": null, "branch": "repo-assist/improve-menuhelpers-tests-2026-05-23", "status": "open", "date": "2026-05-23", "note": "45 new tests for MenuDisplayHelper and MenuSizingHelper"}
+    "menuhelpers-tests": {"pr": 522, "branch": "repo-assist/improve-menuhelpers-tests-2026-05-23", "status": "merged", "date": "2026-05-23"},
+    "channel-result-tests": {"pr": null, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "open", "date": "2026-05-23", "note": "22 tests for LooksLikeMissingPlugin and LooksLikeStaleBaseHash"}
+  },
+  "engineering_attempts": {
+    "treat-warnings-as-errors": {"pr": null, "branch": "repo-assist/eng-treat-warnings-as-errors-2026-05-23", "status": "open", "date": "2026-05-23", "note": "TreatWarningsAsErrors in src/Directory.Build.props + NoWarn CS8524 in Shared.csproj"}
   },
   "monthly_activity_issue": 435,
   "engineering_checks": {
     "test_coverage_doc": "2026-05-22",
     "dependency_audit": "2026-05-18",
-    "ci_pipeline_check": "2026-05-20"
+    "ci_pipeline_check": "2026-05-23",
+    "treat_warnings_as_errors": "2026-05-23"
   },
   "open_repo_assist_issues": [435, 449, 465, 476],
-  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495],
-  "notes": "Issue #462: trackpad scroll - suggested EnableMouseInPointer(true) in OnLaunched. Issue #338: node capabilities onboarding - commented with implementation path. Issue #453: attachment persistence - root cause is ImagePreviewCache being in-process only; sidecar JSON approach recommended. Issue #458: keyless chat events - one-shot notification approach recommended. PR #446 (Dependabot) still open. PR #505 by AlexAlves87 adds ExecApprovals write path (24 new tests). PR #504 localizes XAML strings. PR #468 MSIX hardening draft. PR #521 by bkudiess adds back-links to Hub navigation (open, needs proof). SshTunnelCommandLine tests already exist in ModelsTests.cs."
+  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522],
+  "notes": "PR #522 merged (menuhelpers tests). PR #524 merged (CI expanded). Issue #462: trackpad scroll - suggested EnableMouseInPointer(true) in OnLaunched. Issue #338: node capabilities onboarding - commented with implementation path. Issue #453: attachment persistence - root cause is ImagePreviewCache being in-process only; sidecar JSON approach recommended. Issue #458: keyless chat events - one-shot notification approach recommended. PR #446 (Dependabot) still open. PR #526 by AlexAlves87 adds ExecApprovals write path (24 new tests). PR #523 setup robustness. PR #521 back-links. PR #468 MSIX hardening draft. TreatWarningsAsErrors now enforced in src/ (except CS8524 in Shared which is intentional)."
 }
