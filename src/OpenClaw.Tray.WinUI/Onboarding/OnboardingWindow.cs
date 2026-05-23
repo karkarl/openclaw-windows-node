@@ -92,6 +92,8 @@ public sealed class OnboardingWindow : WindowEx
         // so the new UI renders against real data without touching any
         // service code.
         _v2State = new OpenClawTray.Onboarding.V2.OnboardingV2State();
+        _gatewayWizardState.NavigationLockChanged = ownsNavigation =>
+            _v2State.GatewayWizardOwnsNavigation = ownsNavigation;
         _v2State.GatewayWizardChildFactory = () =>
             Factories.Component<GatewayWizardPage, GatewayWizardState>(_gatewayWizardState);
 

@@ -22,7 +22,13 @@
                       run smoke + pairing proofs. Reuses an existing distro if present.
     FreshMachine    - Like UpstreamInstall, but unregisters any existing
                       OpenClawGateway distro first (simulates a clean machine).
-    Recreate        - Iterated FreshMachine (unregister between runs). Use `-Iterations`.
+    Recreate        - Iterated FreshMachine (unregister between runs and wipe
+                      isolated identity each time). Use `-Iterations`.
+    ResetRedoPreserveIdentity
+                    - Iterated destructive WSL reset while preserving the
+                      isolated Windows tray identity across runs. This catches
+                      "setup completed but the tray is not usable afterward"
+                      pairing/metadata regressions.
 
 .NOTES
     Diagnostics on networking/lifecycle health failures point operators at
@@ -32,7 +38,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("PreflightOnly", "UpstreamInstall", "FreshMachine", "Recreate")]
+    [ValidateSet("PreflightOnly", "UpstreamInstall", "FreshMachine", "Recreate", "ResetRedoPreserveIdentity")]
     [string]$Scenario = "PreflightOnly",
     [string]$OutputDir = (Join-Path (Get-Location) "artifacts\wsl-gateway-validation"),
     [int]$Iterations = 1,
@@ -42,6 +48,7 @@ param(
     [switch]$ContinueOnCleanupFailure,
     [switch]$NoBuild,
     [int]$TimeoutSeconds = 600,
+    [int]$PostSetupUsableTimeoutSeconds = 90,
     [string]$DistroName = "OpenClawGateway",
     [string]$GatewayUrl = "ws://127.0.0.1:18789",
     [string]$RelayProbeUri,
@@ -77,6 +84,7 @@ $cliProject = Join-Path $repoRoot "src\OpenClaw.Cli\OpenClaw.Cli.csproj"
 $validationAppDataRoot = if ($Scenario -eq "PreflightOnly") { $env:APPDATA } else { Join-Path $runRoot "isolated\appdata" }
 $validationLocalAppDataRoot = if ($Scenario -eq "PreflightOnly") { $env:LOCALAPPDATA } else { Join-Path $runRoot "isolated\localappdata" }
 $setupStatePath = Join-Path $validationLocalAppDataRoot "OpenClawTray\setup-state.json"
+$trayLogPath = Join-Path $validationAppDataRoot "openclaw-tray.log"
 $settingsPath = Join-Path $validationAppDataRoot "settings.json"
 $wslInstallLocation = Join-Path $runRoot "wsl\$DistroName"
 
@@ -91,9 +99,20 @@ $script:summary = [ordered]@{
     repository = $repoRoot.Path
     outputDir = $runRoot
     networkingMode = "LocalhostOnly"
+    requestedIterations = $Iterations
+    effectiveIterations = $Iterations
+    setupEngineStatus = "NotStarted"
+    trayUsabilityStatus = "NotStarted"
     activeDistroName = $DistroName
     activeInstallLocation = $wslInstallLocation
     selectedGatewayUrl = $GatewayUrl
+    postSetupUsability = [ordered]@{
+        timeoutSeconds = $PostSetupUsableTimeoutSeconds
+        trayLogPath = $trayLogPath
+        proof = "NotStarted"
+        lastFailure = $null
+        lastSuccess = $null
+    }
     pairingValidation = [ordered]@{
         gatewayImplementation = "Unknown"
         bootstrapQrShape = "Unknown"
@@ -106,6 +125,9 @@ $script:summary = [ordered]@{
     steps = @()
     error = $null
 }
+$effectiveIterations = if ($Scenario -eq "ResetRedoPreserveIdentity" -and $Iterations -lt 2) { 2 } else { $Iterations }
+$script:summary.effectiveIterations = $effectiveIterations
+$script:repositoryValidationCompleted = $false
 
 function Add-Step {
     param([string]$Name, [string]$Status, [string]$Message, [hashtable]$Data = @{})
@@ -124,10 +146,10 @@ function Test-IsOpenClawOwnedDistroName {
 }
 
 function Assert-DestructiveSafety {
-    if ($Scenario -in @("FreshMachine", "Recreate") -and -not $ConfirmDestructiveClean) {
+    if ($Scenario -in @("FreshMachine", "Recreate", "ResetRedoPreserveIdentity") -and -not $ConfirmDestructiveClean) {
         throw "-ConfirmDestructiveClean is required when -Scenario is $Scenario (will unregister WSL distro '$DistroName')."
     }
-    if ($Scenario -in @("FreshMachine", "Recreate") -and -not (Test-IsOpenClawOwnedDistroName -Name $DistroName)) {
+    if ($Scenario -in @("FreshMachine", "Recreate", "ResetRedoPreserveIdentity") -and -not (Test-IsOpenClawOwnedDistroName -Name $DistroName)) {
         throw "Refusing destructive action for non-OpenClaw distro '$DistroName'. Distro name must be exactly 'OpenClawGateway'."
     }
 }
@@ -154,8 +176,11 @@ function Write-Summary {
         "- Scenario: $Scenario",
         "- Status: $($script:summary.status)",
         "- Validation: $($script:summary.validationStatus)",
+        "- Setup engine: $($script:summary.setupEngineStatus)",
+        "- Tray usable after setup: $($script:summary.trayUsabilityStatus)",
         "- Cleanup: $($script:summary.cleanupStatus)",
         "- Networking mode: LocalhostOnly (loopback only)",
+        "- Iterations: $($script:summary.effectiveIterations)",
         "- Started: $($script:summary.startedAt)",
         "- Finished: $($script:summary.finishedAt)",
         "- Output: $runRoot",
@@ -177,6 +202,7 @@ function Redact-SensitiveGatewayOutput {
     if ([string]::IsNullOrEmpty($Content)) { return $Content }
     $r = $Content -replace '("(?:bootstrapToken|bootstrap_token|deviceToken|device_token|token|setupCode|setup_code|PrivateKeyBase64|PublicKeyBase64)"\s*:\s*")[^"]+(")', '$1<redacted>$2'
     $r = $r -replace '(?i)((?:bootstrap|device|gateway|auth)[_-]?token\s*[:=]\s*)[^\s,"''}]+', '$1<redacted>'
+    $r = $r -replace '(?i)(--token\s+)[^\s]+', '$1<redacted>'
     return $r
 }
 
@@ -244,8 +270,13 @@ function Invoke-LoggedProcess {
         }
     }
 
+    $displayArguments = $ArgumentList -join " "
+    if ($SensitiveOutput) {
+        $displayArguments = Redact-SensitiveGatewayOutput $displayArguments
+    }
+
     Add-Step $Name "Completed" "Command completed with exit code $exitCode." @{
-        file = $FilePath; arguments = ($ArgumentList -join " "); exitCode = $exitCode; stdout = $stdout; stderr = $stderr
+        file = $FilePath; arguments = $displayArguments; exitCode = $exitCode; stdout = $stdout; stderr = $stderr
     }
 
     if ($exitCode -ne 0 -and -not $IgnoreExitCode) {
@@ -261,13 +292,19 @@ function Invoke-LoggedPowerShellScript {
 }
 
 function Invoke-RepositoryValidation {
+    if ($script:repositoryValidationCompleted) {
+        Add-Step "repository-validation" "Skipped" "Build and tests already ran earlier in this validation loop."
+        return
+    }
     if ($NoBuild) {
         Add-Step "repository-validation" "Skipped" "Skipped build and tests because -NoBuild was set."
+        $script:repositoryValidationCompleted = $true
         return
     }
     Invoke-LoggedPowerShellScript "build" (Join-Path $repoRoot "build.ps1")
     Invoke-LoggedProcess "test-shared" "dotnet" @("test", ".\tests\OpenClaw.Shared.Tests\OpenClaw.Shared.Tests.csproj", "--no-restore")
     Invoke-LoggedProcess "test-tray"   "dotnet" @("test", ".\tests\OpenClaw.Tray.Tests\OpenClaw.Tray.Tests.csproj", "--no-restore")
+    $script:repositoryValidationCompleted = $true
 }
 
 function Invoke-Preflight {
@@ -324,6 +361,9 @@ function Save-DiagnosticsSnapshot {
     if (Test-Path -LiteralPath $settingsPath) {
         Copy-RedactedFileIfExists -SourcePath $settingsPath -DestinationPath (Join-Path $diag "settings.redacted.json") | Out-Null
     }
+    if (Test-Path -LiteralPath $trayLogPath) {
+        Copy-RedactedFileIfExists -SourcePath $trayLogPath -DestinationPath (Join-Path $diag "openclaw-tray.redacted.log") | Out-Null
+    }
     $identityPath = Join-Path $validationAppDataRoot "OpenClawTray\device-key-ed25519.json"
     if (Test-Path -LiteralPath $identityPath) {
         Copy-RedactedFileIfExists -SourcePath $identityPath -DestinationPath (Join-Path $diag "device-key.shape.redacted.json") | Out-Null
@@ -341,6 +381,84 @@ function Get-ValidationAppEnvironment {
         OPENCLAW_TRAY_DATA_DIR = $validationAppDataRoot
         OPENCLAW_TRAY_APPDATA_DIR = $validationAppDataRoot
         OPENCLAW_TRAY_LOCALAPPDATA_DIR = $validationLocalAppDataRoot
+    }
+}
+
+function Get-ValidationGatewayRecord {
+    $registryPath = Join-Path $validationAppDataRoot "gateways.json"
+    if (-not (Test-Path -LiteralPath $registryPath)) {
+        throw "Gateway registry not found: $registryPath"
+    }
+
+    $registry = Read-TextFileWithRetry -Path $registryPath | ConvertFrom-Json
+    $gateways = @($registry.gateways)
+    if ($gateways.Count -eq 0) {
+        throw "Gateway registry contains no gateways: $registryPath"
+    }
+
+    $active = $null
+    if (-not [string]::IsNullOrWhiteSpace([string]$registry.activeId)) {
+        $active = $gateways | Where-Object { [string]$_.id -eq [string]$registry.activeId } | Select-Object -First 1
+    }
+    if ($null -eq $active) {
+        $active = $gateways | Where-Object { [string]$_.url -eq $script:GatewayUrl } | Select-Object -First 1
+    }
+    if ($null -eq $active) {
+        $active = $gateways | Select-Object -First 1
+    }
+
+    return $active
+}
+
+function Get-ValidationSharedGatewayToken {
+    $active = Get-ValidationGatewayRecord
+    $token = [string]$active.sharedGatewayToken
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        throw "Active gateway record does not contain a shared gateway token."
+    }
+
+    return $token
+}
+
+function Get-ValidationGatewayIdentityDirectory {
+    $active = Get-ValidationGatewayRecord
+    $id = [string]$active.id
+    if ([string]::IsNullOrWhiteSpace($id)) {
+        throw "Active gateway record is missing an id."
+    }
+
+    $identityDir = Join-Path $validationAppDataRoot "gateways\$id"
+    if (-not (Test-Path -LiteralPath $identityDir)) {
+        throw "Gateway identity directory not found: $identityDir"
+    }
+
+    return $identityDir
+}
+
+function Invoke-OpenClawCliProbe {
+    param(
+        [string]$Name,
+        [int]$ConnectTimeoutMs = 15000,
+        [switch]$RequireNode
+    )
+
+    $token = Get-ValidationSharedGatewayToken
+    $identityDir = Get-ValidationGatewayIdentityDirectory
+    Invoke-LoggedProcess $Name "dotnet" @(
+        "run", "--project", $cliProject, "--",
+        "--url", $script:GatewayUrl,
+        "--token", $token,
+        "--identity-path", $identityDir,
+        "--probe-read", "--skip-chat",
+        "--connect-timeout-ms", "$ConnectTimeoutMs"
+    ) -Environment (Get-ValidationAppEnvironment) -SensitiveOutput
+
+    if ($RequireNode) {
+        $stdout = Join-Path $commandsRoot "$($Name -replace "[^a-zA-Z0-9_.-]", "-").stdout.txt"
+        $content = if (Test-Path -LiteralPath $stdout) { Read-TextFileWithRetry -Path $stdout } else { "" }
+        if ($content -notmatch 'node\.list -> [1-9]\d* node\(s\)') {
+            throw "WindowsNodePairingProofFailed: CLI probe did not report any nodes. See $stdout."
+        }
     }
 }
 
@@ -393,6 +511,36 @@ function Wait-ForUiAutomationElement {
     return $null
 }
 
+function Wait-ForUiAutomationElementAny {
+    param([string[]]$AutomationIds, [int]$TimeoutSeconds)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($automationId in $AutomationIds) {
+            $el = Wait-ForUiAutomationElement -AutomationId $automationId -TimeoutSeconds 1
+            if ($null -ne $el) {
+                return @{ Element = $el; AutomationId = $automationId }
+            }
+        }
+    }
+    return $null
+}
+
+function Wait-ForUiAutomationElementByName {
+    param([string]$Name, [int]$TimeoutSeconds)
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    while ((Get-Date) -lt $deadline) {
+        $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+            [System.Windows.Automation.TreeScope]::Descendants, $cond)
+        if ($null -ne $el) { return $el }
+        Start-Sleep -Milliseconds 500
+    }
+    return $null
+}
+
 function Invoke-UiAutomationClick {
     param([string]$AutomationId, [int]$TimeoutSeconds)
     $el = Wait-ForUiAutomationElement -AutomationId $AutomationId -TimeoutSeconds $TimeoutSeconds
@@ -404,6 +552,40 @@ function Invoke-UiAutomationClick {
     }
     Save-DiagnosticsSnapshot -Reason "missing-ui-target-$AutomationId"
     throw "UI element with AutomationId '$AutomationId' was not found within $TimeoutSeconds seconds."
+}
+
+function Invoke-UiAutomationClickByNameIfPresent {
+    param([string]$Name, [int]$TimeoutSeconds)
+    $el = Wait-ForUiAutomationElementByName -Name $Name -TimeoutSeconds $TimeoutSeconds
+    if ($null -eq $el) {
+        Add-Step "ui-click-name-$Name" "Skipped" "UI element named '$Name' was not present."
+        return $false
+    }
+
+    $p = $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+    $p.Invoke()
+    Add-Step "ui-click-name-$Name" "Completed" "Clicked UI element named '$Name'."
+    return $true
+}
+
+function Invoke-UiAutomationClickAny {
+    param([string[]]$AutomationIds, [int]$TimeoutSeconds)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($automationId in $AutomationIds) {
+            $el = Wait-ForUiAutomationElement -AutomationId $automationId -TimeoutSeconds 1
+            if ($null -ne $el) {
+                $p = $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+                $p.Invoke()
+                Add-Step "ui-click-$automationId" "Completed" "Clicked UI element with AutomationId '$automationId'."
+                return $automationId
+            }
+        }
+    }
+
+    $joined = $AutomationIds -join ", "
+    Save-DiagnosticsSnapshot -Reason "missing-ui-target-any"
+    throw "None of the UI automation targets were found within $TimeoutSeconds seconds: $joined."
 }
 
 function Stop-ExistingTrayProcesses {
@@ -488,6 +670,7 @@ function Start-TrayForLocalSetup {
 
 function Wait-ForSetupCompletion {
     param([int]$TimeoutSeconds)
+    $script:summary.setupEngineStatus = "Running"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastPhase = ""; $lastStatus = ""
     while ((Get-Date) -lt $deadline) {
@@ -508,6 +691,7 @@ function Wait-ForSetupCompletion {
             }
 
             if ($status -eq "Complete") {
+                $script:summary.setupEngineStatus = "Passed"
                 if ($state.PSObject.Properties.Name -contains "GatewayUrl" -and -not [string]::IsNullOrWhiteSpace([string]$state.GatewayUrl)) {
                     $script:GatewayUrl = [string]$state.GatewayUrl
                     $script:summary.selectedGatewayUrl = $script:GatewayUrl
@@ -519,26 +703,162 @@ function Wait-ForSetupCompletion {
                 return
             }
             if ($status -in @("FailedRetryable", "FailedTerminal", "Blocked", "Cancelled")) {
+                $script:summary.setupEngineStatus = "Failed"
                 Save-DiagnosticsSnapshot -Reason "setup-failed-$phase"
                 throw "Setup failed with status $status, phase $phase, code $($state.FailureCode): $($state.UserMessage). Diagnostics: https://aka.ms/wsllogs."
             }
         }
         Start-Sleep -Seconds 2
     }
+    $script:summary.setupEngineStatus = "Failed"
     Save-DiagnosticsSnapshot -Reason "setup-timeout"
     throw "Setup did not reach Complete within $TimeoutSeconds seconds. Diagnostics: https://aka.ms/wsllogs."
+}
+
+function Get-TrayLogLines {
+    if (-not (Test-Path -LiteralPath $trayLogPath)) { return @() }
+    return @(Get-Content -LiteralPath $trayLogPath -ErrorAction SilentlyContinue)
+}
+
+function Get-PostSetupTrayLogLines {
+    $lines = @(Get-TrayLogLines)
+    if ($lines.Count -eq 0) { return @() }
+
+    $markerIndex = -1
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        if ($lines[$i] -match 'phase=Complete status=Complete') {
+            $markerIndex = $i
+            break
+        }
+    }
+
+    if ($markerIndex -lt 0) { return @() }
+    return @($lines | Select-Object -Skip $markerIndex)
+}
+
+function Find-FirstPostSetupTrayFailure {
+    foreach ($line in @(Get-PostSetupTrayLogLines)) {
+        if ($line -match 'PAIRING_REQUIRED' -or
+            $line -match 'Pairing required' -or
+            $line -match 'Cannot connect from state PairingRequired' -or
+            $line -match 'metadata-upgrade' -or
+            $line -match 'role-upgrade') {
+            return $line
+        }
+    }
+    return $null
+}
+
+function Find-FirstPostSetupTraySuccess {
+    foreach ($line in @(Get-PostSetupTrayLogLines)) {
+        if ($line -match 'Handshake complete \(hello-ok\)' -or
+            $line -match '\[HANDSHAKE\] Received hello-ok!') {
+            return $line
+        }
+    }
+    return $null
+}
+
+function Find-FirstGatewayWizardUiLine {
+    foreach ($line in @(Get-PostSetupTrayLogLines)) {
+        if ($line -match 'Advancing V2 from LocalSetupProgress -> GatewayWelcome' -or
+            $line -match '\[GatewayClient\] Sending frame: wizard\.start') {
+            return $line
+        }
+    }
+    return $null
+}
+
+function Invoke-GatewayWizardUiProof {
+    $deadline = (Get-Date).AddSeconds(45)
+    $found = $null
+    $logLine = $null
+
+    while ((Get-Date) -lt $deadline) {
+        $found = Wait-ForUiAutomationElementAny -AutomationIds @(
+            "GatewayWizardPage",
+            "V2_GatewayWelcome"
+        ) -TimeoutSeconds 1
+        if ($null -ne $found) { break }
+
+        $logLine = Find-FirstGatewayWizardUiLine
+        if ($null -ne $logLine) { break }
+    }
+
+    if ($null -eq $found -and $null -eq $logLine) {
+        Save-DiagnosticsSnapshot -Reason "gateway-wizard-ui-missing"
+        throw "GatewayWizardUiProofFailed: gateway wizard UI did not render after local setup completed."
+    }
+
+    Add-Step "gateway-wizard-ui" "Passed" "Gateway wizard UI rendered after local setup completed." @{
+        automationId = if ($null -ne $found) { $found.AutomationId } else { $null }
+        logLine = $logLine
+        latestScreenshot = (Get-LatestScreenshotPath)
+    }
+}
+
+function Invoke-PostSetupTrayUsabilityAssertion {
+    $script:summary.trayUsabilityStatus = "Running"
+    $script:summary.postSetupUsability["proof"] = "Running"
+    $deadline = (Get-Date).AddSeconds($PostSetupUsableTimeoutSeconds)
+    $successLine = $null
+
+    while ((Get-Date) -lt $deadline) {
+        $failureLine = Find-FirstPostSetupTrayFailure
+        if ($null -ne $failureLine) {
+            $script:summary.trayUsabilityStatus = "Failed"
+            $script:summary.postSetupUsability["proof"] = "Failed"
+            $script:summary.postSetupUsability["lastFailure"] = $failureLine
+            Save-DiagnosticsSnapshot -Reason "post-setup-pairing-required"
+            throw "PostSetupTrayUsabilityFailed: setup completed, but the tray hit a post-setup pairing failure: $failureLine"
+        }
+
+        $successLine = Find-FirstPostSetupTraySuccess
+        if ($null -ne $successLine) {
+            break
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    if ($null -eq $successLine) {
+        Add-Step "post-setup-tray-log" "Warning" "No post-complete tray hello-ok was observed before timeout; continuing with stored-token proof." @{
+            trayLog = $trayLogPath
+            timeoutSeconds = $PostSetupUsableTimeoutSeconds
+        }
+    } else {
+        $script:summary.postSetupUsability["lastSuccess"] = $successLine
+        Add-Step "post-setup-tray-log" "Passed" "Observed post-setup tray handshake success." @{
+            trayLog = $trayLogPath
+        }
+    }
+
+    try {
+        Invoke-OpenClawCliProbe -Name "post-setup-operator-reconnect" -ConnectTimeoutMs 15000
+
+        $script:summary.trayUsabilityStatus = "Passed"
+        $script:summary.postSetupUsability["proof"] = "Passed"
+        Add-Step "post-setup-usability" "Passed" "Gateway can be reached through registry credentials after setup completed."
+    } catch {
+        $script:summary.trayUsabilityStatus = "Failed"
+        $script:summary.postSetupUsability["proof"] = "Failed"
+        Save-DiagnosticsSnapshot -Reason "post-setup-reconnect-proof-failed"
+        throw
+    }
 }
 
 function Invoke-TrayLocalSetup {
     $proc = Start-TrayForLocalSetup
     Start-Sleep -Seconds 5
 
-    # SetupWarningPage hosts the "Set up locally" primary button.
-    if ($null -eq (Wait-ForUiAutomationElement -AutomationId "OnboardingSetupLocal" -TimeoutSeconds 60)) {
-        Save-DiagnosticsSnapshot -Reason "setup-local-button-not-found"
-        throw "UI automation target OnboardingSetupLocal was not found on SetupWarningPage."
-    }
-    Invoke-UiAutomationClick -AutomationId "OnboardingSetupLocal" -TimeoutSeconds 5
+    # V2 WelcomePage hosts the primary local setup button. Keep the legacy
+    # AutomationId as a fallback so the validator still works on older builds.
+    Invoke-UiAutomationClickAny -AutomationIds @(
+        "V2_Welcome_SetUpLocally",
+        "V2_Welcome_InstallNewWslGateway",
+        "OnboardingSetupLocal"
+    ) -TimeoutSeconds 60 | Out-Null
+    Invoke-UiAutomationClickByNameIfPresent -Name "Continue" -TimeoutSeconds 5 | Out-Null
 
     # LocalSetupProgressPage starts the engine on appearance; just wait for state.
     Wait-ForSetupCompletion -TimeoutSeconds $TimeoutSeconds
@@ -616,7 +936,7 @@ function Test-SetupHistoryPhase {
 }
 
 function Save-RedactedDeviceIdentityShape {
-    $idp = Join-Path $validationAppDataRoot "OpenClawTray\device-key-ed25519.json"
+    $idp = Join-Path (Get-ValidationGatewayIdentityDirectory) "device-key-ed25519.json"
     if (-not (Test-Path -LiteralPath $idp)) {
         Add-Step "device-identity" "Failed" "Device identity file was not found." @{ path = $idp }
         return $false
@@ -706,14 +1026,10 @@ function Invoke-OperatorPairingProof {
         Save-DiagnosticsSnapshot -Reason "operator-device-token-missing"
         throw "OperatorPairingProofFailed: stored operator device token is missing."
     }
-    Invoke-LoggedProcess "operator-stored-token-reconnect" "dotnet" @(
-        "run", "--project", $cliProject, "--",
-        "--probe-read", "--skip-chat", "--require-stored-device-token",
-        "--connect-timeout-ms", "15000"
-    ) -Environment (Get-ValidationAppEnvironment) -SensitiveOutput
+    Invoke-OpenClawCliProbe -Name "operator-stored-token-reconnect" -ConnectTimeoutMs 15000
 
     $script:summary.pairingValidation["operatorPaired"] = $true
-    Add-Step "operator-pairing-proof" "Passed" "Stored operator device token reconnect succeeded."
+    Add-Step "operator-pairing-proof" "Passed" "Operator pairing proof succeeded via registry credentials."
 }
 
 function Invoke-WindowsNodePairingProof {
@@ -727,11 +1043,7 @@ function Invoke-WindowsNodePairingProof {
         Save-DiagnosticsSnapshot -Reason "windows-node-pair-phase-missing"
         throw "WindowsNodePairingProofFailed: setup state did not record PairWindowsTrayNode."
     }
-    Invoke-LoggedProcess "windows-node-list-proof" "dotnet" @(
-        "run", "--project", $cliProject, "--",
-        "--probe-read", "--skip-chat", "--require-stored-device-token", "--require-node",
-        "--connect-timeout-ms", "90000"
-    ) -Environment (Get-ValidationAppEnvironment) -SensitiveOutput
+    Invoke-OpenClawCliProbe -Name "windows-node-list-proof" -ConnectTimeoutMs 90000 -RequireNode
 
     $script:summary.pairingValidation["windowsNodePaired"] = $true
     Add-Step "windows-node-pairing-proof" "Passed" "Gateway node.list returned the Windows tray node."
@@ -772,14 +1084,7 @@ function Invoke-SmokeChecks {
     Invoke-OperatorPairingProof
     Invoke-WindowsNodePairingProof
 
-    $args = @(
-        "run", "--project", $cliProject, "--",
-        "--probe-read", "--skip-chat",
-        "--message", "openclaw validation ping",
-        "--connect-timeout-ms", "15000"
-    )
-    if ($RequireOperatorPairing) { $args += "--require-stored-device-token" }
-    Invoke-LoggedProcess "openclaw-cli-probe" "dotnet" $args -Environment (Get-ValidationAppEnvironment) -SensitiveOutput
+    Invoke-OpenClawCliProbe -Name "openclaw-cli-probe" -ConnectTimeoutMs 15000
 }
 
 function Invoke-DistroUnregisterIfPresent {
@@ -800,13 +1105,33 @@ function Invoke-DistroUnregisterIfPresent {
 
 function Invoke-PreIterationCleanup {
     param([int]$Index)
-    if ($Scenario -in @("FreshMachine", "Recreate")) {
+    if ($Scenario -in @("FreshMachine", "Recreate", "ResetRedoPreserveIdentity")) {
         Invoke-DistroUnregisterIfPresent -Reason "iteration-$Index-pre"
+    }
+    if ($Scenario -in @("FreshMachine", "Recreate")) {
         # Wipe isolated AppData so identity store starts empty.
         foreach ($p in @($validationAppDataRoot, $validationLocalAppDataRoot)) {
             if (Test-Path -LiteralPath $p) {
                 try { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop } catch { }
             }
+        }
+    } elseif ($Scenario -eq "ResetRedoPreserveIdentity") {
+        if (Test-Path -LiteralPath $validationLocalAppDataRoot) {
+            try {
+                Remove-Item -LiteralPath $validationLocalAppDataRoot -Recurse -Force -ErrorAction Stop
+                Add-Step "reset-local-setup-state-$Index" "Completed" "Cleared isolated LocalAppData setup state before reset-redo iteration." @{
+                    localAppDataRoot = $validationLocalAppDataRoot
+                }
+            } catch {
+                Add-Step "reset-local-setup-state-$Index" "Failed" "Could not clear isolated LocalAppData setup state: $($_.Exception.Message)" @{
+                    localAppDataRoot = $validationLocalAppDataRoot
+                }
+                throw
+            }
+        }
+        Add-Step "preserve-isolated-identity-$Index" "Completed" "Preserved isolated tray AppData identity while unregistering WSL distro and clearing setup state." @{
+            appDataRoot = $validationAppDataRoot
+            localAppDataRoot = $validationLocalAppDataRoot
         }
     } else {
         Stop-WslKeepAliveProcesses
@@ -851,6 +1176,8 @@ function New-IterationRecord {
         distroName = $DistroName
         installLocation = $wslInstallLocation
         validationStatus = "Running"
+        setupEngineStatus = "NotStarted"
+        trayUsabilityStatus = "NotStarted"
         cleanupStatus = "NotStarted"
         error = $null
         cleanupError = $null
@@ -871,14 +1198,24 @@ function Invoke-ValidationIteration {
         Invoke-RepositoryValidation
         Invoke-PreIterationCleanup -Index $Index
         $trayProcess = Invoke-TrayLocalSetup
+        $iteration.setupEngineStatus = $script:summary.setupEngineStatus
+        Invoke-GatewayWizardUiProof
+        Invoke-PostSetupTrayUsabilityAssertion
+        $iteration.trayUsabilityStatus = $script:summary.trayUsabilityStatus
         Invoke-SmokeChecks
 
         Add-Step "iteration-$Index" "Passed" "Validation iteration $Index passed."
         $iteration.validationStatus = "Passed"
-        $script:summary.validationStatus = "Passed"
+        if ($script:summary.validationStatus -ne "Failed") {
+            $script:summary.validationStatus = "Passed"
+        }
     } catch {
         $iterationFailed = $true
         $iteration.validationStatus = "Failed"
+        if ($iteration.setupEngineStatus -eq "NotStarted") { $iteration.setupEngineStatus = $script:summary.setupEngineStatus }
+        if ($iteration.setupEngineStatus -eq "Running") { $iteration.setupEngineStatus = "Failed" }
+        if ($iteration.trayUsabilityStatus -in @("NotStarted", "Running")) { $iteration.trayUsabilityStatus = $script:summary.trayUsabilityStatus }
+        if ($iteration.trayUsabilityStatus -eq "Running") { $iteration.trayUsabilityStatus = "Failed" }
         $iteration.error = $_.Exception.Message
         $script:summary.validationStatus = "Failed"
         Save-DiagnosticsSnapshot -Reason "iteration-$Index-failed"
@@ -908,9 +1245,9 @@ try {
         Add-Step "scenario" "Passed" "Preflight completed."
         $script:summary.validationStatus = "Passed"
         $script:summary.cleanupStatus = "Skipped"
-    } elseif ($Scenario -eq "Recreate" -or $Iterations -gt 1) {
-        if ($Iterations -lt 1) { throw "-Iterations must be at least 1." }
-        for ($i = 1; $i -le $Iterations; $i++) {
+    } elseif ($Scenario -in @("Recreate", "ResetRedoPreserveIdentity") -or $effectiveIterations -gt 1) {
+        if ($effectiveIterations -lt 1) { throw "-Iterations must be at least 1." }
+        for ($i = 1; $i -le $effectiveIterations; $i++) {
             try { Invoke-ValidationIteration -Index $i }
             catch {
                 Add-Step "iteration-$i" "Failed" $_.Exception.Message

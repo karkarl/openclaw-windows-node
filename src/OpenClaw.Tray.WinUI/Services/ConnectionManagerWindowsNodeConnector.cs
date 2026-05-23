@@ -62,6 +62,11 @@ public sealed class ConnectionManagerWindowsNodeConnector : IWindowsNodeConnecto
         _registry.AddOrUpdate(updated);
         _registry.Save();
 
+        var identityDir = _registry.GetIdentityDirectory(updated.Id);
+        if (!Directory.Exists(identityDir))
+            Directory.CreateDirectory(identityDir);
+        DeviceIdentityStore.ClearStoredTokenForRole(identityDir, "node", _logger);
+
         _logger.Info(
             $"[SetupNodeConnector] Driving node connection via manager to {GatewayUrlHelper.SanitizeForDisplay(normalized)}");
 

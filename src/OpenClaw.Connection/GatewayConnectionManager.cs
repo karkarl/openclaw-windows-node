@@ -874,12 +874,29 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
                             attemptedApprove = true;
                             approved = await operatorClient.NodePairApproveAsync(e.RequestId);
                             if (!approved)
-                                _diagnostics.Record("node", "Node auto-approval failed");
+                            {
+                                _diagnostics.Record("node", "node.pair.approve failed; trying device.pair.approve");
+                                approved = await operatorClient.DevicePairApproveAsync(e.RequestId);
+                            }
+
+                            if (!approved)
+                                _diagnostics.Record("node", "Node/device auto-approval failed");
                         }
                         catch (Exception ex)
                         {
                             _logger.Warn($"[ConnMgr] Node auto-approve failed: {ex.Message}");
                             _diagnostics.Record("node", $"Auto-approve error: {ex.Message}");
+                            try
+                            {
+                                approved = await operatorClient.DevicePairApproveAsync(e.RequestId);
+                                if (approved)
+                                    _diagnostics.Record("node", "device.pair.approve fallback succeeded");
+                            }
+                            catch (Exception fallbackEx)
+                            {
+                                _logger.Warn($"[ConnMgr] Device auto-approve fallback failed: {fallbackEx.Message}");
+                                _diagnostics.Record("node", $"Device auto-approve fallback error: {fallbackEx.Message}");
+                            }
                         }
                     }
                 }

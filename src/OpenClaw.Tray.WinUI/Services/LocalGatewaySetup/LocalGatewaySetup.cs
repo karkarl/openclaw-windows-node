@@ -1599,6 +1599,8 @@ public sealed record ProvisioningResult(bool Success, string? ErrorCode = null, 
 public interface IOperatorPairingService
 {
     Task<ProvisioningResult> PairAsync(LocalGatewaySetupState state, CancellationToken cancellationToken = default);
+    Task<ProvisioningResult> RefreshStoredDeviceTokenAsync(LocalGatewaySetupState state, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ProvisioningResult(true));
 }
 
 public sealed record BootstrapTokenResult(
@@ -1748,6 +1750,8 @@ public sealed record KeepAliveSpawnResult(int Pid, KeepAliveProcessIdentity Iden
 internal interface IWslKeepAliveProcessHost
 {
     KeepAliveSpawnResult Spawn(string distroName, IOpenClawLogger? logger = null);
+    void EnsureInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null);
+    void StopInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null);
     bool TryGetProcessIdentity(int pid, out KeepAliveProcessIdentity identity);
     void Kill(int pid);
 }
@@ -1781,12 +1785,16 @@ internal sealed class DefaultWslKeepAliveProcessHost : IWslKeepAliveProcessHost
             logger?.Warn($"[WslKeepAlive] Detached CreateProcess with breakaway failed (Win32={firstError}); falling back to Process.Start.");
         }
 
-        if (pid is null)
+        if (pid is not null)
         {
-            return SpawnViaProcessFallback(wslPath, distroName);
+            Thread.Sleep(1500);
+            if (TryGetProcessIdentity(pid.Value, out var identity))
+                return new KeepAliveSpawnResult(pid.Value, identity);
+
+            logger?.Warn($"[WslKeepAlive] Detached keepalive PID {pid.Value} exited immediately; falling back to Process.Start.");
         }
 
-        return new KeepAliveSpawnResult(pid.Value, CaptureIdentity(pid.Value));
+        return SpawnViaProcessFallback(wslPath, distroName);
     }
 
     public bool TryGetProcessIdentity(int pid, out KeepAliveProcessIdentity identity)
@@ -1804,6 +1812,33 @@ internal sealed class DefaultWslKeepAliveProcessHost : IWslKeepAliveProcessHost
         catch (System.ComponentModel.Win32Exception) { return false; } // Access denied / handle invalidated
     }
 
+    public void EnsureInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null)
+    {
+        ValidateDistroNameForCommandLine(distroName);
+        var script = string.Join('\n',
+        [
+            "set -e",
+            "if systemctl --user is-active --quiet openclaw-wsl-keepalive.service; then",
+            "  exit 0",
+            "fi",
+            "systemd-run --user \\",
+            "  --unit=openclaw-wsl-keepalive \\",
+            "  --description='OpenClaw WSL keepalive' \\",
+            "  --property=Restart=always \\",
+            "  --property=RestartSec=30 \\",
+            "  /usr/bin/sleep 2147483647 >/dev/null",
+        ]);
+
+        RunWslBash(distroName, script, logger, "start in-distro keepalive");
+    }
+
+    public void StopInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null)
+    {
+        ValidateDistroNameForCommandLine(distroName);
+        var script = "systemctl --user stop openclaw-wsl-keepalive.service >/dev/null 2>&1 || true";
+        RunWslBash(distroName, script, logger, "stop in-distro keepalive");
+    }
+
     public void Kill(int pid)
     {
         try
@@ -1815,6 +1850,41 @@ internal sealed class DefaultWslKeepAliveProcessHost : IWslKeepAliveProcessHost
         catch (ArgumentException) { }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }
+    }
+
+    private static void RunWslBash(string distroName, string script, IOpenClawLogger? logger, string operation)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = ResolveWslPath(),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                ArgumentList = { "-d", distroName, "-u", "openclaw", "--", "bash", "-lc", script }
+            }) ?? throw new InvalidOperationException("Process.Start returned null for wsl.exe.");
+
+            if (!process.WaitForExit(10_000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                throw new TimeoutException($"Timed out trying to {operation}.");
+            }
+
+            if (process.ExitCode != 0)
+            {
+                var stderr = process.StandardError.ReadToEnd();
+                var stdout = process.StandardOutput.ReadToEnd();
+                throw new InvalidOperationException($"{operation} failed with exit code {process.ExitCode}: {stderr}{stdout}");
+            }
+
+            logger?.Info($"[WslKeepAlive] {operation} succeeded.");
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"[WslKeepAlive] {operation} failed: {ex.Message}");
+        }
     }
 
     private static string ResolveWslPath()
@@ -2126,6 +2196,7 @@ public static class WslDistroKeepAlive
                     && host.TryGetProcessIdentity(marker.Pid, out var identity)
                     && IdentityMatchesMarker(identity, marker))
                 {
+                    host.EnsureInDistroKeepAlive(distroName, logger);
                     logger?.Info($"Adopted existing WSL keepalive for {distroName} (PID {marker.Pid}).");
                     return;
                 }
@@ -2156,6 +2227,7 @@ public static class WslDistroKeepAlive
                     throw;
                 }
                 logger?.Info($"Started WSL keepalive process for {distroName} (PID {pid}).");
+                host.EnsureInDistroKeepAlive(distroName, logger);
             }
             catch (Exception ex)
             {
@@ -2179,6 +2251,7 @@ public static class WslDistroKeepAlive
         {
             var host = __TestHost ?? DefaultWslKeepAliveProcessHost.Instance;
             var markerPath = GetMarkerPath(distroName);
+            try { host.StopInDistroKeepAlive(distroName, logger); } catch { }
             if (!TryReadMarker(markerPath, out var marker))
             {
                 if (File.Exists(markerPath))
@@ -2549,24 +2622,107 @@ public sealed class SettingsOperatorPairingService : IOperatorPairingService
             };
         }
 
-        if (credential.IsBootstrapToken)
+        var refresh = await RefreshStoredDeviceTokenAsync(state, cancellationToken);
+        if (!refresh.Success)
+            return refresh;
+
+        _settings.Save();
+        return new ProvisioningResult(true);
+    }
+
+    public async Task<ProvisioningResult> RefreshStoredDeviceTokenAsync(LocalGatewaySetupState state, CancellationToken cancellationToken = default)
+    {
+        if (_connector == null)
+            return new ProvisioningResult(true);
+
+        var reconnectResult = await _connector.ConnectWithStoredDeviceTokenAsync(state.GatewayUrl, cancellationToken);
+        if (reconnectResult.Status == GatewayOperatorConnectionStatus.PairingRequired
+            && _pendingApprover != null
+            && LocalGatewayApprover.IsLocalGateway(state.GatewayUrl)
+            && reconnectResult.PairingRequestId is not null)
         {
-            var reconnectResult = await _connector.ConnectWithStoredDeviceTokenAsync(state.GatewayUrl, cancellationToken);
-            if (reconnectResult.Status != GatewayOperatorConnectionStatus.Connected)
+            var approval = await _pendingApprover.ApproveExplicitAsync(state, reconnectResult.PairingRequestId, cancellationToken);
+            if (!approval.Success)
             {
-                return reconnectResult.Status switch
-                {
-                    GatewayOperatorConnectionStatus.PairingRequired => new ProvisioningResult(false, "operator_reconnect_pairing_required", reconnectResult.ErrorMessage),
-                    GatewayOperatorConnectionStatus.AuthFailed => new ProvisioningResult(false, "operator_reconnect_auth_failed", reconnectResult.ErrorMessage),
-                    GatewayOperatorConnectionStatus.Timeout => new ProvisioningResult(false, "operator_reconnect_timeout", reconnectResult.ErrorMessage),
-                    _ => new ProvisioningResult(false, "operator_reconnect_failed", reconnectResult.ErrorMessage ?? "Operator reconnect with stored device token failed.")
-                };
+                return new ProvisioningResult(
+                    false,
+                    approval.ErrorCode ?? "operator_reconnect_pending_approval_failed",
+                    approval.ErrorMessage ?? "Local gateway operator refresh approval failed.");
             }
 
-            _settings.Save();
+            var reissue = await ReissueStoredDeviceTokenAsync(state, cancellationToken);
+            if (!reissue.Success)
+                return reissue;
+
+            reconnectResult = await _connector.ConnectWithStoredDeviceTokenAsync(state.GatewayUrl, cancellationToken);
+        }
+        else if (IsDeviceTokenMismatch(reconnectResult))
+        {
+            var reissue = await ReissueStoredDeviceTokenAsync(state, cancellationToken);
+            if (!reissue.Success)
+                return reissue;
+
+            reconnectResult = await _connector.ConnectWithStoredDeviceTokenAsync(state.GatewayUrl, cancellationToken);
         }
 
-        return new ProvisioningResult(true);
+        return reconnectResult.Status switch
+        {
+            GatewayOperatorConnectionStatus.Connected => new ProvisioningResult(true),
+            GatewayOperatorConnectionStatus.PairingRequired => new ProvisioningResult(false, "operator_reconnect_pairing_required", reconnectResult.ErrorMessage),
+            GatewayOperatorConnectionStatus.AuthFailed => new ProvisioningResult(false, "operator_reconnect_auth_failed", reconnectResult.ErrorMessage),
+            GatewayOperatorConnectionStatus.Timeout => new ProvisioningResult(false, "operator_reconnect_timeout", reconnectResult.ErrorMessage),
+            _ => new ProvisioningResult(false, "operator_reconnect_failed", reconnectResult.ErrorMessage ?? "Operator reconnect with stored device token failed.")
+        };
+    }
+
+    private async Task<ProvisioningResult> ReissueStoredDeviceTokenAsync(LocalGatewaySetupState state, CancellationToken cancellationToken)
+    {
+        if (_connector == null)
+            return new ProvisioningResult(true);
+
+        var credential = ResolveCredential();
+        if (credential is null)
+        {
+            return new ProvisioningResult(
+                false,
+                "operator_reissue_credential_missing",
+                "A gateway token or bootstrap token is required to reissue the operator device token.");
+        }
+
+        var result = await _connector.ConnectAsync(state.GatewayUrl, credential.Value, credential.IsBootstrapToken, cancellationToken);
+        if (result.Status == GatewayOperatorConnectionStatus.PairingRequired
+            && _pendingApprover != null
+            && LocalGatewayApprover.IsLocalGateway(state.GatewayUrl)
+            && (credential.IsBootstrapToken || result.PairingRequestId is not null))
+        {
+            var approval = credential.IsBootstrapToken
+                ? await _pendingApprover.ApproveLatestAsync(state, cancellationToken)
+                : await _pendingApprover.ApproveExplicitAsync(state, result.PairingRequestId!, cancellationToken);
+            if (!approval.Success)
+            {
+                return new ProvisioningResult(
+                    false,
+                    approval.ErrorCode ?? "operator_reissue_pending_approval_failed",
+                    approval.ErrorMessage ?? "Local gateway operator token reissue approval failed.");
+            }
+
+            result = await _connector.ConnectAsync(state.GatewayUrl, credential.Value, credential.IsBootstrapToken, cancellationToken);
+        }
+
+        return result.Status switch
+        {
+            GatewayOperatorConnectionStatus.Connected => new ProvisioningResult(true),
+            GatewayOperatorConnectionStatus.PairingRequired => new ProvisioningResult(false, "operator_reissue_pairing_required", result.ErrorMessage),
+            GatewayOperatorConnectionStatus.AuthFailed => new ProvisioningResult(false, "operator_reissue_auth_failed", result.ErrorMessage),
+            GatewayOperatorConnectionStatus.Timeout => new ProvisioningResult(false, "operator_reissue_timeout", result.ErrorMessage),
+            _ => new ProvisioningResult(false, "operator_reissue_failed", result.ErrorMessage ?? "Operator device token reissue failed.")
+        };
+    }
+
+    private static bool IsDeviceTokenMismatch(GatewayOperatorConnectionResult result)
+    {
+        return result.Status == GatewayOperatorConnectionStatus.AuthFailed
+            && result.ErrorMessage?.Contains("device token mismatch", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private ResolvedOperatorCredential? ResolveCredential()
@@ -3629,7 +3785,12 @@ public sealed class LocalGatewaySetupEngine
             }, cancellationToken);
         }
 
-        await RunPhaseAsync(state, LocalGatewaySetupPhase.VerifyEndToEnd, "Verifying local gateway", () => Task.FromResult(state.Status == LocalGatewaySetupStatus.Running), cancellationToken);
+        await RunProvisioningPhaseAsync(
+            state,
+            LocalGatewaySetupPhase.VerifyEndToEnd,
+            "Verifying local gateway",
+            () => _operatorPairing.RefreshStoredDeviceTokenAsync(state, cancellationToken),
+            cancellationToken);
 
         if (state.Status == LocalGatewaySetupStatus.Running)
         {

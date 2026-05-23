@@ -1868,6 +1868,8 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         }
     }
 
+    public Task EnsureLocalGatewayKeepAliveAsync() => TryEnsureLocalGatewayKeepAliveAsync();
+
     /// <summary>
     /// Resolves the WSL distro name to keep alive. Prefers the value persisted by
     /// onboarding in <c>setup-state.json</c> so the keepalive always targets the distro
@@ -2119,6 +2121,12 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     {
         if (_connectionManager == null)
             return;
+
+        if (_suppressNodeDuringSetup)
+        {
+            Logger.Info("[App] Suppressed local NodeService auto-connect during local gateway setup");
+            return;
+        }
 
         Logger.Info("[App] Auto-connecting local NodeService via EnsureNodeConnectedAsync");
         try
@@ -4065,4 +4073,3 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         }
     }
 }
-

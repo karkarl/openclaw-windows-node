@@ -52,6 +52,7 @@ public sealed class GatewayWelcomePage : Component<OnboardingV2State>
 
         return VStack(0, children.ToArray())
             .HAlign(HorizontalAlignment.Stretch)
-            .VAlign(VerticalAlignment.Top);
+            .VAlign(VerticalAlignment.Top)
+            .Set(e => Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(e, "V2_GatewayWelcome"));
     }
 }

@@ -47,6 +47,92 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
         {
             Props.WizardLifecycleState = state;
             Props.WizardError = error;
+            Props.NavigationLockChanged?.Invoke(state is not "complete" and not "offline");
+        }
+
+        void ResetGatewayReloadMode()
+        {
+            try
+            {
+                var resetClient = ((App)Microsoft.UI.Xaml.Application.Current).GatewayClient ?? Props.GatewayClient;
+                if (resetClient is not null)
+                {
+                    _ = resetClient.SetConfigAsync("gateway.reload.mode", "hybrid")
+                        .ContinueWith(t =>
+                        {
+                            if (t.IsFaulted)
+                                Logger.Warn($"[GatewayWizard] Failed to reset gateway.reload.mode to hybrid: {t.Exception?.GetBaseException().Message}");
+                            else if (t.Result)
+                                Logger.Info("[GatewayWizard] Reset gateway.reload.mode to hybrid after wizard completion");
+                            else
+                                Logger.Warn("[GatewayWizard] Reset gateway.reload.mode returned false (config.set declined)");
+                        }, TaskScheduler.Default);
+                }
+            }
+            catch (Exception resetEx)
+            {
+                Logger.Warn($"[GatewayWizard] Could not schedule gateway.reload.mode reset: {resetEx.Message}");
+            }
+        }
+
+        static string[] ReadMissingModelProviders(JsonElement payload)
+        {
+            if (!payload.TryGetProperty("auth", out var auth) || auth.ValueKind != JsonValueKind.Object)
+                return [];
+
+            if (!auth.TryGetProperty("missingProvidersInUse", out var missing) || missing.ValueKind != JsonValueKind.Array)
+                return [];
+
+            return missing.EnumerateArray()
+                .Where(p => p.ValueKind == JsonValueKind.String)
+                .Select(p => p.GetString())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(p => p!)
+                .ToArray();
+        }
+
+        async void CompleteWizardAfterAuthCheck()
+        {
+            setWizardState("loading");
+            setErrorMsg("");
+            SaveState("loading");
+
+            try
+            {
+                var app = (App)Microsoft.UI.Xaml.Application.Current;
+                var client = app.GatewayClient ?? Props.GatewayClient;
+                if (client?.IsConnectedToGateway == true)
+                {
+                    var authStatus = await client.SendWizardRequestAsync("models.authStatus", timeoutMs: 10000);
+                    var missing = ReadMissingModelProviders(authStatus);
+                    if (missing.Length > 0)
+                    {
+                        var providers = string.Join(", ", missing);
+                        var message =
+                            $"Model provider authentication is required before OpenClaw can chat.\n\n" +
+                            $"Missing provider(s): {providers}\n\n" +
+                            "From WSL, run:\n" +
+                            $"openclaw models auth add\n\n" +
+                            "Then return here and retry.";
+                        setErrorMsg(message);
+                        setWizardState("error");
+                        SaveState("error", message);
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[GatewayWizard] Model auth status check failed: {ex.Message}");
+            }
+            finally
+            {
+                ResetGatewayReloadMode();
+            }
+
+            setWizardState("complete");
+            SaveState("complete");
         }
 
         void ApplyStep(JsonElement payload)
@@ -91,8 +177,7 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
                     return;
                 }
 
-                setWizardState("complete");
-                SaveState("complete");
+                CompleteWizardAfterAuthCheck();
 
                 // Re-arm gateway.reload.mode=hybrid (the gateway default) now that
                 // the wizard's burst of config writes is done. The pre-seed in
@@ -110,27 +195,6 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
                 // src/gateway/config-reload-plan.ts:50. Best-effort fire-and-forget;
                 // failures only log because we don't want to block the wizard
                 // complete transition on a config write blip.
-                try
-                {
-                    var resetClient = ((App)Microsoft.UI.Xaml.Application.Current).GatewayClient ?? Props.GatewayClient;
-                    if (resetClient is not null)
-                    {
-                        _ = resetClient.SetConfigAsync("gateway.reload.mode", "hybrid")
-                            .ContinueWith(t =>
-                            {
-                                if (t.IsFaulted)
-                                    Logger.Warn($"[GatewayWizard] Failed to reset gateway.reload.mode to hybrid: {t.Exception?.GetBaseException().Message}");
-                                else if (t.Result)
-                                    Logger.Info("[GatewayWizard] Reset gateway.reload.mode to hybrid after wizard completion");
-                                else
-                                    Logger.Warn("[GatewayWizard] Reset gateway.reload.mode returned false (config.set declined)");
-                            }, TaskScheduler.Default);
-                    }
-                }
-                catch (Exception resetEx)
-                {
-                    Logger.Warn($"[GatewayWizard] Could not schedule gateway.reload.mode reset: {resetEx.Message}");
-                }
                 return;
             }
 
@@ -258,6 +322,22 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
                 {
                     client = app.GatewayClient ?? Props.GatewayClient;
                     if (client?.IsConnectedToGateway == true) break;
+                    if (wait % 5 == 0)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await app.EnsureLocalGatewayKeepAliveAsync();
+                                if (app.ConnectionManager is { } cm)
+                                    await cm.ReconnectAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Warn($"[GatewayWizard] Gateway reconnect nudge failed: {ex.Message}");
+                            }
+                        });
+                    }
                     await Task.Delay(1000);
                 }
 
@@ -411,25 +491,12 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
             setSubmitting(true);
             try
             {
-                // Send a proper skip answer based on step type:
-                // - confirm: "false" (decline)
-                // - select/multiselect: NO answer (gateway keeps current value)
-                // - note/text/other: "true" to acknowledge and advance
-                object parameters;
-                if (stepType == "confirm")
-                {
-                    parameters = new { sessionId = Props.WizardSessionId ?? "", answer = new { stepId, value = "false" } };
-                }
-                else if (stepType is "select" or "multiselect")
-                {
-                    // No answer — gateway keeps current value or skips
-                    parameters = new { sessionId = Props.WizardSessionId ?? "" };
-                }
-                else
-                {
-                    // note, text, etc. — send "true" to acknowledge (gateway repeats step if no answer)
-                    parameters = new { sessionId = Props.WizardSessionId ?? "", answer = new { stepId, value = "true" } };
-                }
+                // Send an explicit skip answer. Select/multiselect steps need
+                // the gateway's own sentinel from the current option list:
+                // quickstart channel setup uses "__skip__", while the manual
+                // channel picker uses "__done__" for "Finished / Skip for now".
+                var skipValue = WizardStepSelection.BuildSkipAnswerValue(stepType, optionValues);
+                var parameters = new { sessionId = Props.WizardSessionId ?? "", answer = new { stepId, value = skipValue } };
 
                 var response = await client.SendWizardRequestAsync("wizard.next", parameters);
                 ApplyStep(response);
@@ -513,6 +580,15 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
                 setErrorMsg(msg);
                 setWizardState("error");
                 SaveState("error", msg);
+                return;
+            }
+
+            if (failingStepId.Contains("channel", StringComparison.OrdinalIgnoreCase)
+                || stepTitle.Contains("channel", StringComparison.OrdinalIgnoreCase)
+                || stepMessage.Contains("channel", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Info("[GatewayWizard] Channel step restarted the gateway after config commit; completing wizard after auth check");
+                CompleteWizardAfterAuthCheck();
                 return;
             }
 
@@ -833,6 +909,7 @@ public sealed class GatewayWizardPage : Component<GatewayWizardState>
                 : TextBlock("")
         )
         .MaxWidth(460)
-        .Padding(0, 8, 0, 0);
+        .Padding(0, 8, 0, 0)
+        .Set(e => Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(e, "GatewayWizardPage"));
     }
 }

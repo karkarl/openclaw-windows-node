@@ -37,6 +37,32 @@ public sealed class DeviceIdentityStore : IDeviceIdentityStore
     /// </summary>
     public static void ClearStoredTokens(string identityDir, IOpenClawLogger? logger = null)
     {
+        ClearStoredTokenProperties(
+            identityDir,
+            ["DeviceToken", "DeviceTokenScopes", "NodeDeviceToken", "NodeDeviceTokenScopes"],
+            "device tokens",
+            logger);
+    }
+
+    /// <summary>
+    /// Clear stored device token material for one role while preserving the keypair
+    /// and the other role's token.
+    /// </summary>
+    public static void ClearStoredTokenForRole(string identityDir, string role, IOpenClawLogger? logger = null)
+    {
+        var properties = string.Equals(role, "node", StringComparison.OrdinalIgnoreCase)
+            ? new[] { "NodeDeviceToken", "NodeDeviceTokenScopes" }
+            : ["DeviceToken", "DeviceTokenScopes"];
+
+        ClearStoredTokenProperties(identityDir, properties, $"{role} device token", logger);
+    }
+
+    private static void ClearStoredTokenProperties(
+        string identityDir,
+        string[] propertyNames,
+        string label,
+        IOpenClawLogger? logger)
+    {
         var keyPath = Path.Combine(identityDir, "device-key-ed25519.json");
         if (!File.Exists(keyPath)) return;
         try
@@ -50,7 +76,7 @@ public sealed class DeviceIdentityStore : IDeviceIdentityStore
             writer.WriteStartObject();
             foreach (var prop in root.EnumerateObject())
             {
-                if (prop.Name is "DeviceToken" or "DeviceTokenScopes" or "NodeDeviceToken" or "NodeDeviceTokenScopes")
+                if (Array.IndexOf(propertyNames, prop.Name) >= 0)
                     continue;
                 prop.WriteTo(writer);
             }
@@ -58,11 +84,11 @@ public sealed class DeviceIdentityStore : IDeviceIdentityStore
             writer.Flush();
 
             File.WriteAllBytes(keyPath, ms.ToArray());
-            logger?.Info($"[IdentityStore] Cleared stored device tokens from {identityDir}");
+            logger?.Info($"[IdentityStore] Cleared stored {label} from {identityDir}");
         }
         catch (Exception ex)
         {
-            logger?.Warn($"[IdentityStore] Failed to clear device tokens: {ex.Message}");
+            logger?.Warn($"[IdentityStore] Failed to clear stored {label}: {ex.Message}");
         }
     }
 }

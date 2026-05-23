@@ -26,6 +26,8 @@ public sealed class GatewayWizardState : IDisposable
 
     public string? WizardError { get; set; }
 
+    public Action<bool>? NavigationLockChanged { get; set; }
+
     public OnboardingExistingConfigGuard? ExistingConfigGuard { get; set; }
 
     public GatewayWizardState(SettingsManager settings)

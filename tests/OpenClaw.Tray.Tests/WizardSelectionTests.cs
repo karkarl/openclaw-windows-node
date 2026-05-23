@@ -67,4 +67,31 @@ public class WizardSelectionTests
         Assert.True(WizardStepSelection.TryBuildAnswerValue(stepType, "", values, out var answerValue));
         Assert.Equal("true", answerValue);
     }
+
+    [Theory]
+    [InlineData("confirm", "false")]
+    [InlineData("select", "__skip__")]
+    [InlineData("multiselect", "__skip__")]
+    [InlineData("note", "true")]
+    [InlineData("text", "true")]
+    public void BuildSkipAnswerValue_UsesGatewaySkipSentinelForSelectionSteps(string stepType, string expected)
+    {
+        Assert.Equal(expected, WizardStepSelection.BuildSkipAnswerValue(stepType));
+    }
+
+    [Fact]
+    public void BuildSkipAnswerValue_UsesDoneSentinelWhenSelectOptionsContainFinished()
+    {
+        var optionValues = new[] { "feishu", "telegram", "__done__" };
+
+        Assert.Equal("__done__", WizardStepSelection.BuildSkipAnswerValue("select", optionValues));
+    }
+
+    [Fact]
+    public void BuildSkipAnswerValue_PrefersExplicitSkipSentinelWhenAvailable()
+    {
+        var optionValues = new[] { "feishu", "__skip__", "__done__" };
+
+        Assert.Equal("__skip__", WizardStepSelection.BuildSkipAnswerValue("select", optionValues));
+    }
 }

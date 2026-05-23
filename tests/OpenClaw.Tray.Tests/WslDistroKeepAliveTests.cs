@@ -395,6 +395,8 @@ public class WslDistroKeepAliveTests
         private readonly Dictionary<int, KeepAliveProcessIdentity> _liveProcesses = new();
 
         public List<string> SpawnCalls { get; } = new();
+        public List<string> EnsureInDistroCalls { get; } = new();
+        public List<string> StopInDistroCalls { get; } = new();
         public List<int> KillCalls { get; } = new();
         public int LastSpawnedPid { get; private set; }
 
@@ -420,6 +422,12 @@ public class WslDistroKeepAliveTests
             identity = default!;
             return false;
         }
+
+        public void EnsureInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null)
+            => EnsureInDistroCalls.Add(distroName);
+
+        public void StopInDistroKeepAlive(string distroName, IOpenClawLogger? logger = null)
+            => StopInDistroCalls.Add(distroName);
 
         public void Kill(int pid)
         {

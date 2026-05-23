@@ -77,6 +77,25 @@ See [DEVELOPMENT.md](../DEVELOPMENT.md#developing--testing-the-onboarding-wizard
 
 Use a temp settings directory for tests that construct `SettingsManager`, or set `OPENCLAW_TRAY_DATA_DIR` before the test process starts.
 
+### WSL Gateway First-Run/Reset Loop
+
+Use the WSL validation scripts when changing local setup, pairing, gateway registry, node mode, or onboarding behavior. They drive the real tray UI path and keep test identity isolated from the user's real `%APPDATA%`.
+
+```powershell
+.\scripts\dev-smoke-wsl-setup.ps1
+```
+
+The default smoke loop runs `ResetRedoPreserveIdentity` for two iterations: it unregisters the app-owned `OpenClawGateway` distro between runs while preserving the isolated tray identity. This proves both first-run setup and the "delete WSL and do it again" reset path.
+
+For focused runs:
+
+```powershell
+.\scripts\validate-wsl-gateway.ps1 -Scenario FreshMachine -ConfirmDestructiveClean
+.\scripts\validate-wsl-gateway.ps1 -Scenario ResetRedoPreserveIdentity -ConfirmDestructiveClean -Iterations 2
+```
+
+Validation reports separate verdicts for the setup engine reaching `Complete` and the tray being usable afterward with stored device credentials. It also proves the gateway setup UI path by waiting for the Gateway Welcome/wizard route and `wizard.start` after local setup. A run fails if setup completes but the post-setup tray connection hits `PAIRING_REQUIRED`.
+
 ### Key Files
 
 | Path | Purpose |

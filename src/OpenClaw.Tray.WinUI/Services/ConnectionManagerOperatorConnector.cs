@@ -53,6 +53,13 @@ public sealed class ConnectionManagerOperatorConnector : IGatewayOperatorConnect
         if (!Directory.Exists(identityDir))
             Directory.CreateDirectory(identityDir);
 
+        // This setup connector is called with an explicit bootstrap/shared token
+        // when the local gateway must issue or reissue the operator device token.
+        // Preserve the keypair and any node token, but clear the stale operator
+        // token so the manager's normal credential precedence actually reaches
+        // the supplied setup credential.
+        DeviceIdentityStore.ClearStoredTokenForRole(identityDir, "operator", _logger);
+
         _logger.Info($"[SetupConnector] Connecting via manager to {GatewayUrlHelper.SanitizeForDisplay(normalized)}");
 
         // If already connected or in a non-idle state, disconnect first

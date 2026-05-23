@@ -197,6 +197,18 @@ public sealed class OnboardingV2State
     /// </summary>
     public Func<OpenClawTray.FunctionalUI.Core.Element>? GatewayWizardChildFactory { get; set; }
 
+    private bool _gatewayWizardOwnsNavigation;
+    /// <summary>
+    /// True while the embedded gateway wizard is rendering its own actionable
+    /// controls. The outer V2 Back/Next chrome is hidden during this period to
+    /// avoid two competing navigation systems on the same page.
+    /// </summary>
+    public bool GatewayWizardOwnsNavigation
+    {
+        get => _gatewayWizardOwnsNavigation;
+        set { if (_gatewayWizardOwnsNavigation != value) { _gatewayWizardOwnsNavigation = value; NotifyChanged(); } }
+    }
+
     /// <summary>
     /// Snapshot of pre-existing OpenClaw configuration on this host, so the
     /// V2 Welcome page can render a "replace existing setup?" warn-and-confirm

@@ -815,9 +815,18 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         await SendTrackedRequestAsync("node.pair.list");
     }
 
-    public virtual Task<bool> NodePairApproveAsync(string requestId)
+    public virtual async Task<bool> NodePairApproveAsync(string requestId)
     {
-        return TrySendTrackedRequestAsync("node.pair.approve", new { requestId });
+        try
+        {
+            await SendWizardRequestAsync("node.pair.approve", new { requestId }, timeoutMs: 10000);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"node.pair.approve failed: {ex.Message}");
+            return false;
+        }
     }
 
     public Task<bool> NodePairRejectAsync(string requestId)
@@ -926,9 +935,18 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         await SendTrackedRequestAsync("device.pair.list");
     }
 
-    public virtual Task<bool> DevicePairApproveAsync(string requestId)
+    public virtual async Task<bool> DevicePairApproveAsync(string requestId)
     {
-        return TrySendTrackedRequestAsync("device.pair.approve", new { requestId });
+        try
+        {
+            await SendWizardRequestAsync("device.pair.approve", new { requestId }, timeoutMs: 10000);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"device.pair.approve failed: {ex.Message}");
+            return false;
+        }
     }
 
     public Task<bool> DevicePairRejectAsync(string requestId)

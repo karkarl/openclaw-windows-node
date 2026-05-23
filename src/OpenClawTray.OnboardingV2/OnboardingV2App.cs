@@ -105,7 +105,8 @@ public sealed class OnboardingV2App : Component<OnboardingV2State>
         }, renderTick);
 
         var currentRoute = PageOrder[pageIndex];
-        bool showNavBar = currentRoute != V2Route.Welcome;
+        bool showNavBar = currentRoute != V2Route.Welcome
+            && !(currentRoute == V2Route.GatewayWelcome && Props.GatewayWizardOwnsNavigation);
         bool isLast = pageIndex == PageOrder.Length - 1;
 
         var pageHost = NavigationHost<V2Route>(nav, route => route switch
@@ -196,5 +197,4 @@ public sealed class OnboardingV2App : Component<OnboardingV2State>
         });
     }
 }
-
 

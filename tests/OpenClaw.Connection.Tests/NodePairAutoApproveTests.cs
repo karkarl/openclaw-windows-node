@@ -9,9 +9,9 @@ namespace OpenClaw.Connection.Tests;
 ///
 /// Bug: when a node's PairingStatusChanged fires with Pending + RequestId,
 /// the manager must call <c>NodePairApproveAsync</c> (node.pair.approve).
-/// A previous version incorrectly called <c>DevicePairApproveAsync</c>
-/// (device.pair.approve), which targets a completely separate pairing
-/// system and silently fails, leaving the node with 0 effective commands.
+/// Current gateways can also surface node role-upgrades through the device
+/// pairing system, so a failed node.pair.approve must fall back to
+/// <c>DevicePairApproveAsync</c> for the same requestId.
 /// </summary>
 public class NodePairAutoApproveTests : IDisposable
 {
@@ -57,6 +57,29 @@ public class NodePairAutoApproveTests : IDisposable
         var client = lifecycle.TrackingClient;
         Assert.Contains("node.pair.approve", client.ApprovalMethodsCalled);
         Assert.DoesNotContain("device.pair.approve", client.ApprovalMethodsCalled);
+    }
+
+    [Fact]
+    public async Task AutoApprove_NodePairApproveFails_FallsBackToDevicePairApprove()
+    {
+        using var manager = CreateConnectedManager();
+
+        var lifecycle = _factory.CreatedClients[0];
+        lifecycle.TrackingClient.SetGrantedScopes(["operator.admin"]);
+        lifecycle.TrackingClient.SetIsConnected(true);
+        lifecycle.TrackingClient.NodePairApproveResult = false;
+
+        await FireAndWait(manager, () =>
+            _nodeConnector.FireStatusChanged(ConnectionStatus.Connecting));
+
+        var approvalDone = lifecycle.TrackingClient.WaitForApprovalCallAsync();
+        _nodeConnector.FirePairingStatusChanged(PairingStatus.Pending, requestId: "req-device-role-upgrade-42");
+        await approvalDone;
+        await Task.Delay(200);
+
+        var client = lifecycle.TrackingClient;
+        Assert.Contains("node.pair.approve", client.ApprovalMethodsCalled);
+        Assert.Contains("device.pair.approve", client.ApprovalMethodsCalled);
     }
 
     [Fact]
@@ -217,6 +240,7 @@ public class NodePairAutoApproveTests : IDisposable
         private TaskCompletionSource? _approveGate; // blocks NodePairApproveAsync until released
 
         public IReadOnlyList<string> ApprovalMethodsCalled => _approvalMethodsCalled;
+        public bool NodePairApproveResult { get; set; } = true;
 
         public TrackingGatewayClient(string url)
             : base(url, "mock-token", NullLogger.Instance) { }
@@ -268,7 +292,7 @@ public class NodePairAutoApproveTests : IDisposable
             _approvalSignal?.TrySetResult();
             if (_approveGate != null)
                 await _approveGate.Task;
-            return true;
+            return NodePairApproveResult;
         }
 
         public override Task<bool> DevicePairApproveAsync(string requestId)

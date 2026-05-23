@@ -61,6 +61,44 @@ public sealed class ConnectionManagerWindowsNodeConnectorTests : IDisposable
     }
 
     [Fact]
+    public async Task ConnectAsync_ClearsStoredNodeToken_ButPreservesOperatorToken()
+    {
+        const string url = "ws://localhost:18789";
+        var record = new GatewayRecord { Id = "gw-local", Url = url, IsLocal = true };
+        _registry.AddOrUpdate(record);
+        _registry.SetActive("gw-local");
+        _resolver.OperatorCredential = new GatewayCredential("op", false, "test");
+        _resolver.NodeCredential = new GatewayCredential("nd", false, "test");
+
+        var identityDir = _registry.GetIdentityDirectory("gw-local");
+        Directory.CreateDirectory(identityDir);
+        await File.WriteAllTextAsync(Path.Combine(identityDir, "device-key-ed25519.json"), """
+        {
+          "DeviceId": "device-1",
+          "PublicKeyBase64": "public",
+          "PrivateKeyBase64": "private",
+          "DeviceToken": "operator-token",
+          "DeviceTokenScopes": ["operator.admin"],
+          "NodeDeviceToken": "stale-node-token",
+          "NodeDeviceTokenScopes": []
+        }
+        """);
+
+        await _manager.ConnectAsync("gw-local");
+        await InvokeHandshakeSucceededAsync(_manager);
+
+        var connector = new ConnectionManagerWindowsNodeConnector(
+            _manager, _registry, NullLogger.Instance);
+
+        await connector.ConnectAsync(url, "shared-token", "boot-token");
+
+        var identityJson = await File.ReadAllTextAsync(Path.Combine(identityDir, "device-key-ed25519.json"));
+        Assert.Contains("operator-token", identityJson);
+        Assert.DoesNotContain("stale-node-token", identityJson);
+        Assert.DoesNotContain("NodeDeviceToken", identityJson);
+    }
+
+    [Fact]
     public async Task ConnectAsync_NoExistingRecord_ThrowsWithoutMutatingActiveGateway()
     {
         const string url = "ws://localhost:18789";

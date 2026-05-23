@@ -11,11 +11,13 @@ internal sealed class CliOptions
 
     public string? GatewayUrlOverride { get; set; }
     public string? TokenOverride { get; set; }
+    public string? IdentityPathOverride { get; set; }
     public string Message { get; set; } = "openclaw-cli validation ping";
     public int Repeat { get; set; } = 1;
     public int DelayMs { get; set; } = 500;
     public int ConnectTimeoutMs { get; set; } = 10000;
     public bool ProbeReadApis { get; set; }
+    public bool SkipChat { get; set; }
     public bool Verbose { get; set; }
 }
 
@@ -64,7 +66,7 @@ internal static class Program
         }
 
         IOpenClawLogger logger = options.Verbose ? new ConsoleLogger() : NullLogger.Instance;
-        using var client = new OpenClawGatewayClient(gatewayUrl, token, logger);
+        using var client = new OpenClawGatewayClient(gatewayUrl, token, logger, identityPath: options.IdentityPathOverride);
 
         var lastStatus = ConnectionStatus.Disconnected;
         var connectedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -111,27 +113,34 @@ internal static class Program
         }
 
         var failures = 0;
-        for (var i = 1; i <= options.Repeat; i++)
+        if (options.SkipChat)
         {
-            var message = options.Repeat == 1
-                ? options.Message
-                : $"{options.Message} [attempt {i}/{options.Repeat}]";
+            Console.WriteLine("chat.send skipped.");
+        }
+        else
+        {
+            for (var i = 1; i <= options.Repeat; i++)
+            {
+                var message = options.Repeat == 1
+                    ? options.Message
+                    : $"{options.Message} [attempt {i}/{options.Repeat}]";
 
-            try
-            {
-                Console.WriteLine($"chat.send #{i} -> \"{message}\"");
-                await client.SendChatMessageAsync(message);
-                Console.WriteLine($"chat.send #{i} OK");
-            }
-            catch (Exception ex)
-            {
-                failures++;
-                Console.Error.WriteLine($"chat.send #{i} FAILED: {ex.Message}");
-            }
+                try
+                {
+                    Console.WriteLine($"chat.send #{i} -> \"{message}\"");
+                    await client.SendChatMessageAsync(message);
+                    Console.WriteLine($"chat.send #{i} OK");
+                }
+                catch (Exception ex)
+                {
+                    failures++;
+                    Console.Error.WriteLine($"chat.send #{i} FAILED: {ex.Message}");
+                }
 
-            if (i < options.Repeat)
-            {
-                await Task.Delay(options.DelayMs);
+                if (i < options.Repeat)
+                {
+                    await Task.Delay(options.DelayMs);
+                }
             }
         }
 
@@ -225,6 +234,9 @@ internal static class Program
                 case "--token":
                     options.TokenOverride = RequireValue(args, ref i, arg);
                     break;
+                case "--identity-path":
+                    options.IdentityPathOverride = RequireValue(args, ref i, arg);
+                    break;
                 case "--message":
                     options.Message = RequireValue(args, ref i, arg);
                     break;
@@ -239,6 +251,9 @@ internal static class Program
                     break;
                 case "--probe-read":
                     options.ProbeReadApis = true;
+                    break;
+                case "--skip-chat":
+                    options.SkipChat = true;
                     break;
                 case "--verbose":
                     options.Verbose = true;
@@ -285,11 +300,13 @@ internal static class Program
         Console.WriteLine("  --settings <path>            Settings file (default: %APPDATA%\\OpenClawTray\\settings.json)");
         Console.WriteLine("  --url <ws://...>             Override gateway URL");
         Console.WriteLine("  --token <token>              Override token");
+        Console.WriteLine("  --identity-path <path>       Override device identity directory");
         Console.WriteLine("  --message <text>             Message to send");
         Console.WriteLine("  --repeat <n>                 Number of sends (default: 1)");
         Console.WriteLine("  --delay-ms <n>               Delay between sends (default: 500)");
         Console.WriteLine("  --connect-timeout-ms <n>     Wait for Connected state (default: 10000)");
         Console.WriteLine("  --probe-read                 Request sessions/usage/nodes once");
+        Console.WriteLine("  --skip-chat                  Connect and probe without sending chat.send");
         Console.WriteLine("  --verbose                    Enable shared client console logs");
         Console.WriteLine("  --help, -h                   Show this help");
     }

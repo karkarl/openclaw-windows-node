@@ -2,6 +2,8 @@ namespace OpenClawTray.Onboarding.Services;
 
 public static class WizardStepSelection
 {
+    public const string SkipValue = "__skip__";
+
     public static bool RequiresSelection(string stepType) => stepType is "select" or "multiselect";
 
     public static int SelectedIndex(string stepInput, IReadOnlyList<string> optionValues)
@@ -42,6 +44,24 @@ public static class WizardStepSelection
 
         answerValue = string.IsNullOrEmpty(stepInput) ? "true" : stepInput;
         return true;
+    }
+
+    public static string BuildSkipAnswerValue(string stepType, IReadOnlyCollection<string>? optionValues = null) => stepType switch
+    {
+        "confirm" => "false",
+        "select" or "multiselect" => SelectSkipValue(optionValues),
+        _ => "true"
+    };
+
+    private static string SelectSkipValue(IReadOnlyCollection<string>? optionValues)
+    {
+        if (optionValues?.Contains(SkipValue) == true)
+            return SkipValue;
+
+        if (optionValues?.Contains("__done__") == true)
+            return "__done__";
+
+        return SkipValue;
     }
 
     private static string[] SplitMultiSelectValues(string stepInput) =>

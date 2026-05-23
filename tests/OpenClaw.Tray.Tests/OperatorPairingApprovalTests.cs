@@ -157,6 +157,44 @@ public class OperatorPairingApprovalTests
     }
 
     [Fact]
+    public async Task PairAsync_StoredTokenRefreshPairingRequired_ApprovesExplicitAndRetries()
+    {
+        var settings = new FakePairingSettings { Token = "redacted-explicit-gateway-token" };
+        var connector = new ScriptedConnector(
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.Connected),
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.PairingRequired, "metadata upgrade", "metadata-123"),
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.Connected));
+        var approver = new RecordingApprover(new PendingDeviceApprovalResult(true));
+        var service = new SettingsOperatorPairingService(settings, connector, approver);
+
+        var result = await service.PairAsync(new LocalGatewaySetupState { GatewayUrl = "ws://127.0.0.1:18789", DistroName = "OpenClawGateway" });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, connector.ConnectCalls);
+        Assert.Equal(2, connector.ConnectWithStoredDeviceTokenCalls);
+        Assert.Equal(1, approver.ApproveExplicitCalls);
+        Assert.Equal("metadata-123", approver.LastExplicitRequestId);
+    }
+
+    [Fact]
+    public async Task PairAsync_StoredTokenMismatch_ReissuesTokenAndRetriesStoredReconnect()
+    {
+        var settings = new FakePairingSettings { Token = "redacted-explicit-gateway-token" };
+        var connector = new ScriptedConnector(
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.Connected),
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.AuthFailed, "unauthorized: device token mismatch"),
+            new GatewayOperatorConnectionResult(GatewayOperatorConnectionStatus.Connected));
+        var approver = new RecordingApprover(new PendingDeviceApprovalResult(true));
+        var service = new SettingsOperatorPairingService(settings, connector, approver);
+
+        var result = await service.PairAsync(new LocalGatewaySetupState { GatewayUrl = "ws://127.0.0.1:18789", DistroName = "OpenClawGateway" });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, connector.ConnectCalls);
+        Assert.Equal(2, connector.ConnectWithStoredDeviceTokenCalls);
+    }
+
+    [Fact]
     public void ParseApproveJson_OkResponse_ReturnsSuccess()
     {
         var result = WslGatewayCliPendingDeviceApprover.ParseApproveJson("{\"ok\":true,\"requestId\":\"abc\"}");
