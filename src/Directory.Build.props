@@ -11,6 +11,13 @@
     <!-- Audit all package dependencies (direct + transitive) for known CVEs during restore.
          Defaults to "direct" in the SDK; "all" provides broader security coverage. -->
     <NuGetAuditMode>all</NuGetAuditMode>
+
+    <!-- Treat compiler warnings as errors across all source projects.
+         Keeps the warning count at zero and prevents silent warning accumulation
+         that is later expensive to clean up. Individual projects may suppress a
+         specific warning via <NoWarn> only when the warning is intentional and
+         the suppression is documented. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
 </Project>

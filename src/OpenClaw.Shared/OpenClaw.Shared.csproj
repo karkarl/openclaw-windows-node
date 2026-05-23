@@ -5,6 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>OpenClaw.Shared</RootNamespace>
+    <!-- CS8524: switch expression on an enum without a _ arm — intentional in
+         ExecApprovalsCoordinator so the compiler flags any new enum member that
+         is added without a corresponding case.  The remaining int-cast space
+         (e.g. (ExecApprovalPromptOutcome)4) is an acceptable gap given that all
+         callers produce only named values. -->
+    <NoWarn>$(NoWarn);CS8524</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
