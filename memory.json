@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-24T01:21:00Z",
-  "last_run_id": "26348397226",
+  "last_run": "2026-05-24T12:42:00Z",
+  "last_run_id": "26361501339",
   "backlog_cursor": {
     "issue_number": 372,
     "comment_cursor": 372
@@ -41,14 +41,16 @@
     "432": {"pr": null, "branch": "repo-assist/fix-issue-432-tfm-dynamic", "status": "closed-no-merge", "date": "2026-05-18"},
     "459": {"pr": 482, "branch": "repo-assist/fix-issue-459-session-key-missing", "status": "merged", "date": "2026-05-21"},
     "467": {"pr": 472, "branch": "repo-assist/fix-issue-467-wsl-parent-dir-cleanup", "status": "merged", "date": "2026-05-20"},
-    "460": {"pr": null, "branch": "repo-assist/fix-issue-460-capability-dispatch", "status": "closed-no-merge", "date": "2026-05-19"}
+    "460": {"pr": null, "branch": "repo-assist/fix-issue-460-capability-dispatch", "status": "closed-no-merge", "date": "2026-05-19"},
+    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "open", "date": "2026-05-24", "note": "EnableMouseInPointer(true) at startup. Manually verified by shanselman on affected devbox."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
     "node-capability-gating-tests": {"pr": 495, "branch": "repo-assist/improve-nodecapabilitygating-tests-2026-05-21", "status": "merged", "date": "2026-05-21"},
     "menuhelpers-tests": {"pr": 522, "branch": "repo-assist/improve-menuhelpers-tests-2026-05-23", "status": "merged", "date": "2026-05-23"},
     "channel-result-tests": {"pr": 528, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "open", "date": "2026-05-23", "note": "22 tests for LooksLikeMissingPlugin and LooksLikeStaleBaseHash"},
-    "operatorscopehelper-tests": {"pr": null, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "open", "date": "2026-05-24", "note": "17 tests for OperatorScopeHelper and ChatNavigationReadiness"}
+    "operatorscopehelper-tests": {"pr": 530, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "open", "date": "2026-05-24", "note": "17 tests for OperatorScopeHelper and ChatNavigationReadiness"},
+    "channels-aggregator-perf": {"pr": 532, "branch": "repo-assist/perf-channels-aggregator-2026-05-24", "status": "open", "date": "2026-05-24", "note": "Hoist QrLinkChannels.Contains; replace LINQ sort with List.Sort"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "branch": "repo-assist/eng-treat-warnings-as-errors-2026-05-23", "status": "open", "date": "2026-05-23", "note": "TreatWarningsAsErrors in src/Directory.Build.props + NoWarn CS8524 in Shared.csproj"}
@@ -62,5 +64,5 @@
   },
   "open_repo_assist_issues": [435, 449, 465, 476],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522],
-  "notes": "PR #527 open (TreatWarningsAsErrors). PR #528 open (channel result tests). PR #529 open (SetupEngine out-of-process, human). PR #526 open (ExecApprovals write path, human). PR #523 open (setup robustness, human). PR #521 open (back-links, human). PR #468 open (MSIX hardening draft). New PR: operatorscopehelper-tests (17 tests). Deep-review #372: C11 fixed (PR #448), A10 fixed (PR #426), 8 security items still pending. Commented on #372 with progress update. Issue #462 trackpad: shanselman tested EnableMouseInPointer(true) locally, waiting for Mike to retest on affected devbox."
+  "notes": "PR #527 open (TreatWarningsAsErrors). PR #528 open (channel result tests). PR #530 open (operatorscopehelper tests). PR #531 open (EnableMouseInPointer trackpad fix for #462 - verified by shanselman). PR #532 open (ChannelsAggregator perf). PR #529 open (SetupEngine out-of-process, human). PR #526 open (ExecApprovals write path, human). PR #523 open (setup robustness, human). PR #521 open (back-links, human). PR #468 open (MSIX hardening draft). Issue #338 CLOSED by shanselman. Deep-review #372: C11 fixed (PR #448), A10 fixed (PR #426), 8 security items still pending."
 }
