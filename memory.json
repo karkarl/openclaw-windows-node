@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-25T01:22:26Z",
-  "last_run_id": "26378354261",
+  "last_run": "2026-05-25T13:28:00Z",
+  "last_run_id": "26402871645",
   "backlog_cursor": {
     "issue_number": 372,
     "comment_cursor": 372
@@ -48,22 +48,24 @@
     "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
     "node-capability-gating-tests": {"pr": 495, "branch": "repo-assist/improve-nodecapabilitygating-tests-2026-05-21", "status": "merged", "date": "2026-05-21"},
     "menuhelpers-tests": {"pr": 522, "branch": "repo-assist/improve-menuhelpers-tests-2026-05-23", "status": "merged", "date": "2026-05-23"},
-    "channel-result-tests": {"pr": 528, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "open", "date": "2026-05-23", "note": "22 tests for LooksLikeMissingPlugin and LooksLikeStaleBaseHash"},
-    "operatorscopehelper-tests": {"pr": 530, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "open", "date": "2026-05-24", "note": "17 tests for OperatorScopeHelper and ChatNavigationReadiness"},
-    "channels-aggregator-perf": {"pr": 532, "branch": "repo-assist/perf-channels-aggregator-2026-05-24", "status": "open", "date": "2026-05-24", "note": "Hoist QrLinkChannels.Contains; replace LINQ sort with List.Sort"},
-    "activitystreamservice-tests": {"pr": null, "branch": "repo-assist/improve-activitystreamservice-tests-2026-05-25", "status": "open", "date": "2026-05-25", "note": "20 new tests for ActivityStreamService: category defaults, empty title guard, insertion order, GetItems filtering/limiting, Clear/Add events, BuildSupportBundle maxItems/fields/truncation"}
+    "channel-result-tests": {"pr": 528, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "open", "date": "2026-05-23"},
+    "operatorscopehelper-tests": {"pr": 530, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "open", "date": "2026-05-24"},
+    "activitystreamservice-tests": {"pr": 535, "branch": "repo-assist/improve-activitystreamservice-tests-2026-05-25", "status": "open", "date": "2026-05-25"}
   },
   "engineering_attempts": {
-    "treat-warnings-as-errors": {"pr": 527, "branch": "repo-assist/eng-treat-warnings-as-errors-2026-05-23", "status": "open", "date": "2026-05-23", "note": "TreatWarningsAsErrors in src/Directory.Build.props + NoWarn CS8524 in Shared.csproj"}
+    "treat-warnings-as-errors": {"pr": 527, "branch": "repo-assist/eng-treat-warnings-as-errors-2026-05-23", "status": "open", "date": "2026-05-23"},
+    "nuget-audit-tests": {"pr": null, "branch": "repo-assist/eng-nuget-audit-tests-2026-05-25", "status": "open", "date": "2026-05-25", "note": "NuGetAuditMode=all in tests/Directory.Build.props to match src/"}
   },
   "monthly_activity_issue": 435,
   "engineering_checks": {
     "test_coverage_doc": "2026-05-22",
     "dependency_audit": "2026-05-18",
     "ci_pipeline_check": "2026-05-23",
-    "treat_warnings_as_errors": "2026-05-23"
+    "treat_warnings_as_errors": "2026-05-23",
+    "nuget_audit_tests": "2026-05-25"
   },
   "open_repo_assist_issues": [435, 449, 465, 476],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522],
-  "notes": "PR #527 open (TreatWarningsAsErrors). PR #528 open (channel result tests). PR #530 open (operatorscopehelper tests). PR #531 open (EnableMouseInPointer trackpad fix for #462 - verified by shanselman). PR #532 open (ChannelsAggregator perf). New: PR (branch repo-assist/improve-activitystreamservice-tests-2026-05-25) open (ActivityStreamService 20 new tests). PR #529 open (SetupEngine out-of-process, human). PR #526 open (ExecApprovals write path, human). PR #523 open (setup robustness, human). PR #521 open (back-links, human). PR #468 open (MSIX hardening draft). Issue #338 CLOSED by shanselman. Issue #460 still needs a narrow focused test-determinism PR (ClawSweeper confirmed May 24 - no operator-side code)."
+  "channels_aggregator_perf": {"pr": 532, "status": "open"},
+  "notes": "PR #527 open (TreatWarningsAsErrors src). PR #528 open (channel result tests). PR #530 open (operatorscopehelper tests). PR #531 open (EnableMouseInPointer trackpad fix for #462 - verified by shanselman). PR #532 open (ChannelsAggregator perf). PR #535 open (ActivityStreamService 20 new tests). PR (branch eng-nuget-audit-tests-2026-05-25) open (NuGetAuditMode=all for tests/). PR #529 open (SetupEngine out-of-process, human). PR #526 open (ExecApprovals write path, human). PR #523 open (setup robustness, human). PR #521 open (back-links, human). PR #468 open (MSIX hardening draft). Issue #460 still needs narrow focused test-determinism PR."
 }
