@@ -4514,4 +4514,22 @@ On your gateway host (Mac/Linux), run:
   </data>
   <data name="HubWindow_Advanced.Content" xml:space="preserve">
     <value>Advanced</value>
+  </data>
+  <data name="AgentEventsPage_LiveText.Text" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="SessionsPage_Subtitle.Text" xml:space="preserve">
+    <value>Conversations this gateway is currently handling, grouped by channel.</value>
+  </data>
+  <data name="SessionsPage_EmptySubtitle.Text" xml:space="preserve">
+    <value>Sessions appear here when a channel is connected and traffic is flowing.</value>
+  </data>
+  <data name="SessionsPage_OpenChat.Content" xml:space="preserve">
+    <value>Open chat</value>
+  </data>
+  <data name="VoiceSettingsPage_PiperPreviewLabel.Text" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="VoiceSettingsPage_PreviewVoiceLabel.Text" xml:space="preserve">
+    <value>Preview Voice</value>
   </data></root>

@@ -4467,4 +4467,22 @@ Voer op uw gateway-host (Mac/Linux) uit:
   </data>
   <data name="HubWindow_Advanced.Content" xml:space="preserve">
     <value>Geavanceerd</value>
+  </data>
+  <data name="AgentEventsPage_LiveText.Text" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="SessionsPage_Subtitle.Text" xml:space="preserve">
+    <value>Gesprekken die deze gateway momenteel afhandelt, gegroepeerd per kanaal.</value>
+  </data>
+  <data name="SessionsPage_EmptySubtitle.Text" xml:space="preserve">
+    <value>Sessies verschijnen hier wanneer een kanaal is verbonden en er verkeer stroomt.</value>
+  </data>
+  <data name="SessionsPage_OpenChat.Content" xml:space="preserve">
+    <value>Chat openen</value>
+  </data>
+  <data name="VoiceSettingsPage_PiperPreviewLabel.Text" xml:space="preserve">
+    <value>Voorbeeld</value>
+  </data>
+  <data name="VoiceSettingsPage_PreviewVoiceLabel.Text" xml:space="preserve">
+    <value>Stem bekijken</value>
   </data></root>

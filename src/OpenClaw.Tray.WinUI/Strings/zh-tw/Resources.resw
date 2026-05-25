@@ -4466,5 +4466,22 @@
   </data>
   <data name="HubWindow_Advanced.Content" xml:space="preserve">
     <value>é€²éšŽ</value>
+  </data>  <data name="AgentEventsPage_LiveText.Text" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="SessionsPage_Subtitle.Text" xml:space="preserve">
+    <value>此網關目前處理的對話，依頻道分組。</value>
+  </data>
+  <data name="SessionsPage_EmptySubtitle.Text" xml:space="preserve">
+    <value>當頻道連接且流量流通時，工作階段會顯示在此處。</value>
+  </data>
+  <data name="SessionsPage_OpenChat.Content" xml:space="preserve">
+    <value>開啟聊天</value>
+  </data>
+  <data name="VoiceSettingsPage_PiperPreviewLabel.Text" xml:space="preserve">
+    <value>預覽</value>
+  </data>
+  <data name="VoiceSettingsPage_PreviewVoiceLabel.Text" xml:space="preserve">
+    <value>預覽語音</value>
   </data></root>
 

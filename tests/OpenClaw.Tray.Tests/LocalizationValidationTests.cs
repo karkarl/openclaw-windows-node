@@ -169,6 +169,10 @@ public class LocalizationValidationTests
         "SandboxPage_1MiB.Content",
         "SandboxPage_64MiB.Content",
         "SandboxPage_SystemRun.Text",
+        // "Live" indicator label — internationally recognized UI term used
+        // in broadcast, streaming, and real-time status indicators worldwide.
+        // No translation provides additional clarity; kept invariant.
+        "AgentEventsPage_LiveText.Text",
     };
 
     private static readonly string[] RequiredRuntimeOnboardingKeys =

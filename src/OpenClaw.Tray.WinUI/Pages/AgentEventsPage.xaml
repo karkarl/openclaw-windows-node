@@ -21,7 +21,7 @@
                         Background="#20FF4444">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <Ellipse x:Name="LiveDot" Width="6" Height="6" Fill="#FFFF4444" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="LiveText" Text="Live" FontSize="11" FontWeight="SemiBold"
+                        <TextBlock x:Uid="AgentEventsPage_LiveText" x:Name="LiveText" Text="Live" FontSize="11" FontWeight="SemiBold"
                                    Foreground="#FFFF4444" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>

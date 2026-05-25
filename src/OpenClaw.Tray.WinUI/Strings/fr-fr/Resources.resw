@@ -4466,4 +4466,22 @@ Sur votre hôte passerelle (Mac/Linux), exécutez :
   </data>
   <data name="HubWindow_Advanced.Content" xml:space="preserve">
     <value>Avancé</value>
+  </data>
+  <data name="AgentEventsPage_LiveText.Text" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="SessionsPage_Subtitle.Text" xml:space="preserve">
+    <value>Conversations actuellement gérées par cette passerelle, regroupées par canal.</value>
+  </data>
+  <data name="SessionsPage_EmptySubtitle.Text" xml:space="preserve">
+    <value>Les sessions s'affichent ici lorsqu'un canal est connecté et que le trafic circule.</value>
+  </data>
+  <data name="SessionsPage_OpenChat.Content" xml:space="preserve">
+    <value>Ouvrir le chat</value>
+  </data>
+  <data name="VoiceSettingsPage_PiperPreviewLabel.Text" xml:space="preserve">
+    <value>Aperçu</value>
+  </data>
+  <data name="VoiceSettingsPage_PreviewVoiceLabel.Text" xml:space="preserve">
+    <value>Aperçu de la voix</value>
   </data></root>
