@@ -10,9 +10,7 @@ using OpenClawTray.Dialogs;
 using OpenClawTray.Helpers;
 using OpenClawTray.Services;
 using OpenClawTray.Windows;
-using OpenClawTray.Onboarding;
 using OpenClaw.Connection;
-using OpenClawTray.Services.LocalGatewaySetup;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -22,6 +20,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -49,13 +48,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     /// during Phase 14 auto-pair (Bug #2, manual test 2026-05-05). Null when no local
     /// setup has run in this app lifetime.
     /// </summary>
-    private LocalGatewaySetupEngine? _localSetupEngine;
-    /// <summary>
-    /// When true, the connection manager suppresses node auto-connect after operator handshake.
-    /// Set during the WSL local-setup flow so the engine controls node pairing in its own phase.
-    /// </summary>
-    private volatile bool _suppressNodeDuringSetup;
-
     /// <summary>The persistent gateway client. Used by the onboarding wizard for RPC calls.</summary>
     public IOperatorGatewayClient? GatewayClient => _connectionManager?.OperatorClient;
     public GatewayRegistry? Registry => _gatewayRegistry;
@@ -112,82 +104,11 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     }
 
     /// <summary>
-    /// Creates the WSL local gateway setup engine using the current tray settings.
-    /// The V2 setup bridge calls this to drive the local-WSL setup flow;
-    /// the engine pairs the operator + Windows tray node into the gateway it
-    /// installs, so we eagerly materialize the NodeService when needed (for
-    /// capability registration via the manager's NodeConnector.ClientCreated bridge).
-    /// </summary>
-    public LocalGatewaySetupEngine CreateLocalGatewaySetupEngine(
-        bool replaceExistingConfigurationConfirmed = false)
-    {
-        if (_connectionManager == null || _gatewayRegistry == null || _gatewayService == null)
-        {
-            throw new InvalidOperationException(
-                "GatewayConnectionManager / GatewayRegistry / GatewayService must be initialized before " +
-                "CreateLocalGatewaySetupEngine. App.OnLaunched initializes them before " +
-                "ShowOnboardingAsync — if you reach here, the init order has regressed.");
-        }
-
-        var settings = _settings ?? new SettingsManager();
-        // NodeService is still required for capability registration on the manager's
-        // WindowsNodeClient (via App.xaml.cs ClientCreated → AttachClient bridge).
-        var nodeService = EnsureNodeService(settings);
-        // Suppress manager auto-start of node during setup so the engine retains
-        // strict phase ordering (operator paired → WSL CLI device-approve → node
-        // pairing). EnsureNodeConnectedAsync (called by ConnectionManagerWindowsNodeConnector
-        // in the PairWindowsTrayNode phase) bypasses this gate to drive the connect.
-        _suppressNodeDuringSetup = true;
-        try
-        {
-            // Use the manager-backed connectors so all handshake/pairing events appear
-            // in the diagnostics window and reuse the manager's v2/v3 signature fallback,
-            // credential resolution, per-gateway identity store, and device token persistence.
-            var operatorConnector = new ConnectionManagerOperatorConnector(
-                _connectionManager, _gatewayRegistry, new AppLogger());
-            var windowsNodeConnector = new ConnectionManagerWindowsNodeConnector(
-                _connectionManager, _gatewayRegistry, new AppLogger());
-            var engine = LocalGatewaySetupEngineFactory.CreateLocalOnly(
-                settings,
-                operatorConnector,
-                windowsNodeConnector,
-                new AppLogger(),
-                nodeService,
-                replaceExistingConfigurationConfirmed: replaceExistingConfigurationConfirmed,
-                gatewayRegistry: _gatewayRegistry);
-            // Clear suppress flag when engine completes so normal node connections resume.
-            // Only clear if this engine is still the active one (prevents stale engine #1
-            // from clearing the flag while engine #2 is running).
-            var capturedEngine = engine;
-            engine.StateChanged += (st) =>
-            {
-                if (st.Status is LocalGatewaySetupStatus.Complete or LocalGatewaySetupStatus.FailedTerminal
-                    or LocalGatewaySetupStatus.FailedRetryable or LocalGatewaySetupStatus.Cancelled)
-                {
-                    if (_localSetupEngine == capturedEngine)
-                        _suppressNodeDuringSetup = false;
-                }
-            };
-            // Bug #2: cache so OnPairingStatusChanged can read engine.IsAutoPairingWindowsNode
-            // and suppress the "copy pairing command" toast during the Phase 14 blip.
-            _localSetupEngine = engine;
-            return engine;
-        }
-        catch
-        {
-            _suppressNodeDuringSetup = false;
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Returns the HWND of the active onboarding window, or IntPtr.Zero if none.
     /// Used by onboarding pages that need to host file pickers / dialogs.
     /// </summary>
     public IntPtr GetOnboardingWindowHandle()
-        => _onboardingWindow != null
-            ? WinRT.Interop.WindowNative.GetWindowHandle(_onboardingWindow)
-            : IntPtr.Zero;
+        => IntPtr.Zero; // SetupEngine.UI is out-of-process; no onboarding window in tray
 
     /// <summary>
     /// Returns the HWND of the Hub window, or IntPtr.Zero if it isn't open.
@@ -268,14 +189,14 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             "OpenClawTray");
     private static readonly string DeepLinkPipeName =
         DeepLinkSecurityPolicy.BuildCurrentUserScopedPipeName(DataPath);
-    // Operator/node identity store (DeviceIdentity). Lives at %APPDATA%\OpenClawTray
-    // by convention so it follows the user across machines via roaming profile.
-    // OPENCLAW_TRAY_APPDATA_DIR isolates a test/E2E identity store the same way
-    // OPENCLAW_TRAY_DATA_DIR isolates the per-machine data directory.
-    private static readonly string IdentityDataPath = Path.Combine(
-        Environment.GetEnvironmentVariable("OPENCLAW_TRAY_APPDATA_DIR")
-            ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "OpenClawTray");
+    // Operator/node identity store. In normal installs this is %APPDATA%\OpenClawTray.
+    // Isolated test/dev runs set OPENCLAW_TRAY_DATA_DIR to the direct OpenClaw data
+    // folder, and SetupEngine/GatewayRegistry write per-gateway identities there.
+    private static readonly string IdentityDataPath = DataDirOverride
+        ?? Path.Combine(
+            Environment.GetEnvironmentVariable("OPENCLAW_TRAY_APPDATA_DIR")
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "OpenClawTray");
     private static readonly string CrashLogPath = Path.Combine(DataPath, "crash.log");
     private static readonly AppRunMarker s_runMarker = new(Path.Combine(DataPath, "run.marker"));
 
@@ -503,11 +424,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         OpenClawTray.Chat.Explorations.ChatExplorationPresetStore.ApplyDefaultIfPresent();
         ShowSurfaceImprovementsTipIfNeeded();
 
-        // Initialize connection manager BEFORE onboarding so CreateLocalGatewaySetupEngine()
-        // (called by the easy-button flow) can wire ConnectionManagerOperatorConnector +
-        // ConnectionManagerWindowsNodeConnector. Without this ordering, the engine factory
-        // would fall back to the legacy NodeServiceWindowsNodeConnector path, which delegates
-        // to the now-obsolete NodeService.ConnectAsync and would fail at runtime.
+        // Initialize connection manager before setup flow.
         _gatewayRegistry = new GatewayRegistry(SettingsManager.SettingsDirectoryPath);
         _gatewayRegistry.Load();
         var credentialResolver = new CredentialResolver(DeviceIdentityFileReader.Instance);
@@ -530,8 +447,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                 // EnsureNodeConnectedAsync). We MUST have a NodeService to register
                 // capabilities on this client before the outbound "connect" goes out —
                 // see NodeConnector.cs:66. Build it lazily here so we never depend on
-                // OnLaunched ordering or the _suppressNodeDuringSetup gate having
-                // landed in the right state. EnsureNodeService is
+                // OnLaunched ordering. EnsureNodeService is
                 // idempotent — it returns the existing instance if already built.
                 // Without this, _nodeService?.AttachClient below is a silent no-op and
                 // the gateway sees the node with caps=0/cmds=0 (regression introduced
@@ -1205,9 +1121,10 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     private TrayMenuSnapshot CaptureTrayMenuSnapshot()
     {
-        var setupMenuLabel = _settings != null
-            && new OpenClawTray.Onboarding.Services.OnboardingExistingConfigGuard(_settings, IdentityDataPath)
-                .HasExistingConfiguration()
+        // Show "Reconfigure" if there's an existing setup, "Setup Guide" if fresh
+        var hasExistingConfig = _settings != null
+            && !StartupSetupState.RequiresSetup(_settings, IdentityDataPath, _gatewayRegistry);
+        var setupMenuLabel = hasExistingConfig
             ? LocalizationHelper.GetString("Menu_Reconfigure")
             : LocalizationHelper.GetString("Menu_SetupGuide");
 
@@ -1721,7 +1638,19 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
         app.NodesHandler = () =>
         {
-            return _appState!.Nodes?.Select(n => new { n.DisplayName, n.NodeId, n.IsOnline, n.Platform, n.CapabilityCount }).ToArray()
+            return _appState!.Nodes?.Select(n => new
+            {
+                n.DisplayName,
+                n.NodeId,
+                n.IsOnline,
+                n.Platform,
+                n.CapabilityCount,
+                n.CommandCount,
+                n.Capabilities,
+                n.Commands,
+                n.DisabledCommands,
+                n.Permissions
+            }).ToArray()
                 ?? Array.Empty<object>();
         };
 
@@ -1804,6 +1733,26 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                 .ToArray();
             return matches;
         };
+
+        app.DashboardUrlHandler = (path) =>
+        {
+            if (!TryResolveChatCredentials(out var gatewayUrl, out var token, out var credentialSource, out var isBootstrapToken))
+                return new { error = "Gateway URL or credential is not configured" };
+
+            var url = GatewayDashboardUrlBuilder.Build(
+                gatewayUrl,
+                path,
+                token,
+                !isBootstrapToken && credentialSource == CredentialResolver.SourceSharedGatewayToken);
+
+            return new
+            {
+                url,
+                credentialSource,
+                usesSharedGatewayToken = !isBootstrapToken && credentialSource == CredentialResolver.SourceSharedGatewayToken,
+                hasTokenQuery = url.Contains("?token=", StringComparison.Ordinal) || url.Contains("&token=", StringComparison.Ordinal)
+            };
+        };
     }
 
     private bool RequiresSetup(SettingsManager settings)
@@ -1813,54 +1762,57 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     private bool ShouldInitializeNodeService()
     {
-        if (_suppressNodeDuringSetup) return false;
         return _settings?.EnableNodeMode == true || _settings?.EnableMcpServer == true;
     }
 
     /// <summary>
-    /// Re-arms the WSL keepalive process for the local OpenClawGateway distro on every
-    /// tray launch when the active gateway is local. The keepalive runs detached from
-    /// the tray (see <see cref="WslDistroKeepAlive"/>) so the WSL2 VM stays up even after
-    /// the tray exits — addressing the vmIdleTimeout window where Windows tears down the
-    /// distro (and therefore systemd + the gateway service) ~20s after the last
-    /// interactive wsl.exe session ends.
+    /// Ensures a WSL keepalive process is running for the local gateway distro
+    /// so the WSL2 VM stays up even after the tray exits.
+    /// Best-effort, fire-and-forget.
     /// </summary>
-    /// <remarks>
-    /// Best-effort, fire-and-forget. Cold Windows logon is exactly when LxssManager is
-    /// slow to come up, so a hanging <c>wsl --list</c> probe must never block tray
-    /// startup. We retry with bounded backoff; if every probe times out, we still try
-    /// the spawn and let <c>wsl.exe</c> itself decide whether the distro exists —
-    /// missing a keepalive arm at cold logon is the exact bug this method exists to
-    /// prevent (see PR review feedback).
-    /// </remarks>
     private async Task TryEnsureLocalGatewayKeepAliveAsync()
     {
         try
         {
             if (_settings is null) return;
 
-            var gatewayUrl = _settings.GetEffectiveGatewayUrl();
-            var distroName = await ResolveLocalGatewayDistroNameAsync();
-
-            if (string.IsNullOrWhiteSpace(gatewayUrl) || !LocalGatewayUrlClassifier.IsLocalGatewayUrl(gatewayUrl))
+            var activeRecord = _gatewayRegistry?.GetActive();
+            if (!WslKeepAlivePolicy.ShouldStart(activeRecord, _settings.GetEffectiveGatewayUrl()))
             {
-                // User is no longer using the local gateway (mode switch since the last
-                // launch). Tear down any keepalive marker that a prior session left
-                // behind so the WSL VM is allowed to idle out; we never reach
-                // EnsureStarted in this branch.
-                if (!string.IsNullOrWhiteSpace(distroName))
-                    WslDistroKeepAlive.Stop(distroName, new AppLogger());
+                await StopStaleLocalGatewayKeepAliveAsync();
                 return;
             }
 
+            var distroName = await ResolveLocalGatewayDistroNameAsync(activeRecord);
             if (string.IsNullOrWhiteSpace(distroName)) return;
 
+            // Verify distro exists before spawning keepalive
             var runner = new WslExeCommandRunner(new AppLogger(), defaultTimeout: TimeSpan.FromSeconds(4));
-            await WslKeepAliveStartupArmer.ArmAsync(
-                distroName,
-                cancellationToken => runner.RunAsync(["--list", "--verbose"], cancellationToken),
-                () => WslDistroKeepAlive.EnsureStarted(distroName, new AppLogger()),
-                Logger.Warn);
+            var distros = await runner.ListDistrosAsync();
+            if (!distros.Any(d => string.Equals(d.Name, distroName, StringComparison.OrdinalIgnoreCase)))
+            {
+                Logger.Warn($"[WslKeepAlive] Distro '{distroName}' not found; skipping keepalive.");
+                return;
+            }
+
+            // Spawn a detached wsl sleep process to keep the VM alive
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ResolveWslExePath(),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-d");
+            psi.ArgumentList.Add(distroName);
+            psi.ArgumentList.Add("--");
+            psi.ArgumentList.Add("sleep");
+            psi.ArgumentList.Add("infinity");
+
+            var proc = System.Diagnostics.Process.Start(psi);
+            if (proc is not null)
+            {
+                Logger.Info($"[WslKeepAlive] Started keepalive for {distroName} (PID {proc.Id}).");
+            }
         }
         catch (Exception ex)
         {
@@ -1868,35 +1820,175 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         }
     }
 
+    private async Task StopStaleLocalGatewayKeepAliveAsync()
+    {
+        try
+        {
+            var localDataDir = SetupExistingGatewayClassifier.ResolveLocalDataPath();
+            var markerDir = Path.Combine(localDataDir, "wsl-keepalive");
+            var markerDistroNames = ReadKeepAliveMarkerDistroNames(markerDir);
+            var setupStateDistroName = await ReadSetupStateDistroNameAsync(localDataDir);
+            var records = _gatewayRegistry?.GetAll() ?? [];
+
+            foreach (var distroName in WslKeepAlivePolicy.FindStaleSetupManagedDistroNames(
+                records,
+                markerDistroNames,
+                setupStateDistroName))
+            {
+                StopKeepAliveProcessesForDistro(distroName);
+                DeleteKeepAliveMarker(markerDir, distroName);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"[WslKeepAlive] Stale keepalive cleanup failed (non-fatal): {ex.Message}");
+        }
+    }
+
+    private static IReadOnlyList<string> ReadKeepAliveMarkerDistroNames(string markerDir)
+    {
+        if (!Directory.Exists(markerDir))
+            return [];
+
+        var distroNames = new List<string>();
+        foreach (var markerPath in Directory.EnumerateFiles(markerDir, "*.json"))
+        {
+            if (WslKeepAlivePolicy.TryGetMarkerDistroName(File.ReadAllText(markerPath), out var distroName))
+                distroNames.Add(distroName);
+        }
+
+        return distroNames;
+    }
+
+    private static async Task<string?> ReadSetupStateDistroNameAsync(string localDataDir)
+    {
+        var stateFile = Path.Combine(localDataDir, "setup-state.json");
+        if (!File.Exists(stateFile))
+            return null;
+
+        var json = await File.ReadAllTextAsync(stateFile);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.TryGetProperty("DistroName", out var distroElement)
+            ? distroElement.GetString()
+            : null;
+    }
+
+    private static void StopKeepAliveProcessesForDistro(string distroName)
+    {
+        var procs = System.Diagnostics.Process.GetProcessesByName("wsl")
+            .Concat(System.Diagnostics.Process.GetProcessesByName("wsl.exe"));
+
+        foreach (var proc in procs)
+        {
+            try
+            {
+                if (WslKeepAlivePolicy.IsKeepaliveCommandLine(GetProcessCommandLine(proc.Id), distroName))
+                {
+                    proc.Kill(entireProcessTree: true);
+                    proc.WaitForExit(5000);
+                    Logger.Info($"[WslKeepAlive] Stopped stale keepalive for {distroName} (PID {proc.Id}).");
+                }
+            }
+            catch
+            {
+                // Process may have exited while being inspected.
+            }
+            finally
+            {
+                proc.Dispose();
+            }
+        }
+    }
+
+    private static void DeleteKeepAliveMarker(string markerDir, string distroName)
+    {
+        if (!Directory.Exists(markerDir))
+            return;
+
+        foreach (var markerPath in Directory.EnumerateFiles(markerDir, "*.json"))
+        {
+            try
+            {
+                if (WslKeepAlivePolicy.TryGetMarkerDistroName(File.ReadAllText(markerPath), out var markerDistro)
+                    && string.Equals(markerDistro, distroName, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(markerPath);
+                    Logger.Info($"[WslKeepAlive] Deleted stale keepalive marker for {distroName}.");
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup; stale/corrupt markers are not fatal.
+            }
+        }
+    }
+
+    private static string? GetProcessCommandLine(int pid)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe",
+                $"-NoProfile -Command \"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine\"")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p == null) return null;
+            var output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(5000);
+            return output.Trim();
+        }
+        catch { return null; }
+    }
+
+    private static string ResolveWslExePath()
+    {
+        var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windowsDir))
+            windowsDir = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
+
+        return Path.Combine(windowsDir, "System32", "wsl.exe");
+    }
+
     /// <summary>
     /// Resolves the WSL distro name to keep alive. Prefers the value persisted by
     /// onboarding in <c>setup-state.json</c> so the keepalive always targets the distro
     /// the user actually installed. In DEBUG / test builds, an
     /// <c>OPENCLAW_WSL_DISTRO_NAME</c> environment override is honored to match
-    /// <see cref="LocalGatewaySetupRuntimeConfiguration.FromEnvironment"/>. Falls back
-    /// to the upstream default <c>OpenClawGateway</c>.
+    /// Resolves the local gateway distro name by reading setup-state.json.
+    /// Falls back to "OpenClawGateway" if not found.
     /// </summary>
-    private async Task<string?> ResolveLocalGatewayDistroNameAsync()
+    private async Task<string?> ResolveLocalGatewayDistroNameAsync(GatewayRecord? activeRecord)
     {
+        string? setupStateDistroName = null;
         try
         {
-            var store = new LocalGatewaySetupStateStore();
-            var state = await store.LoadAsync();
-            if (state is not null && !string.IsNullOrWhiteSpace(state.DistroName))
-                return state.DistroName;
+            var stateFile = Path.Combine(
+                SetupExistingGatewayClassifier.ResolveLocalDataPath(),
+                "setup-state.json");
+
+            if (File.Exists(stateFile))
+            {
+                var json = await File.ReadAllTextAsync(stateFile);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("DistroName", out var dn) &&
+                    dn.GetString() is { Length: > 0 } distroName)
+                {
+                    setupStateDistroName = distroName;
+                }
+            }
         }
         catch (Exception ex)
         {
             Logger.Warn($"[WslKeepAlive] Failed to read setup-state.json: {ex.Message}");
         }
 
-#if DEBUG || OPENCLAW_TRAY_TESTS
-        var envOverride = Environment.GetEnvironmentVariable(LocalGatewaySetupRuntimeConfiguration.DistroNameVariable);
-        if (!string.IsNullOrWhiteSpace(envOverride))
-            return envOverride;
-#endif
-
-        return "OpenClawGateway";
+        return WslKeepAlivePolicy.ResolveDistroName(
+            activeRecord,
+            setupStateDistroName,
+            Environment.GetEnvironmentVariable("OPENCLAW_WSL_DISTRO_NAME"));
     }
 
     // The pre-unification ShouldInitializeNodeService(GatewayRecord, string) overload
@@ -1949,19 +2041,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         {
             if (args.Status == OpenClaw.Shared.PairingStatus.Pending)
             {
-                // Bug #2 (manual test 2026-05-05): suppress the "copy pairing command"
-                // toast while the local-setup engine is mid-Phase-14 node-role PairAsync.
-                // The loopback gateway parks the role-upgrade as Pending for ~100ms before
-                // SettingsWindowsTrayNodeProvisioner's pending-approver auto-approves it;
-                // the user never needs to copy the command in that window. Manual
-                // ConnectionPage pairings call ShowPairingPendingNotification directly
-                // (bypassing this event handler), so the suppression scope is exactly
-                // the autopair window.
-                if (LocalGatewaySetupEngine.ShouldSuppressPairingPendingNotification(_localSetupEngine, args.Status))
-                {
-                    Logger.Info($"Suppressing pairing-pending toast: autopair Phase 14 in progress for {args.DeviceId}");
-                    return;
-                }
                 ShowPairingPendingNotification(args.DeviceId);
             }
             else if (args.Status == OpenClaw.Shared.PairingStatus.Paired)
@@ -2336,8 +2415,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                 return false;
             if (_chatWindow is { IsClosed: false, Visible: true })
                 return false;
-            if (_onboardingWindow != null)
-                return false; // Onboarding window has chat overlay
         }
 
         var type = notification.Type;
@@ -2783,83 +2860,96 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         ShowHub("channels");
     }
 
-    private OnboardingWindow? _onboardingWindow;
+    /// <summary>
+    /// Resolves the SetupEngine.UI executable path.
+    /// Checks <c>{AppDir}/SetupEngine/OpenClaw.SetupEngine.UI.exe</c> (standard layout)
+    /// and <c>{AppDir}/OpenClaw.SetupEngine.UI.exe</c> (flat/legacy layout).
+    /// </summary>
+    internal static string? ResolveSetupEngineUiPath()
+    {
+        const string exeName = "OpenClaw.SetupEngine.UI.exe";
+
+        // Standard layout: SetupEngine subfolder (build.ps1 copies here, installer deploys here)
+        var subDir = Path.Combine(AppContext.BaseDirectory, "SetupEngine", exeName);
+        if (File.Exists(subDir)) return subDir;
+
+        // Flat layout fallback (e.g. everything in one folder)
+        var flat = Path.Combine(AppContext.BaseDirectory, exeName);
+        return File.Exists(flat) ? flat : null;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private const int SwRestore = 9;
+    private const int SwShownormal = 1;
+
+    private static bool TryBringSetupEngineToFront(System.Diagnostics.Process process)
+    {
+        try
+        {
+            process.Refresh();
+            var hwnd = process.MainWindowHandle;
+            if (hwnd == IntPtr.Zero)
+                return false;
+
+            ShowWindow(hwnd, SwRestore);
+            ShowWindow(hwnd, SwShownormal);
+            return SetForegroundWindow(hwnd);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to focus SetupEngine.UI: {ex.Message}");
+            return false;
+        }
+    }
 
     private async Task ShowOnboardingAsync()
     {
         if (_settings == null) return;
 
-        if (_onboardingWindow != null)
+        var setupExePath = ResolveSetupEngineUiPath();
+        if (setupExePath == null)
         {
-            try { _onboardingWindow.Activate(); return; } catch { _onboardingWindow = null; }
+            Logger.Error($"SetupEngine.UI not found (searched {AppContext.BaseDirectory} and sibling project output)");
+            return;
         }
 
-        // Disconnect existing gateway connection for a clean setup flow.
-        // ActiveId is preserved so it can be restored if setup is cancelled.
-        var restoreGatewayId = _gatewayRegistry?.ActiveGatewayId;
-        var disconnectedForOnboarding = false;
-        if (_connectionManager != null &&
-            _connectionManager.CurrentSnapshot.OverallState is not OverallConnectionState.Idle)
+        // Single-instance guard — don't launch if already running
+        var setupProcesses = System.Diagnostics.Process.GetProcessesByName("OpenClaw.SetupEngine.UI");
+        if (setupProcesses.Length > 0)
         {
-            Logger.Info("Disconnecting existing gateway connection for clean setup");
-            await _connectionManager.DisconnectAsync();
-            disconnectedForOnboarding = restoreGatewayId != null;
+            Logger.Info("SetupEngine.UI already running — focusing existing instance");
+            foreach (var p in setupProcesses)
+            {
+                TryBringSetupEngineToFront(p);
+            }
+            foreach (var p in setupProcesses) p.Dispose();
+            return;
         }
 
-        var onboardingCompleted = false;
-        _onboardingWindow = new OnboardingWindow(_settings, IdentityDataPath);
-        _onboardingWindow.OnboardingCompleted += (s, e) =>
+        try
         {
-            onboardingCompleted = true;
-            Logger.Info("Onboarding completed");
-            _onboardingWindow = null;
-
-            // If the persistent client was already initialized during onboarding, keep it
-            if (_connectionManager?.OperatorClient is OpenClawGatewayClient { IsConnectedToGateway: true })
+            var psi = new System.Diagnostics.ProcessStartInfo(setupExePath)
             {
-                Logger.Info("Gateway client already connected from onboarding — keeping");
-                return;
-            }
-
-            // If a reconnect is already in flight (e.g. the user clicked Finish while
-            // the gateway was mid-restart from a V2 GatewayWelcome wizard config save —
-            // the gateway emits a `shutdown` event with reason="gateway restarting" when
-            // provider/model config changes), let the existing auto-reconnect timer
-            // finish rather than canceling it and starting a fresh one. Canceling adds
-            // a visible ~5s churn (cancel + new connect attempt against a still-warming
-            // gateway + retry) on top of the gateway's own ~1.5s restart window.
-            if (_connectionManager?.CurrentSnapshot.OperatorState == RoleConnectionState.Connecting)
+                UseShellExecute = true
+            };
+            var process = System.Diagnostics.Process.Start(psi);
+            if (process != null)
             {
-                Logger.Info("Gateway client reconnect already in flight — keeping");
-                return;
+                await Task.Delay(500);
+                TryBringSetupEngineToFront(process);
+                process.Dispose();
             }
-
-            // Reconnect only if there's an active gateway with credentials —
-            // don't blindly reconnect a pre-setup gateway the user may be replacing.
-            var activeRecord = _gatewayRegistry?.GetActive();
-            if (activeRecord != null && TryConnectGatewayIfCredentialAvailable(activeRecord, "post-onboarding"))
-            {
-                Logger.Info("Reconnecting to active gateway after onboarding");
-            }
-            else
-            {
-                Logger.Info("No previously connected gateway after onboarding — skipping reconnect");
-                TryStartLocalMcpOnlyNode();
-            }
-
-            // Keep hub window in sync with new client — no shadow state to push,
-            // hub observes AppState directly.
-        };
-        _onboardingWindow.Closed += (s, e) =>
+            Logger.Info("Launched SetupEngine.UI for setup");
+        }
+        catch (Exception ex)
         {
-            _onboardingWindow = null;
-            if (!onboardingCompleted && disconnectedForOnboarding && restoreGatewayId != null)
-            {
-                Logger.Info("Onboarding closed before completion — restoring previous gateway connection");
-                _ = _connectionManager?.ConnectAsync(restoreGatewayId);
-            }
-        };
-        _onboardingWindow.Activate();
+            Logger.Error($"Failed to launch SetupEngine.UI: {ex.Message}");
+        }
     }
 
     private void ShowSurfaceImprovementsTipIfNeeded()
@@ -2935,22 +3025,11 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             return;
         }
 
-        var baseUrl = gatewayUrl
-            .Replace("ws://", "http://")
-            .Replace("wss://", "https://")
-            .TrimEnd('/');
-
-        var url = string.IsNullOrEmpty(path)
-            ? baseUrl
-            : $"{baseUrl}/{path.TrimStart('/')}";
-
-        if (!isBootstrapToken &&
-            credentialSource == CredentialResolver.SourceSharedGatewayToken &&
-            !string.IsNullOrEmpty(token))
-        {
-            var separator = url.Contains('?') ? "&" : "?";
-            url = $"{url}{separator}token={Uri.EscapeDataString(token)}";
-        }
+        var url = GatewayDashboardUrlBuilder.Build(
+            gatewayUrl,
+            path,
+            token,
+            !isBootstrapToken && credentialSource == CredentialResolver.SourceSharedGatewayToken);
 
         try
         {
@@ -4065,4 +4144,3 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         }
     }
 }
-

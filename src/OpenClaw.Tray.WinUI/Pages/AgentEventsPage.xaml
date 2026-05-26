@@ -52,7 +52,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="{x:Bind helpers:FluentIconCatalog.Clear, Mode=OneTime}"
                               FontSize="14" IsTextScaleFactorEnabled="False"/>
-                    <TextBlock x:Uid="ClearButton" Text="Clear"/>
+                    <TextBlock Text="Clear"/>
                 </StackPanel>
             </Button>
         </Grid>
@@ -135,7 +135,7 @@
         </ListView>
 
         <!-- Empty state -->
-        <StackPanel x:Name="EmptyState" Grid.Row="2"
+        <StackPanel x:Name="EmptyState" Grid.Row="3"
                     VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
             <TextBlock Text="🤖" FontSize="48" HorizontalAlignment="Center"/>
             <TextBlock x:Uid="AgentEventsPage_TextBlock_96" Text="No events in this session"
