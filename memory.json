@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-05-27T01:21:58Z",
-  "last_run_id": "26484936206",
+  "last_run": "2026-05-27T13:35:21Z",
+  "last_run_id": "26514424534",
   "backlog_cursor": {
-    "issue_number": 372,
-    "comment_cursor": 372
+    "issue_number": 556,
+    "comment_cursor": 556
   },
   "comments_made": {
     "467": "2026-05-20",
@@ -23,7 +23,10 @@
     "462": "2026-05-23",
     "338": "2026-05-23",
     "372": "2026-05-24",
-    "460": "2026-05-26"
+    "460": "2026-05-27",
+    "552": "2026-05-27",
+    "554": "2026-05-27",
+    "555": "2026-05-27"
   },
   "labels_applied": {
     "460": ["enhancement"],
@@ -35,15 +38,18 @@
     "372": ["enhancement"],
     "338": ["bug"],
     "331": ["question"],
-    "252": ["enhancement"]
+    "252": ["enhancement"],
+    "552": ["bug"],
+    "554": ["refactor"]
   },
   "fix_attempts": {
     "351": {"pr": 448, "branch": "repo-assist/fix-mcp-tool-descriptions", "status": "merged", "date": "2026-05-18"},
     "432": {"pr": null, "branch": "repo-assist/fix-issue-432-tfm-dynamic", "status": "closed-no-merge", "date": "2026-05-18"},
     "459": {"pr": 482, "branch": "repo-assist/fix-issue-459-session-key-missing", "status": "merged", "date": "2026-05-21"},
     "467": {"pr": 472, "branch": "repo-assist/fix-issue-467-wsl-parent-dir-cleanup", "status": "merged", "date": "2026-05-20"},
-    "460": {"pr": null, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "needs-retry", "date": "2026-05-26", "note": "PR was never pushed. Needs retry."},
-    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "date": "2026-05-26", "note": "Closed due to merge conflict. Manually verified by shanselman. Needs retry PR."}
+    "460": {"pr": 540, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "closed-no-merge", "note": "Fix was committed to master directly (2ca3457). Issue should be closed."},
+    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "date": "2026-05-26", "note": "Fix was committed directly to master (51c4b4fd). Issue still open pending indierawk2k2 test."},
+    "552": {"pr": null, "branch": "repo-assist/fix-issue-552-async-void-connection-handlers", "status": "open", "date": "2026-05-27", "note": "Partial fix: guarded OnNodeStatusChanged and OnNodePairingStatusChanged in GatewayConnectionManager with top-level try/catch. WinUI layer (46+ handlers) still needs a separate pass."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
@@ -52,7 +58,7 @@
     "channel-result-tests": {"pr": 528, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "merged", "date": "2026-05-26"},
     "operatorscopehelper-tests": {"pr": 530, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "merged", "date": "2026-05-26"},
     "activitystreamservice-tests": {"pr": 535, "branch": "repo-assist/improve-activitystreamservice-tests-2026-05-25", "status": "merged", "date": "2026-05-26"},
-    "execcmdtoken-tests": {"pr": null, "branch": "repo-assist/improve-execcmdtoken-tests-2026-05-27", "status": "open", "date": "2026-05-27", "note": "66 tests for ExecCommandToken and ExecEnvInvocationUnwrapper"}
+    "execcmdtoken-tests": {"pr": 548, "branch": "repo-assist/improve-execcmdtoken-tests-2026-05-27", "status": "open", "date": "2026-05-27", "note": "66 tests for ExecCommandToken and ExecEnvInvocationUnwrapper"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "branch": "repo-assist/eng-treat-warnings-as-errors-2026-05-23", "status": "closed-no-merge", "date": "2026-05-26"},
@@ -68,5 +74,5 @@
   },
   "open_repo_assist_issues": [435],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "2026-05-27: Created PR for ExecCommandToken + ExecEnvInvocationUnwrapper tests (66 tests, Task 9). Task 1 had 0 unlabelled issues. Priority next: retry fix for #462 (trackpad, PR had conflict), create working fix PR for #460 (test determinism), fix #453 (attachment persistence)."
+  "notes": "2026-05-27: Created PR for async void fix in GatewayConnectionManager (partial fix for #552). Commented on new issues #552, #554, #555. Issue #460 fix already in master (commit 2ca3457) - should be closed. Issue #462 fix in master (51c4b4fd) - waiting for indierawk2k2 to confirm. Next: fix attachment persistence #453, broader async void pass for WinUI layer (#552)."
 }
