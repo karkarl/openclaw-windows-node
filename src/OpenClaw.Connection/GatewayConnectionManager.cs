@@ -769,149 +769,165 @@ public sealed class GatewayConnectionManager : IGatewayConnectionManager
 
     private async void OnNodeStatusChanged(object? sender, ConnectionStatus status)
     {
-        _diagnostics.Record("node", $"Node status: {status}");
-
-        // Check connector's pairing status directly — it's set synchronously
-        // before this handler runs, so it's always up-to-date
-        var connectorPairingStatus = _nodeConnector?.PairingStatus;
-        var isPairingPending = connectorPairingStatus == PairingStatus.Pending;
-
-        if (isPairingPending && status is ConnectionStatus.Disconnected or ConnectionStatus.Error)
-            return;
-
-        await _transitionSemaphore.WaitAsync();
         try
         {
-            var prev = _stateMachine.Current.OverallState;
-            switch (status)
-            {
-                case ConnectionStatus.Connected:
-                    _stateMachine.TryTransition(ConnectionTrigger.NodeConnected);
-                    break;
-                case ConnectionStatus.Connecting:
-                    _stateMachine.StartNodeConnecting();
-                    break;
-                case ConnectionStatus.Disconnected:
-                    if (_stateMachine.Current.NodeState != RoleConnectionState.PairingRequired)
-                        _stateMachine.TryTransition(ConnectionTrigger.NodeDisconnected);
-                    break;
-                case ConnectionStatus.Error:
-                    if (_stateMachine.Current.NodeState != RoleConnectionState.PairingRequired)
-                        _stateMachine.TryTransition(ConnectionTrigger.NodeError, "Node transport error");
-                    break;
-            }
+            _diagnostics.Record("node", $"Node status: {status}");
 
-            // Update node state in snapshot
-            if (_nodeConnector != null)
-            {
-                _stateMachine.SetNodeInfo(_nodeConnector.NodeDeviceId, _nodeConnector.PairingStatus);
-            }
+            // Check connector's pairing status directly — it's set synchronously
+            // before this handler runs, so it's always up-to-date
+            var connectorPairingStatus = _nodeConnector?.PairingStatus;
+            var isPairingPending = connectorPairingStatus == PairingStatus.Pending;
 
-            EmitStateChanged(prev);
+            if (isPairingPending && status is ConnectionStatus.Disconnected or ConnectionStatus.Error)
+                return;
+
+            await _transitionSemaphore.WaitAsync();
+            try
+            {
+                var prev = _stateMachine.Current.OverallState;
+                switch (status)
+                {
+                    case ConnectionStatus.Connected:
+                        _stateMachine.TryTransition(ConnectionTrigger.NodeConnected);
+                        break;
+                    case ConnectionStatus.Connecting:
+                        _stateMachine.StartNodeConnecting();
+                        break;
+                    case ConnectionStatus.Disconnected:
+                        if (_stateMachine.Current.NodeState != RoleConnectionState.PairingRequired)
+                            _stateMachine.TryTransition(ConnectionTrigger.NodeDisconnected);
+                        break;
+                    case ConnectionStatus.Error:
+                        if (_stateMachine.Current.NodeState != RoleConnectionState.PairingRequired)
+                            _stateMachine.TryTransition(ConnectionTrigger.NodeError, "Node transport error");
+                        break;
+                }
+
+                // Update node state in snapshot
+                if (_nodeConnector != null)
+                {
+                    _stateMachine.SetNodeInfo(_nodeConnector.NodeDeviceId, _nodeConnector.PairingStatus);
+                }
+
+                EmitStateChanged(prev);
+            }
+            finally
+            {
+                _transitionSemaphore.Release();
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            _transitionSemaphore.Release();
+            _logger.Warn($"[ConnMgr] Unhandled exception in OnNodeStatusChanged: {ex.Message}");
+            _diagnostics.Record("node", $"OnNodeStatusChanged error: {ex.Message}");
         }
     }
 
     private async void OnNodePairingStatusChanged(object? sender, PairingStatusEventArgs e)
     {
-        _diagnostics.Record("node", $"Node pairing: {e.Status}");
-
-        await _transitionSemaphore.WaitAsync();
         try
         {
-            var prev = _stateMachine.Current.OverallState;
-            switch (e.Status)
-            {
-                case PairingStatus.Paired:
-                    _stateMachine.TryTransition(ConnectionTrigger.NodePaired);
-                    break;
-                case PairingStatus.Pending:
-                    _stateMachine.TryTransition(ConnectionTrigger.NodePairingRequired);
-                    break;
-                case PairingStatus.Rejected:
-                    _stateMachine.TryTransition(ConnectionTrigger.NodePairingRejected);
-                    break;
-            }
+            _diagnostics.Record("node", $"Node pairing: {e.Status}");
 
-            // Update snapshot
-            if (_nodeConnector != null)
-            {
-                _stateMachine.SetNodeInfo(_nodeConnector.NodeDeviceId, _nodeConnector.PairingStatus, e.RequestId);
-            }
-
-            EmitStateChanged(prev);
-        }
-        finally
-        {
-            _transitionSemaphore.Release();
-        }
-
-        // Auto-approve node pairing if operator has admin/pairing scope.
-        // _autoApproveInFlight is a CAS guard scoped to JUST the approve RPC —
-        // we release it before the reconnect delay so unrelated approvals
-        // (different requestIds) aren't starved while we wait for the gateway
-        // and node-reconnect handshake to settle (which can take 5–30s on
-        // first connect via WSL cold-start).
-        if (e.Status == PairingStatus.Pending && !string.IsNullOrWhiteSpace(e.RequestId)
-            && e.RequestId != _lastAutoApprovedRequestId)
-        {
-            if (Interlocked.CompareExchange(ref _autoApproveInFlight, e.RequestId, null) != null)
-            {
-                return;
-            }
-
-            var approvalGeneration = Interlocked.Read(ref _generation);
-            bool attemptedApprove = false;
-            bool approved = false;
+            await _transitionSemaphore.WaitAsync();
             try
             {
-                var operatorClient = _activeLifecycle?.DataClient;
-                if (operatorClient?.IsConnectedToGateway == true)
+                var prev = _stateMachine.Current.OverallState;
+                switch (e.Status)
                 {
-                    var scopes = operatorClient.GrantedOperatorScopes;
-                    var canApprove = OperatorScopeHelper.CanApproveDevices(scopes);
-
-                    if (canApprove)
-                    {
-                        _diagnostics.Record("node", $"Auto-approving node pairing (requestId={e.RequestId})");
-                        try
-                        {
-                            attemptedApprove = true;
-                            approved = await operatorClient.NodePairApproveAsync(e.RequestId);
-                            if (!approved)
-                                _diagnostics.Record("node", "Node auto-approval failed");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Warn($"[ConnMgr] Node auto-approve failed: {ex.Message}");
-                            _diagnostics.Record("node", $"Auto-approve error: {ex.Message}");
-                        }
-                    }
+                    case PairingStatus.Paired:
+                        _stateMachine.TryTransition(ConnectionTrigger.NodePaired);
+                        break;
+                    case PairingStatus.Pending:
+                        _stateMachine.TryTransition(ConnectionTrigger.NodePairingRequired);
+                        break;
+                    case PairingStatus.Rejected:
+                        _stateMachine.TryTransition(ConnectionTrigger.NodePairingRejected);
+                        break;
                 }
+
+                // Update snapshot
+                if (_nodeConnector != null)
+                {
+                    _stateMachine.SetNodeInfo(_nodeConnector.NodeDeviceId, _nodeConnector.PairingStatus, e.RequestId);
+                }
+
+                EmitStateChanged(prev);
             }
             finally
             {
-                // Only dedupe after an actual approve attempt. If the operator
-                // client was disconnected or lacked scope, do not burn the
-                // requestId; a later Pending event can still retry once the
-                // operator client is ready or has approval scope.
-                if (attemptedApprove && Interlocked.Read(ref _generation) == approvalGeneration)
-                    _lastAutoApprovedRequestId = e.RequestId;
-                Interlocked.Exchange(ref _autoApproveInFlight, null);
+                _transitionSemaphore.Release();
             }
 
-            // Post-approve reconnect happens OUTSIDE the CAS guard so it
-            // doesn't block unrelated approvals.
-            if (approved)
+            // Auto-approve node pairing if operator has admin/pairing scope.
+            // _autoApproveInFlight is a CAS guard scoped to JUST the approve RPC —
+            // we release it before the reconnect delay so unrelated approvals
+            // (different requestIds) aren't starved while we wait for the gateway
+            // and node-reconnect handshake to settle (which can take 5–30s on
+            // first connect via WSL cold-start).
+            if (e.Status == PairingStatus.Pending && !string.IsNullOrWhiteSpace(e.RequestId)
+                && e.RequestId != _lastAutoApprovedRequestId)
             {
-                _diagnostics.Record("node", "Node pairing auto-approved — reconnecting node");
-                await _reconnectDelay(TimeSpan.FromMilliseconds(1000)); // brief delay for gateway to process
-                if (Interlocked.Read(ref _generation) == approvalGeneration)
-                    await StartNodeConnectionAsync();
+                if (Interlocked.CompareExchange(ref _autoApproveInFlight, e.RequestId, null) != null)
+                {
+                    return;
+                }
+
+                var approvalGeneration = Interlocked.Read(ref _generation);
+                bool attemptedApprove = false;
+                bool approved = false;
+                try
+                {
+                    var operatorClient = _activeLifecycle?.DataClient;
+                    if (operatorClient?.IsConnectedToGateway == true)
+                    {
+                        var scopes = operatorClient.GrantedOperatorScopes;
+                        var canApprove = OperatorScopeHelper.CanApproveDevices(scopes);
+
+                        if (canApprove)
+                        {
+                            _diagnostics.Record("node", $"Auto-approving node pairing (requestId={e.RequestId})");
+                            try
+                            {
+                                attemptedApprove = true;
+                                approved = await operatorClient.NodePairApproveAsync(e.RequestId);
+                                if (!approved)
+                                    _diagnostics.Record("node", "Node auto-approval failed");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warn($"[ConnMgr] Node auto-approve failed: {ex.Message}");
+                                _diagnostics.Record("node", $"Auto-approve error: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    // Only dedupe after an actual approve attempt. If the operator
+                    // client was disconnected or lacked scope, do not burn the
+                    // requestId; a later Pending event can still retry once the
+                    // operator client is ready or has approval scope.
+                    if (attemptedApprove && Interlocked.Read(ref _generation) == approvalGeneration)
+                        _lastAutoApprovedRequestId = e.RequestId;
+                    Interlocked.Exchange(ref _autoApproveInFlight, null);
+                }
+
+                // Post-approve reconnect happens OUTSIDE the CAS guard so it
+                // doesn't block unrelated approvals.
+                if (approved)
+                {
+                    _diagnostics.Record("node", "Node pairing auto-approved — reconnecting node");
+                    await _reconnectDelay(TimeSpan.FromMilliseconds(1000)); // brief delay for gateway to process
+                    if (Interlocked.Read(ref _generation) == approvalGeneration)
+                        await StartNodeConnectionAsync();
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[ConnMgr] Unhandled exception in OnNodePairingStatusChanged: {ex.Message}");
+            _diagnostics.Record("node", $"OnNodePairingStatusChanged error: {ex.Message}");
         }
     }
 
