@@ -9,6 +9,14 @@
   #define MyAppArch "x64"
 #endif
 
+#ifndef MyCompression
+  #define MyCompression "lzma"
+#endif
+
+#ifndef MySolidCompression
+  #define MySolidCompression "yes"
+#endif
+
 [Setup]
 AppId={{M0LTB0T-TRAY-4PP1-D3N7}}
 AppName={#MyAppName}
@@ -21,8 +29,8 @@ DefaultDirName={localappdata}\OpenClawTray
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=OpenClawCompanion-Setup-{#MyAppArch}
-Compression=lzma
-SolidCompression=yes
+Compression={#MyCompression}
+SolidCompression={#MySolidCompression}
 WizardStyle=modern
 PrivilegesRequired=lowest
 SetupIconFile=src\OpenClaw.Tray.WinUI\Assets\openclaw.ico

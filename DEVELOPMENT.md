@@ -169,6 +169,23 @@ dotnet publish src/OpenClaw.Tray.WinUI -c Release -r win-x64 --self-contained -o
 
 This creates a standalone executable with all dependencies bundled.
 
+#### Local Inno Installer Iteration
+
+Use the local helper to build unsigned installer EXEs without waiting for CI:
+
+```powershell
+# Fast x64 installer for Windows Sandbox smoke tests
+.\scripts\build-inno-local.ps1 -Arch x64 -Fast
+
+# Recompile Inno only after changing installer.iss
+.\scripts\build-inno-local.ps1 -Arch x64 -Fast -NoPublish
+
+# Build both release-shaped architectures locally
+.\scripts\build-inno-local.ps1 -Arch All
+```
+
+`-Fast` uses ZIP/no-solid compression for quick local iteration. CI release builds keep the default LZMA solid compression and Azure signing.
+
 ## Architecture Overview
 
 ### Native chat surface (FunctionalUI + OpenClaw.Chat)

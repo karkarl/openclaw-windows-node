@@ -61,6 +61,8 @@ public sealed class InstallerIssAssertionTests
         var iss = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "installer.iss"));
 
         Assert.Contains(@"#define MyAppName ""OpenClaw Companion""", iss);
+        Assert.Contains(@"#define MyCompression ""lzma""", iss);
+        Assert.Contains(@"#define MySolidCompression ""yes""", iss);
         Assert.Contains("OutputBaseFilename=OpenClawCompanion-Setup-{#MyAppArch}", iss);
         Assert.Contains(@"Name: ""{group}\{#MyAppName}""; Filename: ""{app}\{#MyAppExeName}""", iss);
         Assert.Contains(@"Name: ""{group}\OpenClaw Gateway Setup""; Filename: ""{app}\SetupEngine\OpenClaw.SetupEngine.UI.exe""", iss);
