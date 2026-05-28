@@ -42,7 +42,7 @@ After the installer finishes, OpenClaw Companion starts automatically. Look for 
 
 If you don't see it, check the **hidden icons** area (the `^` arrow next to the tray).
 
-The installer also creates a Start Menu group with shortcuts for **OpenClaw Companion**, **OpenClaw Gateway Setup**, **OpenClaw Companion Settings**, **OpenClaw Chat**, **Check for Updates**, and uninstall. The Gateway Setup shortcut opens the local WSL/onboarding setup flow.
+The installer also creates a Start Menu group with shortcuts for **OpenClaw Companion**, **OpenClaw Gateway Setup**, **OpenClaw Companion Settings**, **OpenClaw Chat**, **Check for Updates**, and uninstall. The Gateway Setup shortcut launches the bundled local WSL/onboarding setup app.
 
 ### 5. Onboarding Wizard
 

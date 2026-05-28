@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using OpenClaw.SetupEngine;
 using Windows.UI;
 
 namespace OpenClaw.SetupEngine.UI.Pages;
@@ -93,21 +94,18 @@ public sealed partial class CompletePage : Page
         // Brief pause for process cleanup
         Thread.Sleep(1000);
 
-        // Launch via protocol deep link — opens tray and navigates to chat
-        Process.Start(new ProcessStartInfo("openclaw://chat") { UseShellExecute = true });
+        var trayPath = TrayExecutableResolver.Resolve();
+        if (trayPath != null)
+            Process.Start(new ProcessStartInfo(trayPath, "openclaw://chat") { UseShellExecute = true });
+        else
+            Process.Start(new ProcessStartInfo("openclaw://chat") { UseShellExecute = true });
     }
 
     private static void RegisterStartup()
     {
         try
         {
-            // Find tray exe path for startup registration
-            var candidates = new[]
-            {
-                Path.Combine(AppContext.BaseDirectory, "..", "OpenClaw.Tray.WinUI", "OpenClaw.Tray.WinUI.exe"),
-                Path.Combine(AppContext.BaseDirectory, "OpenClaw.Tray.WinUI.exe"),
-            };
-            var trayPath = candidates.FirstOrDefault(File.Exists);
+            var trayPath = TrayExecutableResolver.Resolve();
             if (trayPath == null) return;
 
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(

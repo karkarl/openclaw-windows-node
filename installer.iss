@@ -48,6 +48,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
   #define publish "publish"
 #endif
 
+#if !FileExists(publish + "\SetupEngine\OpenClaw.SetupEngine.UI.exe")
+  #error SetupEngine.UI payload missing. Publish OpenClaw.SetupEngine.UI into {#publish}\SetupEngine before compiling the installer.
+#endif
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startupicon"; Description: "Start OpenClaw Companion when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
@@ -66,7 +70,7 @@ Root: HKCU; Subkey: "Software\Classes\openclaw\shell\open\command"; ValueType: s
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\OpenClaw Gateway Setup"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://setup"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\OpenClaw Gateway Setup"; Filename: "{app}\SetupEngine\OpenClaw.SetupEngine.UI.exe"; IconFilename: "{app}\SetupEngine\OpenClaw.SetupEngine.UI.exe"
 Name: "{group}\OpenClaw Companion Settings"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://commandcenter"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\OpenClaw Chat"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://chat"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\Check for Updates"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://check-updates"; IconFilename: "{app}\{#MyAppExeName}"

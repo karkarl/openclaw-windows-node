@@ -63,7 +63,7 @@ public sealed class InstallerIssAssertionTests
         Assert.Contains(@"#define MyAppName ""OpenClaw Companion""", iss);
         Assert.Contains("OutputBaseFilename=OpenClawCompanion-Setup-{#MyAppArch}", iss);
         Assert.Contains(@"Name: ""{group}\{#MyAppName}""; Filename: ""{app}\{#MyAppExeName}""", iss);
-        Assert.Contains(@"Name: ""{group}\OpenClaw Gateway Setup""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://setup""", iss);
+        Assert.Contains(@"Name: ""{group}\OpenClaw Gateway Setup""; Filename: ""{app}\SetupEngine\OpenClaw.SetupEngine.UI.exe""", iss);
         Assert.Contains(@"Name: ""{group}\OpenClaw Companion Settings""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://commandcenter""", iss);
         Assert.Contains(@"Name: ""{group}\OpenClaw Chat""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://chat""", iss);
         Assert.Contains(@"Name: ""{group}\Check for Updates""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://check-updates""", iss);
@@ -84,8 +84,10 @@ public sealed class InstallerIssAssertionTests
     [Fact]
     public void ReleaseBuildCopiesSetupEngineIntoInstallerPayload()
     {
+        var iss = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "installer.iss"));
         var ci = File.ReadAllText(Path.Combine(GetRepositoryRoot(), ".github", "workflows", "ci.yml"));
 
+        Assert.Contains(@"FileExists(publish + ""\SetupEngine\OpenClaw.SetupEngine.UI.exe"")", iss);
         Assert.Contains("Publish SetupEngine.UI", ci);
         Assert.Contains(@"dotnet publish src/OpenClaw.SetupEngine.UI", ci);
         Assert.Contains(@"mkdir publish\SetupEngine", ci);
