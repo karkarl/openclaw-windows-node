@@ -429,7 +429,6 @@ public sealed partial class PermissionsPage : Page
         {
             CurrentApp.Settings.TtsProvider = newProvider;
             CurrentApp.Settings.Save();
-            ((IAppCommands)CurrentApp).NotifySettingsSaved();
             TtsStatusText.Text = LocalizationHelper.Format(
                 "PermissionsPage_TtsStatus_DefaultProviderFormat", newProvider);
         }
@@ -472,7 +471,6 @@ public sealed partial class PermissionsPage : Page
         if (changed)
         {
             settings.Save();
-            ((IAppCommands)CurrentApp).NotifySettingsSaved();
             TtsElevenLabsApiKeyBox.Password =
                 string.IsNullOrEmpty(settings.TtsElevenLabsApiKey) ? "" : SavedApiKeySentinel;
             TtsStatusText.Text = LocalizationHelper.GetString("PermissionsPage_TtsStatus_ElevenLabsSaved");
