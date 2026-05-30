@@ -2053,7 +2053,18 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                         .Set(t => { t.FontSize = 11; }).VAlign(VerticalAlignment.Center)
                 ) with { ColumnGap = 8 }).Margin(0, 0, 0, 0);
 
-                var headerButton = Button(headerContent, toggleTaskList).Set(b =>
+                // A11y: provide an explicit automation name so Narrator announces
+                // the full card state when the header button is focused. The body
+                // content sits outside the Button's automation subtree (it is a
+                // sibling, not a child), so the button name must summarise the
+                // entire card — including task description, step count, and status.
+                var headerAutomationName = effectiveExpanded
+                    ? $"{summaryLine}, {stepCountLabel}, {taskStatusText}, expanded"
+                    : $"{summaryLine}, {stepCountLabel}, {taskStatusText}, collapsed";
+
+                var headerButton = Button(headerContent, toggleTaskList)
+                    .AutomationName(headerAutomationName)
+                    .Set(b =>
                 {
                     b.HorizontalAlignment = HorizontalAlignment.Stretch;
                     b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -2072,8 +2083,11 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
                 {
                     // Body sits inside the same card; thin top border so the
                     // header + body read as one unit but the divide is clear.
+                    // A11y: label the body region so Narrator scan-mode users
+                    // understand its relationship to the header above it.
                     cardChildren.Add(
                         Border(VStack(8, stepRows.ToArray()))
+                            .AutomationName($"Tool steps for: {summaryLine}")
                             .Set(b =>
                             {
                                 b.Padding = bubblePadding;
