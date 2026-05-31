@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-31T01:26:33Z",
-  "last_run_id": "26699926026",
+  "last_run": "2026-05-31T12:48:26Z",
+  "last_run_id": "26713016571",
   "backlog_cursor": {
     "issue_number": 593,
     "comment_cursor": 593
@@ -25,7 +25,7 @@
     "372": "2026-05-24",
     "460": "2026-05-27",
     "552": "2026-05-27",
-    "554": "2026-05-27",
+    "554": "2026-05-31",
     "555": "2026-05-27",
     "563": "2026-05-28",
     "570": "2026-05-28",
@@ -58,8 +58,8 @@
     "552": {"pr": null, "branch": "repo-assist/fix-issue-552-async-void-connection-handlers", "status": "open", "date": "2026-05-27", "note": "Partial fix: guarded OnNodeStatusChanged and OnNodePairingStatusChanged in GatewayConnectionManager. WinUI layer still needs a separate pass."},
     "570": {"pr": 571, "branch": "repo-assist/fix-issue-570-bump-version-0.5.0", "status": "open", "date": "2026-05-28"},
     "583": {"pr": 585, "branch": "repo-assist/fix-issue-583-mojibake-resources", "status": "open", "date": "2026-05-29"},
-    "590": {"pr": 603, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30", "note": "Set explicit AutomationName on CompactSummary headerButton and body Border. PR #603 created."},
-    "593": {"pr": null, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31", "note": "Branch RuntimeInformation.OSArchitecture on Arm64 to show UEFI/Intune/HVCI wording instead of VT-x/AMD-V. PR pending creation."}
+    "590": {"pr": 608, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30", "note": "PR #608 and #603 both address this. #608 from last run."},
+    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31", "note": "Branch RuntimeInformation.OSArchitecture on Arm64 to show UEFI/Intune/HVCI wording instead of VT-x/AMD-V. PR #609."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
@@ -70,7 +70,8 @@
     "activitystreamservice-tests": {"pr": 535, "branch": "repo-assist/improve-activitystreamservice-tests-2026-05-25", "status": "merged", "date": "2026-05-26"},
     "execcmdtoken-tests": {"pr": 548, "branch": "repo-assist/improve-execcmdtoken-tests-2026-05-27", "status": "open", "date": "2026-05-27"},
     "json-options-cache": {"pr": 566, "branch": "repo-assist/improve-json-options-cache-2026-05-28", "status": "open", "date": "2026-05-28"},
-    "deriveoverall-tests": {"pr": 595, "branch": "repo-assist/improve-deriveoverall-tests-2026-05-30", "status": "open", "date": "2026-05-30"}
+    "deriveoverall-tests": {"pr": 595, "branch": "repo-assist/improve-deriveoverall-tests-2026-05-30", "status": "open", "date": "2026-05-30"},
+    "device-token-handoff-tests": {"pr": null, "branch": "repo-assist/improve-device-token-handoff-tests-2026-05-31", "status": "open", "date": "2026-05-31", "note": "4 tests: node role clears bootstrap, operator role preserves it, already-null no-crash, identity store persistence. 269 connection tests pass."}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
@@ -87,5 +88,5 @@
   },
   "open_repo_assist_issues": [435],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "2026-05-31 (run 26699926026): Task 3+10. Created PR for #590 a11y fix (PR #603, already existed from prior run). Created new ARM64 fix for #593 in branch repo-assist/fix-issue-593-arm64-wsl-virt-message - branches RuntimeInformation.OSArchitecture to show Arm64-specific UEFI/HVCI message. Infrastructure failures (GitVersion env-file) prevent build validation in this environment - pre-existing issue."
+  "notes": "2026-05-31 (run 26713016571): Task 2+9. Commented on #554 (AlexAlves87 posted 4 extraction PRs #604-607 today). Created test PR for DeviceTokenReceived bootstrap handoff (4 tests, all pass, 269 total connection tests). Infrastructure failures (GitVersion env-file) prevent full build validation - pre-existing issue."
 }
