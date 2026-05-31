@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using OpenClaw.Connection;
 using OpenClaw.Shared;
@@ -93,15 +94,21 @@ internal static class WslInstallSupport
     {
         var text = Normalize(output);
 
-        // Firmware virtualization off (VT-x/AMD-V disabled in BIOS/UEFI).
+        // Firmware virtualization off (VT-x/AMD-V or ARM EL2 disabled).
         // wsl.exe emits this when the Windows feature is installed but the
         // CPU virtualization extension is turned off; remediation requires
         // a trip into firmware settings, not `wsl --install`.
         if (Contains(text, "virtualization is not enabled"))
         {
-            message = "WSL2 requires hardware virtualization, but it is disabled in firmware. "
-                + "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
-                + "reboot, then retry setup.";
+            message = RuntimeInformation.OSArchitecture == Architecture.Arm64
+                ? "WSL2 requires hardware virtualization, but it is disabled in firmware. "
+                    + "Enable virtualization in your device's UEFI settings (look for "
+                    + "'Virtualization Support' or similar). On managed devices this may be "
+                    + "controlled by your organization's Intune policy (Memory Integrity / HVCI). "
+                    + "Reboot, then retry setup."
+                : "WSL2 requires hardware virtualization, but it is disabled in firmware. "
+                    + "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
+                    + "reboot, then retry setup.";
             return true;
         }
 
