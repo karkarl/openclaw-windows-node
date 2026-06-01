@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-06-01T01:30:16Z",
-  "last_run_id": "26730436630",
+  "last_run": "2026-06-01T14:27:53Z",
+  "last_run_id": "26760907527",
   "backlog_cursor": {
     "issue_number": 593,
     "comment_cursor": 593
@@ -50,36 +50,36 @@
   },
   "fix_attempts": {
     "351": {"pr": 448, "branch": "repo-assist/fix-mcp-tool-descriptions", "status": "merged", "date": "2026-05-18"},
-    "432": {"pr": null, "branch": "repo-assist/fix-issue-432-tfm-dynamic", "status": "closed-no-merge", "date": "2026-05-18"},
     "459": {"pr": 482, "branch": "repo-assist/fix-issue-459-session-key-missing", "status": "merged", "date": "2026-05-21"},
     "467": {"pr": 472, "branch": "repo-assist/fix-issue-467-wsl-parent-dir-cleanup", "status": "merged", "date": "2026-05-20"},
-    "460": {"pr": 540, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "closed-no-merge", "note": "Fix was committed to master directly (2ca3457). Issue should be closed."},
-    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "date": "2026-05-26", "note": "Fix was committed directly to master (51c4b4fd). Issue still open."},
-    "552": {"pr": null, "branch": "repo-assist/fix-issue-552-async-void-connection-handlers", "status": "open", "date": "2026-05-27", "note": "Partial fix: guarded OnNodeStatusChanged and OnNodePairingStatusChanged in GatewayConnectionManager. WinUI layer still needs a separate pass."},
+    "460": {"pr": 540, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "closed-no-merge", "note": "Fix committed to master (2ca3457). Issue should be closed."},
+    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "note": "Fix committed to master (51c4b4fd). Issue still open."},
+    "552": {"pr": null, "branch": "repo-assist/fix-issue-552-async-void-connection-handlers", "status": "open", "date": "2026-05-27"},
     "570": {"pr": 571, "branch": "repo-assist/fix-issue-570-bump-version-0.5.0", "status": "open", "date": "2026-05-28"},
     "583": {"pr": 585, "branch": "repo-assist/fix-issue-583-mojibake-resources", "status": "open", "date": "2026-05-29"},
-    "590": {"pr": 608, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30", "note": "PR #608 and #603 both address this. #608 from last run."},
-    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31", "note": "Branch RuntimeInformation.OSArchitecture on Arm64 to show UEFI/Intune/HVCI wording instead of VT-x/AMD-V. PR #609."},
-    "453": {"pr": null, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01", "note": "Sidecar approach: attachment-sidecar.json written alongside tool-metadata.json. Records trimmedText+sentAtMs+attachments per thread. On LoadHistoryAsync, re-injects chip markers. 5 tests added. 879 passed."}
+    "590": {"pr": 608, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30"},
+    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31"},
+    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01"}
   },
   "improve_attempts": {
-    "deep-link-parser-tests": {"pr": 456, "branch": "repo-assist/improve-deeplink-tests-2026-05-19", "status": "merged", "date": "2026-05-19"},
-    "node-capability-gating-tests": {"pr": 495, "branch": "repo-assist/improve-nodecapabilitygating-tests-2026-05-21", "status": "merged", "date": "2026-05-21"},
-    "menuhelpers-tests": {"pr": 522, "branch": "repo-assist/improve-menuhelpers-tests-2026-05-23", "status": "merged", "date": "2026-05-23"},
-    "channel-result-tests": {"pr": 528, "branch": "repo-assist/improve-channel-result-tests-2026-05-23", "status": "merged", "date": "2026-05-26"},
-    "operatorscopehelper-tests": {"pr": 530, "branch": "repo-assist/improve-operatorscopehelper-tests-2026-05-24", "status": "merged", "date": "2026-05-26"},
-    "activitystreamservice-tests": {"pr": 535, "branch": "repo-assist/improve-activitystreamservice-tests-2026-05-25", "status": "merged", "date": "2026-05-26"},
-    "execcmdtoken-tests": {"pr": 548, "branch": "repo-assist/improve-execcmdtoken-tests-2026-05-27", "status": "open", "date": "2026-05-27"},
-    "json-options-cache": {"pr": 566, "branch": "repo-assist/improve-json-options-cache-2026-05-28", "status": "open", "date": "2026-05-28"},
-    "deriveoverall-tests": {"pr": 595, "branch": "repo-assist/improve-deriveoverall-tests-2026-05-30", "status": "open", "date": "2026-05-30"},
-    "device-token-handoff-tests": {"pr": 612, "branch": "repo-assist/improve-device-token-handoff-tests-2026-05-31", "status": "open", "date": "2026-05-31", "note": "4 tests: node role clears bootstrap, operator role preserves it, already-null no-crash, identity store persistence. 269 connection tests pass."}
+    "deep-link-parser-tests": {"pr": 456, "status": "merged"},
+    "node-capability-gating-tests": {"pr": 495, "status": "merged"},
+    "menuhelpers-tests": {"pr": 522, "status": "merged"},
+    "channel-result-tests": {"pr": 528, "status": "merged"},
+    "operatorscopehelper-tests": {"pr": 530, "status": "merged"},
+    "activitystreamservice-tests": {"pr": 535, "status": "merged"},
+    "execcmdtoken-tests": {"pr": 548, "status": "open", "date": "2026-05-27"},
+    "json-options-cache": {"pr": 566, "status": "open", "date": "2026-05-28"},
+    "deriveoverall-tests": {"pr": 595, "status": "open", "date": "2026-05-30"},
+    "device-token-handoff-tests": {"pr": 612, "status": "open", "date": "2026-05-31"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
     "nuget-audit-tests": {"pr": 539, "status": "merged"},
     "bump-nuget-packages-2026-05-29": {"pr": 578, "status": "open"}
   },
-  "monthly_activity_issue": 435,
+  "monthly_activity_issue": 616,
+  "monthly_activity_may_closed": 435,
   "engineering_checks": {
     "test_coverage_doc": "2026-05-22",
     "dependency_audit": "2026-05-29",
@@ -87,7 +87,7 @@
     "treat_warnings_as_errors": "2026-05-23",
     "nuget_audit_tests": "2026-05-25"
   },
-  "open_repo_assist_issues": [435],
+  "open_repo_assist_issues": [],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "2026-06-01 (run 26730436630): Task 10+3. Implemented attachment sidecar fix for #453 (P2 data-loss). Branch repo-assist/fix-issue-453-attachment-sidecar. Sidecar stores trimmedText+sentAtMs+filename+isImage per thread. On history reload, re-injects chip markers. 879/881 tests passed. Infrastructure failures (GitVersion env-file) pre-existing. PR submitted via safeoutputs."
+  "notes": "2026-06-01 (run 26760907527): Tasks 7+2+11. Task 7: no stale PRs (oldest human PR 9 days). Task 2: no new human issue activity since last run. Task 11: closed May issue #435, created June issue (aw_jun2026). monthly_activity_issue updated to new June issue number (update once known)."
 }
