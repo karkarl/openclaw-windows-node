@@ -21,9 +21,18 @@
     cannot read a repo owned by a different Windows account/group. The script
     will print the manual command instead.
 
+.PARAMETER PackageMsix
+    In addition to the always-packaged loose-layout build, produce a .msix
+    package file in src/OpenClaw.Tray.WinUI/AppPackages/. Requires the
+    OpenClaw.Tray.WinUI project to be in the build set (Project=All, Tray, or
+    WinUI). If %LOCALAPPDATA%\OpenClawTray\dev-msix.pfx exists the .msix is
+    signed with that cert (run scripts\setup-dev-msix-cert.ps1 once to create
+    it); otherwise the .msix is unsigned.
+
 .EXAMPLE
     .\build.ps1
     .\build.ps1 -Project WinUI -Configuration Release
+    .\build.ps1 -Project WinUI -PackageMsix
     .\build.ps1 -CheckOnly
 #>
 
@@ -36,7 +45,9 @@ param(
     
     [switch]$CheckOnly,
 
-    [switch]$NoTrustRepository
+    [switch]$NoTrustRepository,
+
+    [switch]$PackageMsix
 )
 
 $ErrorActionPreference = "Stop"
@@ -297,7 +308,7 @@ function Invoke-DotNetCaptured($arguments) {
     }
 }
 
-function Build-Project($name, $path, $useRid = $false) {
+function Build-Project($name, $path, $useRid = $false, $publishMsix = $false) {
     Write-Host "`nBuilding $name..." -ForegroundColor White
     
     if (-not (Test-Path $path)) {
@@ -305,10 +316,16 @@ function Build-Project($name, $path, $useRid = $false) {
         return $false
     }
     
-    $dotnetArgs = @("build", $path, "-c", $Configuration)
-    # WinUI requires runtime identifier for self-contained WebView2 support
-    if ($useRid) {
-        $dotnetArgs += @("-r", $rid)
+    if ($publishMsix) {
+        # MSIX file production: dotnet publish so the self-contained layout MSIX
+        # tooling packages matches what end-users install. -p:PackageMsix=true
+        # turns on GenerateAppxPackageOnBuild in the csproj.
+        $dotnetArgs = @("publish", $path, "-c", $Configuration, "-r", $rid, "--self-contained", "-p:PackageMsix=true")
+    } elseif ($useRid) {
+        # WinUI requires runtime identifier for self-contained WebView2 support.
+        $dotnetArgs = @("build", $path, "-c", $Configuration, "-r", $rid)
+    } else {
+        $dotnetArgs = @("build", $path, "-c", $Configuration)
     }
     $result = Invoke-DotNetCaptured $dotnetArgs
     $exitCode = $LASTEXITCODE
@@ -369,11 +386,32 @@ if ($Project -ne "Shared" -and $Project -ne "All" -and $toBuild -notcontains "Sh
     $toBuild = @("Shared") + $toBuild
 }
 
+# -PackageMsix preflight: must include WinUI/Tray and (warn only) check PFX.
+if ($PackageMsix) {
+    $winUITargetIncluded = ($toBuild -contains "WinUI") -or ($toBuild -contains "Tray")
+    if (-not $winUITargetIncluded) {
+        Write-Error "-PackageMsix requires -Project All, Tray, or WinUI (current: $Project)"
+        exit 1
+    }
+
+    $devPfx = Join-Path $env:LOCALAPPDATA "OpenClawTray\dev-msix.pfx"
+    if (Test-Path $devPfx) {
+        Write-Success "Dev MSIX signing cert found: $devPfx"
+    } else {
+        Write-Warning "Dev MSIX signing cert not found at $devPfx"
+        Write-Info "The .msix will be unsigned and must be installed with: Add-AppxPackage -AllowUnsigned -Path <msix>"
+        Write-Info "To produce a signed .msix instead, run (elevated):"
+        Write-Info "  .\scripts\setup-dev-msix-cert.ps1"
+    }
+}
+
 for ($i = 0; $i -lt $toBuild.Count; $i++) {
     $proj = $toBuild[$i]
     if ($projects.ContainsKey($proj)) {
         $projInfo = $projects[$proj]
-        $buildResults[$proj] = Build-Project $proj $projInfo.Path $projInfo.UseRid
+        $isWinUI = ($proj -eq "WinUI" -or $proj -eq "Tray")
+        $shouldPackageMsix = $PackageMsix -and $isWinUI
+        $buildResults[$proj] = Build-Project $proj $projInfo.Path $projInfo.UseRid $shouldPackageMsix
         if ($proj -eq "Shared" -and -not $buildResults[$proj] -and $i -lt ($toBuild.Count - 1)) {
             Write-Warning "Skipping remaining projects because Shared failed."
             break
@@ -409,10 +447,31 @@ if ($failCount -eq 0) {
             $winUIManifestPath = ".\$winUIProjectDirectory\Package.appxmanifest"
             Write-Host "  WinUI:    .\run-app-local.ps1 -NoBuild" -ForegroundColor White
             Write-Host "  Isolated: .\run-app-local.ps1 -NoBuild -Isolated" -ForegroundColor White
-            Write-Host "  WinApp:   .\run-app-local.ps1 -NoBuild -UseWinApp" -ForegroundColor White
-            Write-Host "            Direct launch is default. -UseWinApp runs: winapp run `"$winUIOutputDirectory`" --manifest `"$winUIManifestPath`" --executable `"OpenClaw.Tray.WinUI.exe`" --debug-output" -ForegroundColor DarkGray
+            Write-Host "            Runs: winapp run `"$winUIOutputDirectory`" --manifest `"$winUIManifestPath`" --executable `"OpenClaw.Tray.WinUI.exe`" --debug-output" -ForegroundColor DarkGray
         } else {
             Write-Warning "Unable to determine WinUI target framework from $winUIProjectPath"
+        }
+
+        if ($PackageMsix) {
+            $appPackagesDir = Join-Path $winUIProjectDirectory "AppPackages"
+            $producedMsix = $null
+            if (Test-Path $appPackagesDir) {
+                $producedMsix = Get-ChildItem -Path $appPackagesDir -Recurse -Filter "*.msix" -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            }
+
+            Write-Host "`nMSIX:" -ForegroundColor Cyan
+            if ($producedMsix) {
+                Write-Host "  Path:     $($producedMsix.FullName)" -ForegroundColor White
+                $devPfx = Join-Path $env:LOCALAPPDATA "OpenClawTray\dev-msix.pfx"
+                if (Test-Path $devPfx) {
+                    Write-Host "  Install:  Add-AppxPackage -Path `"$($producedMsix.FullName)`"" -ForegroundColor White
+                } else {
+                    Write-Host "  Install:  Add-AppxPackage -AllowUnsigned -Path `"$($producedMsix.FullName)`"  (elevated)" -ForegroundColor White
+                }
+            } else {
+                Write-Warning "Could not locate produced .msix under $appPackagesDir"
+            }
         }
     }
 } else {

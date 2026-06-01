@@ -383,10 +383,10 @@ jobs:
       run: dotnet restore src/OpenClaw.Tray.WinUI -r ${{ matrix.rid }}
 
     - name: Build WinUI Tray App (Release)
-      run: dotnet build src/OpenClaw.Tray.WinUI --no-restore -c Release -r ${{ matrix.rid }}
+      run: dotnet build src/OpenClaw.Tray.WinUI --no-restore -c Release -r ${{ matrix.rid }} -p:Unpackaged=true
 
     - name: Publish WinUI Tray App
-      run: dotnet publish src/OpenClaw.Tray.WinUI -c Release -r ${{ matrix.rid }} --self-contained --no-restore -o publish
+      run: dotnet publish src/OpenClaw.Tray.WinUI -c Release -r ${{ matrix.rid }} --self-contained --no-restore -o publish -p:Unpackaged=true
 
     - name: Verify x64 Native Runtime Payload
       if: matrix.rid == 'win-x64'

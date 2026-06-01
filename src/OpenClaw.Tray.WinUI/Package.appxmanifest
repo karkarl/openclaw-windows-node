@@ -9,13 +9,17 @@
   <!-- IMPORTANT: Publisher must exactly match the Azure Artifact Signing certificate subject.
        Check your certificate profile at: Azure Portal > Artifact Signing > openclaw > openclaw
        Update the Publisher= value below to match. -->
-  <!-- Version is patched at build time by the SyncAppxManifestVersionTarget in
-       OpenClaw.Tray.WinUI.csproj from $(Version) (see docs/VERSIONING.md).
-       The 0.0.0.0 below is a sentinel and is never shipped. -->
+  <!-- Version: the always-packaged dev path (WinAppCLI loose-layout register,
+       VS F5 with the MsixPackage launch profile) reads this value as-is, so
+       the in-source baseline must be a valid 4-part MSIX version (not all
+       zeros). For .msix file production (build.ps1 -PackageMsix / CI build-msix
+       job) SyncAppxManifestVersionTarget in OpenClaw.Tray.WinUI.csproj
+       overwrites this with the GitVersion-derived $(Version); see
+       docs/VERSIONING.md. -->
   <Identity
     Name="OpenClaw.Companion"
     Publisher="CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US"
-    Version="0.0.0.0" />
+    Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>OpenClaw Companion</DisplayName>

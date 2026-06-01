@@ -100,7 +100,8 @@ function Publish-ArchitecturePayload {
         "-r", $RuntimeIdentifier,
         "--self-contained",
         "-o", $publishDir,
-        "-v:minimal"
+        "-v:minimal",
+        "-p:Unpackaged=true"
     )
     if ($PublishVersion) {
         $trayPublishArgs += "-p:Version=$PublishVersion"

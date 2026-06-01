@@ -22,21 +22,52 @@
     <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <!-- Unpackaged (default): traditional EXE distribution via Inno Setup -->
-  <PropertyGroup Condition="'$(PackageMsix)' != 'true'">
+  <!-- Packaging mode (two opt-in flags; default is always-packaged MSIX loose layout).
+
+       Default (no flags): WindowsPackageType=MSIX. `dotnet build` produces a
+       packaged loose layout in $(TargetDir) (Package.appxmanifest +
+       AppxManifest.xml + payload). Dev launches it via WinAppCLI
+       (`run-app-local.ps1`) or VS F5 (MsixPackage launch profile, see
+       Properties\launchSettings.json). No .msix file is generated and no
+       signing happens; no cert required.
+
+       -p:PackageMsix=true (build.ps1 -PackageMsix; CI build-msix job): also
+       produce a .msix file in AppPackages\. Signing auto-detects the dev PFX
+       at %LOCALAPPDATA%\OpenClawTray\dev-msix.pfx (run
+       scripts\setup-dev-msix-cert.ps1 once to create it). When present the
+       .msix installs via plain Add-AppxPackage; when absent the .msix is
+       unsigned and requires Add-AppxPackage -AllowUnsigned. CI/release
+       overrides these properties to sign with the production cert.
+
+       -p:Unpackaged=true (scripts\build-inno-local.ps1; CI Inno publish job):
+       legacy unpackaged WindowsPackageType=None + app.manifest path that
+       feeds the Inno Setup installer. Not used by interactive dev. -->
+  <PropertyGroup Condition="'$(Unpackaged)' != 'true'">
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Unpackaged)' == 'true'">
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
-  <!-- MSIX packaged: enables camera/mic consent prompts, package identity -->
   <PropertyGroup Condition="'$(PackageMsix)' == 'true'">
-    <WindowsPackageType>MSIX</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
     <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
     <AppxBundle>Never</AppxBundle>
     <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
+    <!-- Local dev signing: scripts\setup-dev-msix-cert.ps1 provisions a
+         self-signed cert and exports it to the well-known per-user PFX path
+         below. When that file exists, the build signs the .msix with it so the
+         output package installs with plain Add-AppxPackage (no -AllowUnsigned
+         dance). When it doesn't exist, the .msix is unsigned. CI/release
+         pipelines override these properties to sign with the production cert. -->
+    <OpenClawDevMsixPfx>$(LOCALAPPDATA)\OpenClawTray\dev-msix.pfx</OpenClawDevMsixPfx>
+    <AppxPackageSigningEnabled Condition="!Exists('$(OpenClawDevMsixPfx)')">false</AppxPackageSigningEnabled>
+    <AppxPackageSigningEnabled Condition="Exists('$(OpenClawDevMsixPfx)')">true</AppxPackageSigningEnabled>
+    <PackageCertificateKeyFile Condition="Exists('$(OpenClawDevMsixPfx)')">$(OpenClawDevMsixPfx)</PackageCertificateKeyFile>
+    <PackageCertificatePassword Condition="Exists('$(OpenClawDevMsixPfx)')">openclaw-dev</PackageCertificatePassword>
     <!-- MSIX package version (Identity/Version in Package.appxmanifest) is auto-synced from
          $(Version) by the SyncAppxManifestVersion target below; this is the only place the
          Version is written. -->
@@ -93,11 +124,12 @@
 
   <!--
     Single source of truth for the app version is GitVersion/tag history (see docs/VERSIONING.md).
-    Package.appxmanifest carries a sentinel Version="0.0.0.0" in source; the real version is patched
-    in only when actually packaging MSIX (WindowsPackageType=MSIX), so unpackaged dev builds leave
-    the file untouched and git stays clean. CI's manifest patch step (.github/workflows/ci.yml)
-    only writes Identity/Name and DisplayName; Version is written by this target from the
-    GitVersion-derived $(Version).
+    Package.appxmanifest carries a baseline Version in source (e.g. 1.0.0.0) so the always-packaged
+    dev path (WinAppCLI loose-layout register, VS F5) can use the in-source manifest as-is. The
+    real release version is patched in only when actually producing a .msix file (PackageMsix=true),
+    so default `dotnet build` runs leave the file untouched and git stays clean. CI's manifest patch
+    step (.github/workflows/ci.yml) only writes Identity/Name and DisplayName; Version is written
+    by this target from the GitVersion-derived $(Version).
 
     Uses a regex string-replace (not XmlPoke) to preserve the manifest's hand-formatted layout.
     The MSIX Identity/Version must be a 4-part version (X.Y.Z.W) with no pre-release suffix;
@@ -172,11 +204,11 @@
     </Task>
   </UsingTask>
 
-  <Target Name="SyncAppxManifestVersionTarget" BeforeTargets="BeforeBuild;_GenerateCurrentProjectAppxManifest" Condition="'$(WindowsPackageType)' == 'MSIX'">
+  <Target Name="SyncAppxManifestVersionTarget" BeforeTargets="BeforeBuild;_GenerateCurrentProjectAppxManifest" Condition="'$(PackageMsix)' == 'true'">
     <!-- Fail loudly if MSIX packaging was requested but no version was supplied; without
-         this, the target would silently skip and the sentinel 0.0.0.0 in the source manifest
-         would ship in the MSIX package. -->
-    <Error Text="MSIX packaging requested (WindowsPackageType=MSIX) but Version is empty. Ensure GitVersion can read this repository's tag history or pass /p:Version=X.Y[.Z]." Condition="'$(Version)' == ''" />
+         this, the target would silently skip and the baseline version in the source
+         manifest would ship in the .msix package. -->
+    <Error Text="MSIX packaging requested (PackageMsix=true) but Version is empty. Ensure GitVersion can read this repository's tag history or pass /p:Version=X.Y[.Z]." Condition="'$(Version)' == ''" />
     <PropertyGroup>
       <_AppxManifestPath>$(MSBuildThisFileDirectory)Package.appxmanifest</_AppxManifestPath>
       <_StrippedVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(Version)', '[-+].*$', ''))</_StrippedVersion>
@@ -237,7 +269,7 @@
   </Target>
 
   <!-- Copy WebView2Loader.dll to output root for unpackaged app (not needed for MSIX) -->
-  <Target Name="CopyWebView2Loader" AfterTargets="Build" Condition="'$(PackageMsix)' != 'true'">
+  <Target Name="CopyWebView2Loader" AfterTargets="Build" Condition="'$(Unpackaged)' == 'true'">
     <PropertyGroup>
       <!-- Detect ARM64 via RuntimeIdentifier, Platform, or processor architecture -->
       <IsArm64Build Condition="'$(Platform)' == 'ARM64' OR '$(RuntimeIdentifier)' == 'win-arm64' OR '$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">true</IsArm64Build>

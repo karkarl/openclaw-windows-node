@@ -74,8 +74,12 @@ dotnet build src/OpenClaw.Tray.WinUI -r win-x64 -p:PackageMsix=true    # x64 MSI
 
 ### Run Tray App
 
+The tray always runs as a packaged WinUI app in development. `run-app-local.ps1`
+uses Microsoft WinAppCLI (`winget install Microsoft.WinAppCLI`) to activate the
+build output as a packaged loose layout — no `.msix` file is required.
+
 ```powershell
-# Build and launch the unpackaged WinUI tray app
+# Build and launch the tray app (packaged loose layout via winapp)
 .\run-app-local.ps1
 
 # If you already built, skip rebuild and launch the existing Debug output
@@ -86,14 +90,7 @@ dotnet build src/OpenClaw.Tray.WinUI -r win-x64 -p:PackageMsix=true    # x64 MSI
 
 # Alpha update testing from a Release build
 .\run-app-local.ps1 -Configuration Release -Isolated -UpdateChannel alpha
-
-# Optional: launch through WinAppCLI with Package.appxmanifest
-.\run-app-local.ps1 -UseWinApp -NoBuild
 ```
-
-The default path starts the unpackaged executable directly. `-UseWinApp` requires
-Microsoft WinAppCLI (`winget install Microsoft.WinAppCLI`) and is only needed when
-you want manifest/MSIX-adjacent launch validation.
 
 ### Run CLI WebSocket Validator
 
