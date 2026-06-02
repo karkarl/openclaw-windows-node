@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using OpenClaw.Connection;
 using OpenClaw.Shared;
@@ -90,18 +91,20 @@ internal static class WslInstallSupport
     // sentences are not, and over-broad fallbacks just create false
     // positives.
     public static bool TryGetEnvironmentIssue(string output, out string message)
+        => TryGetEnvironmentIssue(output, RuntimeInformation.OSArchitecture, out message);
+
+    internal static bool TryGetEnvironmentIssue(string output, Architecture osArchitecture, out string message)
     {
         var text = Normalize(output);
 
-        // Firmware virtualization off (VT-x/AMD-V disabled in BIOS/UEFI).
+        // Firmware virtualization off.
         // wsl.exe emits this when the Windows feature is installed but the
         // CPU virtualization extension is turned off; remediation requires
         // a trip into firmware settings, not `wsl --install`.
         if (Contains(text, "virtualization is not enabled"))
         {
             message = "WSL2 requires hardware virtualization, but it is disabled in firmware. "
-                + "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
-                + "reboot, then retry setup.";
+                + GetVirtualizationDisabledRemediation(osArchitecture);
             return true;
         }
 
@@ -124,6 +127,14 @@ internal static class WslInstallSupport
 
         static bool Contains(string haystack, string needle)
             => haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+        static string GetVirtualizationDisabledRemediation(Architecture architecture)
+            => architecture == Architecture.Arm64
+                ? "Enable virtualization in your device's UEFI settings (look for 'Virtualization Support' or similar). "
+                    + "On managed ARM64 devices, this may be controlled by your organization's Intune policy "
+                    + "(Memory Integrity / Pluton / HVCI). Reboot, then retry setup."
+                : "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
+                    + "reboot, then retry setup.";
     }
 
     public static string[] BuildDirectInstallArgs(string baseDistro, string distroName, string installPath)

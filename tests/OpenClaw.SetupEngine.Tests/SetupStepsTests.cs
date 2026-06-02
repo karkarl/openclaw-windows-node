@@ -1,6 +1,7 @@
 using OpenClaw.Connection;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 
 namespace OpenClaw.SetupEngine.Tests;
 
@@ -512,9 +513,28 @@ public class SetupStepsTests : IDisposable
             "WSL2 is unable to start since virtualization is not enabled on this machine. "
             + "Please ensure the 'Virtual Machine Platform' optional component is enabled "
             + "and virtualization is turned on in your computer's firmware settings.",
+            Architecture.X64,
             out var message));
         Assert.Contains("BIOS", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("VT-x", message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("virtualization", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WslInstallSupport_TryGetEnvironmentIssue_UsesArm64FirmwareWordingOnArm64()
+    {
+        Assert.True(WslInstallSupport.TryGetEnvironmentIssue(
+            "WSL2 is unable to start since virtualization is not enabled on this machine. "
+            + "Please ensure the 'Virtual Machine Platform' optional component is enabled "
+            + "and virtualization is turned on in your computer's firmware settings.",
+            Architecture.Arm64,
+            out var message));
+        Assert.Contains("ARM64", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UEFI", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Virtualization Support", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("VT-x", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("AMD-V", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SVM", message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -561,7 +581,6 @@ public class SetupStepsTests : IDisposable
 
         Assert.Equal(StepOutcome.FailedTerminal, result.Outcome);
         Assert.Contains("virtualization", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("BIOS", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
