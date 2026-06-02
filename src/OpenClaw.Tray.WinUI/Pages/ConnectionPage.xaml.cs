@@ -109,20 +109,7 @@ public sealed partial class ConnectionPage : Page
         var settings = CurrentApp.Settings;
         if (settings == null) return;
 
-        // Local-WSL install entry points. The hub only exposes
-        // OpenSetupAction on platforms where WSL tooling is wired up; if
-        // it's null we hide the entry points so the user isn't offered a
-        // button that does nothing.
-        //   • WelcomeLocalWslSetupCard — get-started CTA on the empty-state
-        //     Welcome screen for first-run users.
-        //   • AddLocalWslItem — third method tab inside the Add Gateway
-        //     form, alongside Direct and Setup code.
-        var localSetupAvailable = true;
-        var localSetupVisibility = localSetupAvailable
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        WelcomeLocalWslSetupCard.Visibility = localSetupVisibility;
-        AddLocalWslItem.Visibility = localSetupVisibility;
+        UpdateLocalWslSetupEntryVisibility();
 
         if (_connectionManager != null)
             _connectionManager.StateChanged += OnManagerStateChanged;
@@ -203,9 +190,28 @@ public sealed partial class ConnectionPage : Page
     {
         DispatcherQueue?.TryEnqueue(() =>
         {
+            UpdateLocalWslSetupEntryVisibility();
             LoadSavedGateways();
             RefreshFromSnapshot(_lastSnapshot);
         });
+    }
+
+    private void UpdateLocalWslSetupEntryVisibility()
+    {
+        var hasLocalWslGateway = _gatewayRegistry?.GetAll()
+            .Any(record => GatewayHostAccessClassifier.Classify(record).IsWslManaged) == true;
+
+        var localSetupVisibility = hasLocalWslGateway
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        WelcomeLocalWslSetupCard.Visibility = localSetupVisibility;
+        AddLocalWslItem.Visibility = localSetupVisibility;
+
+        if (hasLocalWslGateway && AddLocalWslItem.IsSelected)
+        {
+            AddDirectItem.IsSelected = true;
+            ShowAddPane("direct");
+        }
     }
 
     // ─── Plan apply ───────────────────────────────────────────────────

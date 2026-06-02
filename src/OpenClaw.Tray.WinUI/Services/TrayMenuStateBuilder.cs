@@ -302,9 +302,10 @@ internal sealed class TrayMenuStateBuilder
         // Voice overlay disabled — inline chat voice mode is used instead.
         // menu.AddMenuItem("Voice", FluentIconCatalog.Build(FluentIconCatalog.VoiceAct), "voice");
 
-        // Setup Guide / Reconfigure entry — label flips based on whether prior
-        // configuration exists; routes to the existing "setup" action handler.
-        menu.AddMenuItem(_snapshot.SetupMenuLabel, FluentIconCatalog.Build(FluentIconCatalog.Setup), "setup");
+        if (_snapshot.ShowSetupMenuItem)
+        {
+            menu.AddMenuItem(_snapshot.SetupMenuLabel, FluentIconCatalog.Build(FluentIconCatalog.Setup), "setup");
+        }
 
         // ── Footer ──
         menu.AddSeparator();

@@ -1187,12 +1187,9 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     private TrayMenuSnapshot CaptureTrayMenuSnapshot()
     {
-        // Show "Reconfigure" if there's an existing setup, "Setup Guide" if fresh
-        var hasExistingConfig = _settings != null
-            && !StartupSetupState.RequiresSetup(_settings, IdentityDataPath, _gatewayRegistry);
-        var setupMenuLabel = hasExistingConfig
-            ? LocalizationHelper.GetString("Menu_Reconfigure")
-            : LocalizationHelper.GetString("Menu_SetupGuide");
+        var hasGatewayRecords = (_gatewayRegistry?.GetAll().Count ?? 0) > 0;
+        var showSetupMenuItem = !hasGatewayRecords;
+        var setupMenuLabel = LocalizationHelper.GetString("Menu_SetupGuide");
 
         return new TrayMenuSnapshot
         {
@@ -1213,6 +1210,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             UsageStatus = _appState?.UsageStatus,
             UsageCost = _appState?.UsageCost,
             Settings = _settings,
+            ShowSetupMenuItem = showSetupMenuItem,
             SetupMenuLabel = setupMenuLabel,
         };
     }
