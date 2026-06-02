@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-06-02T01:27:48Z",
-  "last_run_id": "26792605989",
+  "last_run": "2026-06-02T13:42:51Z",
+  "last_run_id": "26823599987",
   "backlog_cursor": {
     "issue_number": 593,
     "comment_cursor": 593
@@ -59,7 +59,7 @@
     "590": {"pr": 608, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30"},
     "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31"},
     "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01"},
-    "458": {"pr": null, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open", "date": "2026-06-02", "note": "PR pending number from safeoutputs"}
+    "458": {"pr": 628, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open", "date": "2026-06-02"}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -72,7 +72,8 @@
     "json-options-cache": {"pr": 566, "status": "open", "date": "2026-05-28"},
     "deriveoverall-tests": {"pr": 595, "status": "open", "date": "2026-05-30"},
     "device-token-handoff-tests": {"pr": 612, "status": "open", "date": "2026-05-31"},
-    "device-identity-store-tests": {"pr": null, "status": "open", "date": "2026-06-02", "note": "Bundled in fix-issue-458 PR (pending number)"}
+    "device-identity-store-tests": {"pr": 628, "status": "open", "date": "2026-06-02", "note": "Bundled in PR #628"},
+    "async-event-handler-guard-tests": {"pr": null, "status": "open", "date": "2026-06-02", "note": "PR pending number from safeoutputs; branch: repo-assist/improve-async-event-handler-guard-tests"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
@@ -90,5 +91,5 @@
   },
   "open_repo_assist_issues": [],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "2026-06-02 (run 26792605989): Tasks 3+9+11. Task 3: Fixed missing _keylessEventDiagnosticRaised reset on reconnect in OpenClawChatDataProvider.cs (issue #458). PR pending number from safeoutputs. Task 9: Added DeviceIdentityStoreTests.cs with 6 unit tests for ClearStoredTokens. Bundled both in same branch/PR. Task 11: Updated monthly issue #618. Issue #552 closed by shanselman. Issue #460 still open but fix is in master - needs closing."
+  "notes": "2026-06-02 (run 26823599987): Tasks 5+6+11. Task 6: All open Repo Assist PRs (#548,#566,#571,#578,#585,#595,#603,#608,#609,#612,#615,#628) pass CI - no action needed. Task 5: Added AsyncEventHandlerGuardTests.cs with 8 unit tests covering all fault boundary paths. PR pending number. PR #628 number confirmed (was 'pending' last run). Issue #460 still open but fix is in master - needs closing."
 }
