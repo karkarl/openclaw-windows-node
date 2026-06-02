@@ -8,7 +8,7 @@ Before installing, make sure you have:
 
 - **Windows 10 (20H2 or later)** or **Windows 11**
 - **WebView2 Runtime** — pre-installed on Windows 11 and most up-to-date Windows 10 systems. If missing, download from [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/).
-- An active **OpenClaw account** with a gateway token — sign up at [openclaw.ai](https://openclaw.ai).
+- Access to an **OpenClaw gateway URL and token** (existing local/remote/VPS gateway, or one installed via **OpenClaw Gateway Setup** during onboarding). You do **not** need to pre-install OpenClaw before running this installer.
 
 ## Step-by-Step Installation
 
