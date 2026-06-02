@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-06-01T14:27:53Z",
-  "last_run_id": "26760907527",
+  "last_run": "2026-06-02T01:27:48Z",
+  "last_run_id": "26792605989",
   "backlog_cursor": {
     "issue_number": 593,
     "comment_cursor": 593
@@ -19,7 +19,7 @@
     "246": "2026-05-01",
     "252": "2026-05-01",
     "453": "2026-06-01",
-    "458": "2026-05-22",
+    "458": "2026-06-02",
     "462": "2026-05-23",
     "338": "2026-05-23",
     "372": "2026-05-24",
@@ -54,12 +54,12 @@
     "467": {"pr": 472, "branch": "repo-assist/fix-issue-467-wsl-parent-dir-cleanup", "status": "merged", "date": "2026-05-20"},
     "460": {"pr": 540, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "closed-no-merge", "note": "Fix committed to master (2ca3457). Issue should be closed."},
     "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "note": "Fix committed to master (51c4b4fd). Issue still open."},
-    "552": {"pr": null, "branch": "repo-assist/fix-issue-552-async-void-connection-handlers", "status": "open", "date": "2026-05-27"},
     "570": {"pr": 571, "branch": "repo-assist/fix-issue-570-bump-version-0.5.0", "status": "open", "date": "2026-05-28"},
     "583": {"pr": 585, "branch": "repo-assist/fix-issue-583-mojibake-resources", "status": "open", "date": "2026-05-29"},
     "590": {"pr": 608, "branch": "repo-assist/fix-issue-590-a11y-tool-output-automation", "status": "open", "date": "2026-05-30"},
     "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31"},
-    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01"}
+    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01"},
+    "458": {"pr": null, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open", "date": "2026-06-02", "note": "PR pending number from safeoutputs"}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -71,14 +71,15 @@
     "execcmdtoken-tests": {"pr": 548, "status": "open", "date": "2026-05-27"},
     "json-options-cache": {"pr": 566, "status": "open", "date": "2026-05-28"},
     "deriveoverall-tests": {"pr": 595, "status": "open", "date": "2026-05-30"},
-    "device-token-handoff-tests": {"pr": 612, "status": "open", "date": "2026-05-31"}
+    "device-token-handoff-tests": {"pr": 612, "status": "open", "date": "2026-05-31"},
+    "device-identity-store-tests": {"pr": null, "status": "open", "date": "2026-06-02", "note": "Bundled in fix-issue-458 PR (pending number)"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
     "nuget-audit-tests": {"pr": 539, "status": "merged"},
     "bump-nuget-packages-2026-05-29": {"pr": 578, "status": "open"}
   },
-  "monthly_activity_issue": 616,
+  "monthly_activity_issue": 618,
   "monthly_activity_may_closed": 435,
   "engineering_checks": {
     "test_coverage_doc": "2026-05-22",
@@ -89,5 +90,5 @@
   },
   "open_repo_assist_issues": [],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "2026-06-01 (run 26760907527): Tasks 7+2+11. Task 7: no stale PRs (oldest human PR 9 days). Task 2: no new human issue activity since last run. Task 11: closed May issue #435, created June issue (aw_jun2026). monthly_activity_issue updated to new June issue number (update once known)."
+  "notes": "2026-06-02 (run 26792605989): Tasks 3+9+11. Task 3: Fixed missing _keylessEventDiagnosticRaised reset on reconnect in OpenClawChatDataProvider.cs (issue #458). PR pending number from safeoutputs. Task 9: Added DeviceIdentityStoreTests.cs with 6 unit tests for ClearStoredTokens. Bundled both in same branch/PR. Task 11: Updated monthly issue #618. Issue #552 closed by shanselman. Issue #460 still open but fix is in master - needs closing."
 }
