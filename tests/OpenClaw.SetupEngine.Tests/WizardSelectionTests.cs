@@ -65,4 +65,22 @@ public class WizardSelectionTests
     {
         Assert.Equal(expectedDisabled, WizardSelection.ShouldDisableContinue("text", input));
     }
+
+    [Theory]
+    [InlineData("Authorize device", "", null)]
+    [InlineData("Choose a channel", "Select where OpenClaw should send messages", null)]
+    [InlineData("Setup", "Downloading plugin package", null)]
+    [InlineData("Setup", "Installing integration", null)]
+    [InlineData("Choose integration", "", "Microsoft Teams")]
+    [InlineData("Choose integration", "", "msteams")]
+    public void TimeoutForStep_UsesLongTimeoutForSlowWizardOperations(string title, string message, string? additionalText)
+    {
+        Assert.Equal(WizardSelection.SlowStepTimeoutMs, WizardSelection.TimeoutForStep(title, message, additionalText));
+    }
+
+    [Fact]
+    public void TimeoutForStep_UsesDefaultTimeoutForOrdinaryQuestions()
+    {
+        Assert.Equal(WizardSelection.DefaultStepTimeoutMs, WizardSelection.TimeoutForStep("Choose a model", "Select the default model."));
+    }
 }

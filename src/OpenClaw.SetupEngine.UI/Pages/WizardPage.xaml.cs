@@ -427,7 +427,7 @@ public sealed partial class WizardPage : Page
                 parameters = new { sessionId = _sessionId, answer = new { stepId = _stepId, value = answerValue } };
             }
 
-            var payload = await _client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutForCurrentStep());
+            var payload = await _client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutForCurrentStep(answerValue));
             await ApplyPayloadAsync(payload);
         }
         catch (Exception ex)
@@ -496,16 +496,20 @@ public sealed partial class WizardPage : Page
             ErrorText.Visibility = Visibility.Collapsed;
     }
 
-    private int TimeoutForCurrentStep()
+    private int TimeoutForCurrentStep(object? answerValue)
     {
-        var text = $"{TitleText.Text} {string.Join(' ', MessagePanel.Children.OfType<TextBlock>().Select(t => t.Text))}";
-        return text.Contains("device", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("authorize", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("login", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("sign in", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("oauth", StringComparison.OrdinalIgnoreCase)
-            ? 300_000
-            : 30_000;
+        var message = string.Join(' ', MessagePanel.Children.OfType<TextBlock>().Select(t => t.Text));
+        var answerText = answerValue switch
+        {
+            string[] values => string.Join(' ', values),
+            _ => answerValue?.ToString() ?? ""
+        };
+        var selectedValues = GetSelectedOptionValues().ToHashSet(StringComparer.Ordinal);
+        var selectedOptionText = string.Join(' ', _options
+            .Where(option => selectedValues.Contains(option.Value))
+            .Select(option => $"{option.Label} {option.Hint}"));
+
+        return WizardSelection.TimeoutForStep(TitleText.Text, message, _stepId, answerText, selectedOptionText);
     }
 
     private void ResetInputs()

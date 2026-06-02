@@ -158,7 +158,7 @@ public sealed class SetupWizardRunner
 
                 try
                 {
-                    payload = await client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutFor(parsed));
+                    payload = await client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutFor(parsed, answerResult.Answer));
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested && IsRestartLikeWizardDisconnect(ex) && restartAttempts < 2)
                 {
@@ -417,16 +417,15 @@ public sealed class SetupWizardRunner
         return false;
     }
 
-    private static int TimeoutFor(WizardPayload step)
+    private static int TimeoutFor(WizardPayload step, string? answer)
     {
-        var text = $"{step.Title} {step.Message}";
-        return text.Contains("device", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("authorize", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("login", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("sign in", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("oauth", StringComparison.OrdinalIgnoreCase)
-            ? 300_000
-            : 30_000;
+        var selectedOptionText = !string.IsNullOrWhiteSpace(answer)
+            ? string.Join(' ', step.Options
+                .Where(option => string.Equals(option.Value, answer, StringComparison.Ordinal))
+                .Select(option => $"{option.Label} {option.Hint}"))
+            : "";
+
+        return WizardSelection.TimeoutForStep(step.Title, step.Message, step.StepId, answer, selectedOptionText);
     }
 
     private static bool IsRestartLikeWizardDisconnect(Exception ex)
