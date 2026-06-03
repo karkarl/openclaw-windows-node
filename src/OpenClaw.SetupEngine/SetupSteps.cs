@@ -1243,7 +1243,10 @@ public sealed class ConfigureGatewayStep : SetupStep
             echo "GATEWAY_CONFIGURED"
             """;
 
-        var result = await ctx.Commands.RunInWslAsync(distro, script, TimeSpan.FromSeconds(30), env, ct);
+        var result = await ctx.Commands.RunInWslAsync(distro, script, TimeSpan.FromSeconds(90), env, ct);
+
+        if (result.TimedOut)
+            return StepResult.Fail("Gateway configuration timed out (WSL/CLI startup may be slow); please retry the setup.");
 
         if (result.ExitCode != 0 || !result.Stdout.Contains("GATEWAY_CONFIGURED"))
             return StepResult.Fail($"Gateway configuration failed (exit {result.ExitCode}): {result.Stderr}");

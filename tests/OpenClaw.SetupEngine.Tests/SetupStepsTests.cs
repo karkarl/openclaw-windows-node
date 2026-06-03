@@ -972,7 +972,7 @@ public class SetupStepsTests : IDisposable
     private static CommandResult Fail(string stderr = "")
         => new(1, "", stderr, TimeSpan.Zero, TimedOut: false);
 
-    private sealed class FakeCommandRunner(Func<string[], CommandResult> run) : ICommandRunner
+    private sealed class FakeCommandRunner(Func<string[], CommandResult> run, Func<string, CommandResult>? wslRun = null) : ICommandRunner
     {
         public List<(string Executable, string[] Arguments)> Calls { get; } = [];
 
@@ -996,6 +996,25 @@ public class SetupStepsTests : IDisposable
             IReadOnlyDictionary<string, string>? environment = null,
             CancellationToken ct = default,
             string? user = null)
-            => throw new NotSupportedException("RunInWslAsync is not expected in these tests.");
+        {
+            if (wslRun is not null)
+                return Task.FromResult(wslRun(command));
+            throw new NotSupportedException("RunInWslAsync is not expected in these tests.");
+        }
+    }
+
+    [Fact]
+    public async Task ConfigureGateway_TimedOut_ReturnsDescriptiveError()
+    {
+        var timedOutResult = new CommandResult(-1, "", "", TimeSpan.FromSeconds(90), TimedOut: true);
+        var wslRunner = new FakeCommandRunner(_ => Ok(), wslRun: _ => timedOutResult);
+        var ctx = CreateContext(commands: wslRunner);
+        ctx.DistroName = "test-distro";
+
+        var step = new ConfigureGatewayStep();
+        var result = await step.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(StepOutcome.Failed, result.Outcome);
+        Assert.Contains("timed out", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
