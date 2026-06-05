@@ -383,10 +383,10 @@ jobs:
       run: dotnet restore src/OpenClaw.Tray.WinUI -r ${{ matrix.rid }}
 
     - name: Build WinUI Tray App (Release)
-      run: dotnet build src/OpenClaw.Tray.WinUI --no-restore -c Release -r ${{ matrix.rid }} -p:Unpackaged=true
+      run: dotnet build src/OpenClaw.Tray.WinUI --no-restore -c Release -r ${{ matrix.rid }}
 
     - name: Publish WinUI Tray App
-      run: dotnet publish src/OpenClaw.Tray.WinUI -c Release -r ${{ matrix.rid }} --self-contained --no-restore -o publish -p:Unpackaged=true
+      run: dotnet publish src/OpenClaw.Tray.WinUI -c Release -r ${{ matrix.rid }} --self-contained --no-restore -o publish
 
     - name: Verify x64 Native Runtime Payload
       if: matrix.rid == 'win-x64'
@@ -424,7 +424,7 @@ jobs:
 
   build-msix:
     needs: [test, e2etests]
-    if: false # Paused for alpha.4; ship Inno setup and portable ZIP artifacts only.
+    if: false # Paused; will be unpaused when MSIX-primary release pipeline lands (Phase 4).
     runs-on: ${{ matrix.rid == 'win-arm64' && 'windows-11-arm' || 'windows-latest' }}
     continue-on-error: true
     strategy:
@@ -614,26 +614,6 @@ jobs:
       # checks still run.
       run: .\scripts\Test-ReleaseNativeDependencies.ps1 -PayloadPath artifacts/tray-win-arm64 -RequireAppLocalVCRuntime -SkipNativeLoadProbe
 
-    - name: Download Visual C++ Runtime Redistributables
-      shell: pwsh
-      run: |
-        $redists = @(
-          @{ Uri = "https://aka.ms/vc14/vc_redist.x64.exe"; Path = "vc_redist.x64.exe" },
-          @{ Uri = "https://aka.ms/vc14/vc_redist.arm64.exe"; Path = "vc_redist.arm64.exe" }
-        )
-
-        foreach ($redist in $redists) {
-          Invoke-WebRequest -Uri $redist.Uri -OutFile $redist.Path
-          $signature = Get-AuthenticodeSignature -LiteralPath $redist.Path
-          if ($signature.Status -ne "Valid") {
-            throw "$($redist.Path) Authenticode signature was $($signature.Status)."
-          }
-          $subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }
-          if ($subject -notmatch "O=Microsoft Corporation") {
-            throw "$($redist.Path) signer was not Microsoft Corporation: $subject"
-          }
-        }
-
     # Create ZIP files for Updatum auto-update (asset name must contain the RID).
     # We ship both x64 and arm64 portables now that the build job produces a
     # libsodium-compatible app-local VC runtime for both architectures (the
@@ -647,50 +627,11 @@ jobs:
       run: |
         Compress-Archive -Path artifacts/tray-win-arm64/* -DestinationPath OpenClawTray-${{ needs.test.outputs.semVer }}-win-arm64.zip
 
-    # Inno Setup installer for x64
-    - name: Install Inno Setup
-      run: choco install innosetup -y
-
-    - name: Build x64 Installer
-      run: |
-        # Prepare x64 files
-        mkdir publish-x64
-        copy artifacts/tray-win-x64/* publish-x64/ -Recurse
-        .\scripts\Test-ReleaseNativeDependencies.ps1 -PayloadPath publish-x64 -RequireAppLocalVCRuntime -RequireInstallerVCRedist -InstallerVCRedistPath vc_redist.x64.exe
-        # Build installer
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.test.outputs.majorMinorPatch }} /DMyAppArch=x64 /Dpublish=publish-x64 /DvcRedist=vc_redist.x64.exe installer.iss
-
-    - name: Build arm64 Installer
-      run: |
-        # Prepare arm64 files
-        mkdir publish-arm64
-        copy artifacts/tray-win-arm64/* publish-arm64/ -Recurse
-        # -RequireAppLocalVCRuntime: arm64 payload now ships VC runtime DLLs from the build job.
-        # -SkipNativeLoadProbe:      this verifier runs on the x64 release runner and cannot
-        #                             LoadLibrary an arm64 DLL.
-        .\scripts\Test-ReleaseNativeDependencies.ps1 -PayloadPath publish-arm64 -RequireAppLocalVCRuntime -RequireInstallerVCRedist -InstallerVCRedistPath vc_redist.arm64.exe -SkipNativeLoadProbe
-        # Build installer
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.test.outputs.majorMinorPatch }} /DMyAppArch=arm64 /Dpublish=publish-arm64 /DvcRedist=vc_redist.arm64.exe installer.iss
-
-    - name: Sign Installers
-      uses: azure/artifact-signing-action@v2
-      with:
-        endpoint: https://eus.codesigning.azure.net/
-        signing-account-name: openclaw
-        certificate-profile-name: openclaw
-        files-folder: Output
-        files-folder-filter: exe
-        file-digest: SHA256
-        timestamp-rfc3161: http://timestamp.acs.microsoft.com
-        timestamp-digest: SHA256
-
     - name: Create Release
       uses: softprops/action-gh-release@v3
       with:
         generate_release_notes: true
         files: |
-          Output/OpenClawCompanion-Setup-x64.exe
-          Output/OpenClawCompanion-Setup-arm64.exe
           OpenClawTray-${{ needs.test.outputs.semVer }}-win-x64.zip
           OpenClawTray-${{ needs.test.outputs.semVer }}-win-arm64.zip
         prerelease: ${{ contains(github.ref_name, '-') }}
@@ -699,14 +640,14 @@ jobs:
           ## OpenClaw Windows Hub ${{ github.ref_name }}
 
           ### Downloads
-          - **Installer (x64)**: `OpenClawCompanion-Setup-x64.exe` - Intel/AMD 64-bit
-          - **Installer (ARM64)**: `OpenClawCompanion-Setup-arm64.exe` - Windows on ARM (Surface, etc.)
           - **Portable x64**: `OpenClawTray-${{ needs.test.outputs.semVer }}-win-x64.zip`
           - **Portable ARM64**: `OpenClawTray-${{ needs.test.outputs.semVer }}-win-arm64.zip`
 
+          > MSIX installer artifacts arrive in a follow-up release once the
+          > MSIX-primary distribution pipeline lands.
+
           ### Features
           - 🦞 System tray integration with gateway status
-          - 🔄 Auto-updates from GitHub Releases
           - ✅ Code-signed with Azure Artifact Signing
 
           ### Requirements
@@ -715,6 +656,6 @@ jobs:
           - OpenClaw gateway running locally
 
           ### Quick Start
-          1. Run the installer for your architecture
-          2. Launch from Start Menu or system tray
+          1. Extract the portable ZIP and run `OpenClaw.Tray.WinUI.exe`
+          2. Launch from system tray
           3. Right-click tray icon → Settings to configure

@@ -32,9 +32,12 @@ This monorepo contains the Windows hub, shared client libraries, and CLI utiliti
 
 Direct downloads from the latest OpenClaw release:
 
-- [OpenClawCompanion-Setup-x64.exe](https://github.com/openclaw/openclaw/releases/latest/download/OpenClawCompanion-Setup-x64.exe)
-- [OpenClawCompanion-Setup-arm64.exe](https://github.com/openclaw/openclaw/releases/latest/download/OpenClawCompanion-Setup-arm64.exe)
-- [OpenClawCompanion-SHA256SUMS.txt](https://github.com/openclaw/openclaw/releases/latest/download/OpenClawCompanion-SHA256SUMS.txt)
+<!--
+TODO(MSIX phase 7): Replace this placeholder with the canonical MSIX download
+links once the MSIX-primary release pipeline lands. The Inno `.exe` installer
+links that used to live here were removed when Inno was deleted.
+-->
+- MSIX installer downloads coming soon — see [docs/SETUP.md](docs/SETUP.md).
 
 ### Prerequisites
 - Windows 10 (20H2+) or Windows 11

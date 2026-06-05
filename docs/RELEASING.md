@@ -75,16 +75,12 @@ git push origin vX.Y.Z-alpha.N
 
 For the current alpha flow, ship only:
 
-- Inno setup installers:
-  - `OpenClawCompanion-Setup-x64.exe`
-  - `OpenClawCompanion-Setup-arm64.exe`
 - Portable ZIP payloads for Updatum:
   - `OpenClawTray-<version>-win-x64.zip`
   - `OpenClawTray-<version>-win-arm64.zip`
 
-MSIX artifacts are intentionally paused for alpha while we focus on the Inno
-installer path and signed portable update payloads. Re-enable MSIX only when we
-explicitly want packaged camera/microphone consent validation again.
+MSIX artifacts will become the primary distribution surface in a follow-up
+phase; see the MSIX-primary publishing plan on the `user/kmahone/msix` branch.
 
 ## Executable signing policy
 

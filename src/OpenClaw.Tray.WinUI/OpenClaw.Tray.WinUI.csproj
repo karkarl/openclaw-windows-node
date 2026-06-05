@@ -258,6 +258,30 @@
     <Error Condition="!Exists('$(PublishDir)tools\mxc\$(MxcArch)\wxc-exec.exe')" Text="wxc-exec.exe missing at $(PublishDir)tools\mxc\$(MxcArch)\. Publish-time copy did not run; check MxcArch=$(MxcArch), MxcSdkBinDir=$(MxcSdkBinDir)." />
   </Target>
 
+  <!--
+    Ship-guard: OpenClaw.SetupEngine.UI must remain an in-process class library
+    referenced by the tray, never a standalone .exe. The Inno installer used to
+    enforce this via a `#if FileExists(... OpenClaw.SetupEngine.UI.exe) #error`
+    preprocessor check. With Inno gone we enforce it in MSBuild instead, so the
+    guard runs on every local build and every CI publish. If someone adds
+    `<OutputType>Exe</OutputType>` to OpenClaw.SetupEngine.UI.csproj — or
+    otherwise emits a SetupEngine.UI .exe into the tray output/publish — this
+    target fails the build before packaging.
+
+    Why this matters: the in-tray setup hosting design (single process, single
+    mutex, single deep-link surface) breaks if SetupEngine.UI ships as a
+    separate process. See docs/SETUP_ENGINE_REDESIGN.md for the hazard note.
+  -->
+  <Target Name="ValidateSetupEngineUiNotShipped" AfterTargets="Build">
+    <Error Condition="Exists('$(TargetDir)OpenClaw.SetupEngine.UI.exe')"
+           Text="OpenClaw.SetupEngine.UI.exe must not be shipped with the tray. Setup UI is hosted by OpenClaw.Tray.WinUI.exe. See docs/SETUP_ENGINE_REDESIGN.md." />
+  </Target>
+
+  <Target Name="ValidateSetupEngineUiNotPublished" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <Error Condition="Exists('$(PublishDir)OpenClaw.SetupEngine.UI.exe')"
+           Text="OpenClaw.SetupEngine.UI.exe must not be in the publish payload. Setup UI is hosted by OpenClaw.Tray.WinUI.exe. See docs/SETUP_ENGINE_REDESIGN.md." />
+  </Target>
+
   <Target Name="CopySetupDefaultConfigToOutput" AfterTargets="Build">
     <Copy SourceFiles="$(OpenClawSetupDefaultConfig)" DestinationFiles="$(TargetDir)default-config.json" SkipUnchangedFiles="true" Condition="Exists('$(OpenClawSetupDefaultConfig)')" />
   </Target>

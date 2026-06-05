@@ -80,9 +80,6 @@ For example:
 .\scripts\Get-OpenClawVersion.ps1 -Variable MajorMinorPatch
 ```
 
-`scripts\build-inno-local.ps1` uses that helper for Inno's `AppVersion` when
-`-Version` is not explicitly supplied.
-
 ## Guardrails
 
 - Do not add `<Version>` release literals to product `.csproj` files.
