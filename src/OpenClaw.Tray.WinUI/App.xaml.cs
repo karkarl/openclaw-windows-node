@@ -25,7 +25,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Updatum;
 using WinUIEx;
 using SetupCompletedEventArgs = OpenClaw.SetupEngine.UI.SetupCompletedEventArgs;
 using SetupWindow = OpenClaw.SetupEngine.UI.SetupWindow;
@@ -34,12 +33,6 @@ namespace OpenClawTray;
 
 public partial class App : Application, OpenClawTray.Services.IAppCommands
 {
-    internal static readonly UpdatumManager AppUpdater = new("openclaw", "openclaw-windows-node")
-    {
-        FetchOnlyLatestRelease = true,
-        InstallUpdateSingleFileExecutableName = "OpenClaw.Tray.WinUI",
-    };
-
     private TrayIcon? _trayIcon;
     private GatewayConnectionManager? _connectionManager;
     private GatewayRegistry? _gatewayRegistry;
@@ -102,8 +95,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             _settings.SshTunnelHost,
             _settings.SshTunnelRemotePort,
             _settings.SshTunnelLocalPort,
-            includeBrowserProxyForward,
-            _settings.SshTunnelSshPort);
+            includeBrowserProxyForward);
     }
 
     /// <summary>
@@ -138,7 +130,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     private Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
     private AppState? _appState;
     internal AppState? AppState => _appState;
-    private UpdateCoordinator? _updateCoordinator;
     private GatewayService? _gatewayService;
     private CancellationTokenSource? _deepLinkCts;
     private bool _isExiting;
@@ -226,12 +217,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                 Logger.Warn($"[App] Ignoring invalid OPENCLAW_LANGUAGE value: {langOverride}");
         }
 
-        // Wire the GatewayHostAccess localization indirection to LocalizationHelper.
-        // The classifier defaults to identity (returns the resource key as-is) for unit-test
-        // contexts that lack a WinUI runtime; in-app we point it at the real resource lookup.
-        GatewayHostAccessLocalization.GetString = LocalizationHelper.GetString;
-        GatewayHostAccessLocalization.Format = (key, args) => LocalizationHelper.Format(key, args);
-
         InitializeComponent();
         
         s_runMarker.Check();
@@ -274,14 +259,12 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             if (!process.HasExited)
                 process.WaitForExit(TimeSpan.FromSeconds(60));
         }
-        // slopwatch-ignore: SW003 Cleanup is best-effort; failure cannot improve caller state and the original outcome is preserved.
         catch (ArgumentException)
         {
             // The source process already exited.
         }
         catch (Exception ex)
         {
-            // slopwatch-ignore: SW003 Diagnostic logging fallback is best-effort and logging failure must not cascade.
             try { Logger.Warn($"Post-setup restart wait for PID {pid} failed: {ex.Message}"); } catch { }
         }
     }
@@ -440,20 +423,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
         // Central observable model + gateway event handler.
         _appState = new AppState(_dispatcherQueue);
-        _updateCoordinator = new UpdateCoordinator(
-            AppUpdater,
-            _appState,
-            _settings,
-            () =>
-            {
-                XamlRoot? r = null;
-                if (_hubWindow != null && !_hubWindow.IsClosed)
-                    r = (_hubWindow.Content as FrameworkElement)?.XamlRoot;
-                return r ?? (_keepAliveWindow?.Content as FrameworkElement)?.XamlRoot;
-            },
-            refreshStatus: UpdateStatusDetailWindow,
-            exit: Exit);
-        _appState.UpdateInfo = UpdateCoordinator.BuildInitialInfo();
         _gatewayService = new GatewayService(_appState, _dispatcherQueue!);
         _gatewayService.ConnectionStatusChanged += OnGatewayConnectionStatusChanged;
         _gatewayService.AuthenticationFailed += OnGatewayAuthenticationFailed;
@@ -473,28 +442,14 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // Register URI scheme on first run
         DeepLinkHandler.RegisterUriScheme();
 
-        // Anchor the WinUI runtime so transient windows (UpdateDialog,
-        // setup wizard, etc.) don't terminate the process when closed.
+        // Anchor the WinUI runtime so transient windows (setup wizard,
+        // dialogs, etc.) don't terminate the process when closed.
         // WinUI 3 Desktop's default DispatcherShutdownMode is
-        // OnLastWindowClose — without this override, closing the
-        // UpdateDialog on the startup path (when it is the only window)
-        // would shut down the WinUI runtime mid-flight and kill the
-        // in-progress download/extraction. We still control shutdown
+        // OnLastWindowClose — without this override, closing a transient
+        // dialog on the startup path (when it is the only window) would
+        // shut down the WinUI runtime mid-flight. We control shutdown
         // explicitly via Application.Exit().
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
-
-        // Check for updates before launching. Skip in test instances — no UI dialogs,
-        // no network calls, no startup delay.
-        if (DataDirOverride is null &&
-            Environment.GetEnvironmentVariable("OPENCLAW_SKIP_UPDATE_CHECK") != "1")
-        {
-            var shouldLaunch = await _updateCoordinator.CheckForUpdatesAsync();
-            if (!shouldLaunch)
-            {
-                Exit();
-                return;
-            }
-        }
 
         // Register toast activation handler
         ToastNotificationManagerCompat.OnActivated += OnToastActivated;
@@ -514,7 +469,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         ShowSurfaceImprovementsTipIfNeeded();
 
         // Initialize connection manager before setup flow.
-        _gatewayRegistry = new GatewayRegistry(SettingsManager.SettingsDirectoryPath, logger: new AppLogger());
+        _gatewayRegistry = new GatewayRegistry(SettingsManager.SettingsDirectoryPath);
         _gatewayRegistry.Load();
         var credentialResolver = new CredentialResolver(DeviceIdentityFileReader.Instance);
         var clientFactory = new GatewayClientFactory();
@@ -626,8 +581,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // hosts. Fire-and-forget on a background task so a slow LxssManager at
         // cold logon never delays InitializeGatewayClient. The keepalive itself
         // runs detached from the tray — see WslDistroKeepAlive in LocalGatewaySetup.cs.
-        var wslKeepAlive = new WslGatewayKeepAliveService(() => _settings, () => _gatewayRegistry);
-        _ = Task.Run(wslKeepAlive.TryEnsureAsync);
+        _ = Task.Run(TryEnsureLocalGatewayKeepAliveAsync);
         InitializeGatewayClient();
 
         // Pre-warm chat window (WebView2 init takes 1-3s, do it now so left-click is instant)
@@ -936,7 +890,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             case "history": ShowHub("channels"); break;
             case "activity": ShowHub("channels"); break;
             case "healthcheck": _ = RunHealthCheckAsync(userInitiated: true); break;
-            case "checkupdates": _ = _updateCoordinator!.CheckForUpdatesUserInitiatedAsync(); break;
             case "settings": ShowSettings(); break;
             case "setup": _ = ShowOnboardingAsync(); break;
             case "autostart": ToggleAutoStart(); break;
@@ -1422,8 +1375,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                         _settings.SshTunnelLocalPort,
                         _settings.NodeBrowserProxyEnabled &&
                             SshTunnelCommandLine.CanForwardBrowserProxyPort(
-                                _settings.SshTunnelRemotePort, _settings.SshTunnelLocalPort),
-                        _settings.SshTunnelSshPort)
+                                _settings.SshTunnelRemotePort, _settings.SshTunnelLocalPort))
                     : null,
             };
             _gatewayRegistry.AddOrUpdate(record);
@@ -1610,7 +1562,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             _settings.UseSshTunnel,
             _settings.SshTunnelUser,
             _settings.SshTunnelHost,
-            _settings.SshTunnelSshPort,
             _settings.SshTunnelRemotePort,
             _settings.SshTunnelLocalPort,
             SettingsManager.SettingsDirectoryPath,
@@ -3331,7 +3282,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     }
     void IAppCommands.ShowVoiceOverlay() => ShowHub("voice");
     void IAppCommands.ShowChat() => ShowChatWindow();
-    void IAppCommands.CheckForUpdates() => _ = _updateCoordinator!.CheckForUpdatesUserInitiatedAsync();
     void IAppCommands.ShowOnboarding() => _ = ShowOnboardingAsync();
     void IAppCommands.ShowConnectionStatus() => ShowConnectionStatusWindow();
     void IAppCommands.NotifySettingsSaved() => OnSettingsSaved(this, EventArgs.Empty);
@@ -3614,7 +3564,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             OpenSettings = ShowSettings,
             OpenSetup = () => _ = ShowOnboardingAsync(),
             RunHealthCheck = () => RunHealthCheckAsync(userInitiated: true),
-            CheckForUpdates = _updateCoordinator!.CheckForUpdatesUserInitiatedAsync,
             OpenLogFile = OpenLogFile,
             OpenLogFolder = OpenLogFolder,
             OpenConfigFolder = OpenConfigFolder,
@@ -3893,8 +3842,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                     _settings.SshTunnelHost,
                     _settings.SshTunnelRemotePort,
                     _settings.SshTunnelLocalPort,
-                    includeBrowserProxy,
-                    _settings.SshTunnelSshPort);
+                    includeBrowserProxy);
                 DiagnosticsJsonlService.Write("tunnel.ensure_started", new
                 {
                     status = _sshTunnelService.Status.ToString(),
@@ -3951,8 +3899,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
                     _settings.SshTunnelHost,
                     _settings.SshTunnelRemotePort,
                     _settings.SshTunnelLocalPort,
-                    restartBrowserProxy,
-                    _settings.SshTunnelSshPort);
+                    restartBrowserProxy);
                 Logger.Info("SSH tunnel restarted successfully");
                 DiagnosticsJsonlService.Write("tunnel.restart_succeeded", new
                 {

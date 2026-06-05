@@ -108,7 +108,6 @@ OpenClaw Companion responds to `openclaw://` deep links, which can be invoked fr
 | `openclaw://activity` | Open the Activity page |
 | `openclaw://history` | Open the Activity page filtered to notification history |
 | `openclaw://healthcheck` | Run a manual health check |
-| `openclaw://check-updates` | Run a manual update check |
 | `openclaw://logs` | Open the current tray log file |
 | `openclaw://log-folder` | Open the logs folder |
 | `openclaw://config` | Open the config folder |

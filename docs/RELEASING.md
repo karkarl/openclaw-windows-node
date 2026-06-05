@@ -73,14 +73,9 @@ git tag -a vX.Y.Z-alpha.N -m "OpenClaw Windows Hub vX.Y.Z-alpha.N"
 git push origin vX.Y.Z-alpha.N
 ```
 
-For the current alpha flow, ship only:
-
-- Portable ZIP payloads for Updatum:
-  - `OpenClawTray-<version>-win-x64.zip`
-  - `OpenClawTray-<version>-win-arm64.zip`
-
-MSIX artifacts will become the primary distribution surface in a follow-up
-phase; see the MSIX-primary publishing plan on the `user/kmahone/msix` branch.
+For the current alpha flow, no binary artifacts are attached to the GitHub
+release (the MSIX-primary distribution pipeline lands in a follow-up phase on
+the `user/kmahone/msix` branch). The tag itself is the published artifact.
 
 ## Executable signing policy
 

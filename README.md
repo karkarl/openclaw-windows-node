@@ -340,7 +340,6 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 | `openclaw://dashboard/skills` | Open Skills dashboard page |
 | `openclaw://dashboard/cron` | Open Cron dashboard page |
 | `openclaw://healthcheck` | Run a manual health check |
-| `openclaw://check-updates` | Run a manual update check |
 | `openclaw://logs` | Open the current tray log file |
 | `openclaw://log-folder` | Open the logs folder |
 | `openclaw://config` | Open the config folder |

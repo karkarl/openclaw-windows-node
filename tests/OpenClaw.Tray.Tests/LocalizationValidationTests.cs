@@ -39,7 +39,6 @@ public class LocalizationValidationTests
         "Onboarding_Connection_QrButton",
         "Onboarding_Connection_Token",
         "WindowTitle_TrayMenu",
-        "WindowTitle_Update",
         // STT/TTS card invariants — these are protocol/brand identifiers
         // not user-visible prose. They intentionally read the same in every
         // locale: "eleven_multilingual_v2" is an ElevenLabs model
@@ -521,7 +520,6 @@ public class LocalizationValidationTests
     /// </summary>
     private static readonly HashSet<string> LatinScriptInvariantResourceKeys = new(StringComparer.Ordinal)
     {
-        "Update_OK",
         "Onboarding_IncompleteSetup_Close",
         "ChatPage_OK",
         "ConnectionPage_ViaSSH",

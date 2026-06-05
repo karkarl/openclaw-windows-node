@@ -92,5 +92,4 @@ For example:
 ## References
 
 - [Microsoft Docs: Assembly Versioning](https://learn.microsoft.com/en-us/dotnet/standard/assembly/versioning)
-- [Updatum Library](https://github.com/sn4k3/Updatum)
 - [GitVersion Documentation](https://gitversion.net/)
