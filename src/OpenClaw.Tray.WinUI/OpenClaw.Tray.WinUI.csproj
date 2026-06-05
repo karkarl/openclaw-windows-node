@@ -22,7 +22,7 @@
     <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <!-- Packaging mode (two opt-in flags; default is always-packaged MSIX loose layout).
+  <!-- Packaging mode (one opt-in flag; default is always-packaged MSIX loose layout).
 
        Default (no flags): WindowsPackageType=MSIX. `dotnet build` produces a
        packaged loose layout in $(TargetDir) (Package.appxmanifest +
@@ -37,20 +37,10 @@
        scripts\setup-dev-msix-cert.ps1 once to create it). When present the
        .msix installs via plain Add-AppxPackage; when absent the .msix is
        unsigned and requires Add-AppxPackage -AllowUnsigned. CI/release
-       overrides these properties to sign with the production cert.
-
-       -p:Unpackaged=true (scripts\build-inno-local.ps1; CI Inno publish job):
-       legacy unpackaged WindowsPackageType=None + app.manifest path that
-       feeds the Inno Setup installer. Not used by interactive dev. -->
-  <PropertyGroup Condition="'$(Unpackaged)' != 'true'">
+       overrides these properties to sign with the production cert. -->
+  <PropertyGroup>
     <WindowsPackageType>MSIX</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Unpackaged)' == 'true'">
-    <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PackageMsix)' == 'true'">
@@ -266,18 +256,6 @@
        silently ship without wxc-exec. -->
   <Target Name="ValidateWxcExecPublished" AfterTargets="CopyWxcExecToPublish" Condition="'$(PublishDir)' != '' And '$(VerifyWxcExecShipped)' != 'false' And '$(SkipMxcNodeBridgeRestore)' != 'true'">
     <Error Condition="!Exists('$(PublishDir)tools\mxc\$(MxcArch)\wxc-exec.exe')" Text="wxc-exec.exe missing at $(PublishDir)tools\mxc\$(MxcArch)\. Publish-time copy did not run; check MxcArch=$(MxcArch), MxcSdkBinDir=$(MxcSdkBinDir)." />
-  </Target>
-
-  <!-- Copy WebView2Loader.dll to output root for unpackaged app (not needed for MSIX) -->
-  <Target Name="CopyWebView2Loader" AfterTargets="Build" Condition="'$(Unpackaged)' == 'true'">
-    <PropertyGroup>
-      <!-- Detect ARM64 via RuntimeIdentifier, Platform, or processor architecture -->
-      <IsArm64Build Condition="'$(Platform)' == 'ARM64' OR '$(RuntimeIdentifier)' == 'win-arm64' OR '$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">true</IsArm64Build>
-      <WebView2LoaderSource Condition="'$(IsArm64Build)' == 'true'">$(OutputPath)runtimes\win-arm64\native\WebView2Loader.dll</WebView2LoaderSource>
-      <WebView2LoaderSource Condition="'$(WebView2LoaderSource)' == ''">$(OutputPath)runtimes\win-x64\native\WebView2Loader.dll</WebView2LoaderSource>
-    </PropertyGroup>
-    <Message Importance="high" Text="Copying WebView2Loader.dll from $(WebView2LoaderSource)" />
-    <Copy SourceFiles="$(WebView2LoaderSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(WebView2LoaderSource)')" />
   </Target>
 
   <Target Name="CopySetupDefaultConfigToOutput" AfterTargets="Build">
