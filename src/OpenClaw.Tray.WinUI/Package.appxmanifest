@@ -3,8 +3,10 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap desktop com rescap">
 
   <!-- IMPORTANT: Publisher must exactly match the Azure Artifact Signing certificate subject.
        Check your certificate profile at: Azure Portal > Artifact Signing > openclaw > openclaw
@@ -56,6 +58,25 @@
             <uap:DisplayName>OpenClaw Protocol</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
+
+        <!-- Toast notification activation. Required when running packaged so
+             Microsoft.Toolkit.Uwp.Notifications (ToastNotificationManagerCompat)
+             can register its COM activator against a stable CLSID and route
+             toast button clicks back into App.OnToastActivated. The toolkit
+             generates the activator type at runtime; we only need the CLSID
+             declared here plus a matching <com:ComServer> entry for the
+             packaged COM activator. -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="EF9297B3-EEEB-4E50-8306-D1D118E04BC7" />
+        </desktop:Extension>
+
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="$targetnametoken$.exe" DisplayName="OpenClaw Toast Activator" Arguments="-ToastActivated">
+              <com:Class Id="EF9297B3-EEEB-4E50-8306-D1D118E04BC7" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
       </Extensions>
     </Application>
   </Applications>
