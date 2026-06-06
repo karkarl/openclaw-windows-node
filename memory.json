@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-06-06T00:00:00Z",
-  "last_run_id": "27048495350",
+  "last_run": "2026-06-06",
+  "last_run_id": "27062665629",
   "backlog_cursor": {
     "issue_number": 661,
-    "comment_cursor": 688
+    "comment_cursor": 705
   },
   "comments_made": {
     "467": "2026-05-20",
@@ -37,7 +37,15 @@
     "639": "2026-06-03",
     "638": "2026-06-03",
     "661": "2026-06-03",
-    "672": "2026-06-05"
+    "672": "2026-06-05",
+    "697": {
+      "date": "2026-06-06",
+      "note": "Pointed to PR #701 for SSH custom port fix"
+    },
+    "694": {
+      "date": "2026-06-06",
+      "note": "Confirmed WSL locale fix in current code, suggested latest installer"
+    }
   },
   "labels_applied": {
     "460": [
@@ -75,6 +83,12 @@
     ],
     "554": [
       "refactor"
+    ],
+    "703": [
+      "bug"
+    ],
+    "694": [
+      "bug"
     ]
   },
   "fix_attempts": {
@@ -228,6 +242,13 @@
       "status": "open",
       "date": "2026-06-06",
       "note": "Task 8+9: SearchValues<char> fast-path alloc fix + 4 fence-path edge-case tests in ContentBlockSeamRepairTests.cs"
+    },
+    "repo-assist/test-ssh-tunnel-state-machine-2026-06-06": {
+      "title": "test(connection): expand SshTunnelService state-machine coverage",
+      "pr": "pending",
+      "date": "2026-06-06",
+      "status": "open",
+      "note": "11 new tests for SshTunnelService state transitions (1 \u2192 12)"
     }
   },
   "engineering_attempts": {
@@ -286,5 +307,6 @@
     535,
     539
   ],
-  "notes": "Run 2026-06-06: Task 8 (perf: SearchValues<char> in RepairContentBlockSeams fast-path) + Task 9 (4 fence-path edge-case tests in ContentBlockSeamRepairTests.cs). PR pending push. DeviceIdentityStore tests deferred to open PR #628. Last run PR #699 (fix #672) is open. NuGet bundle from last run failed push; Dependabot PRs #621/#622/#623 appear closed."
+  "notes": "Run 2026-06-06: Task 8 (perf: SearchValues<char> in RepairContentBlockSeams fast-path) + Task 9 (4 fence-path edge-case tests in ContentBlockSeamRepairTests.cs). PR pending push. DeviceIdentityStore tests deferred to open PR #628. Last run PR #699 (fix #672) is open. NuGet bundle from last run failed push; Dependabot PRs #621/#622/#623 appear closed.",
+  "monthly_activity_month": "2026-06"
 }
