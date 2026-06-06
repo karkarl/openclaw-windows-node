@@ -25,9 +25,11 @@
     In addition to the always-packaged loose-layout build, produce a .msix
     package file in src/OpenClaw.Tray.WinUI/AppPackages/. Requires the
     OpenClaw.Tray.WinUI project to be in the build set (Project=All, Tray, or
-    WinUI). If %LOCALAPPDATA%\OpenClawTray\dev-msix.pfx exists the .msix is
-    signed with that cert (run scripts\setup-dev-msix-cert.ps1 once to create
-    it); otherwise the .msix is unsigned.
+    WinUI). Requires %LOCALAPPDATA%\OpenClawTray\dev-msix.pfx (run
+    scripts\setup-dev-msix-cert.ps1 once to create it); the build hard-fails
+    if the cert is missing because MSIX packages cannot be installed unsigned
+    on stock Windows (Add-AppxPackage -AllowUnsigned only works under very
+    specific developer-mode conditions that do not cover this package).
 
 .EXAMPLE
     .\build.ps1
@@ -386,7 +388,9 @@ if ($Project -ne "Shared" -and $Project -ne "All" -and $toBuild -notcontains "Sh
     $toBuild = @("Shared") + $toBuild
 }
 
-# -PackageMsix preflight: must include WinUI/Tray and (warn only) check PFX.
+# -PackageMsix preflight: must include WinUI/Tray and dev signing cert must
+# exist. Unsigned MSIX packages cannot be installed on stock Windows, so a
+# missing cert is a hard fail rather than a warning.
 if ($PackageMsix) {
     $winUITargetIncluded = ($toBuild -contains "WinUI") -or ($toBuild -contains "Tray")
     if (-not $winUITargetIncluded) {
@@ -398,10 +402,15 @@ if ($PackageMsix) {
     if (Test-Path $devPfx) {
         Write-Success "Dev MSIX signing cert found: $devPfx"
     } else {
-        Write-Warning "Dev MSIX signing cert not found at $devPfx"
-        Write-Info "The .msix will be unsigned and must be installed with: Add-AppxPackage -AllowUnsigned -Path <msix>"
-        Write-Info "To produce a signed .msix instead, run (elevated):"
-        Write-Info "  .\scripts\setup-dev-msix-cert.ps1"
+        Write-Error "Dev MSIX signing cert not found at $devPfx"
+        Write-Host ""
+        Write-Host "An unsigned .msix cannot be installed on stock Windows" -ForegroundColor Yellow
+        Write-Host "(Add-AppxPackage -AllowUnsigned only works under narrow" -ForegroundColor Yellow
+        Write-Host "developer-mode conditions that do not cover this package)." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "To create the dev signing cert, run (elevated):" -ForegroundColor Cyan
+        Write-Host "  .\scripts\setup-dev-msix-cert.ps1" -ForegroundColor White
+        exit 1
     }
 }
 
@@ -463,12 +472,7 @@ if ($failCount -eq 0) {
             Write-Host "`nMSIX:" -ForegroundColor Cyan
             if ($producedMsix) {
                 Write-Host "  Path:     $($producedMsix.FullName)" -ForegroundColor White
-                $devPfx = Join-Path $env:LOCALAPPDATA "OpenClawTray\dev-msix.pfx"
-                if (Test-Path $devPfx) {
-                    Write-Host "  Install:  Add-AppxPackage -Path `"$($producedMsix.FullName)`"" -ForegroundColor White
-                } else {
-                    Write-Host "  Install:  Add-AppxPackage -AllowUnsigned -Path `"$($producedMsix.FullName)`"  (elevated)" -ForegroundColor White
-                }
+                Write-Host "  Install:  Add-AppxPackage -Path `"$($producedMsix.FullName)`"" -ForegroundColor White
             } else {
                 Write-Warning "Could not locate produced .msix under $appPackagesDir"
             }
