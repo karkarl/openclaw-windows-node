@@ -1,8 +1,8 @@
 {
   "last_run": "2026-06-07",
-  "last_run_id": "27079137908",
+  "last_run_id": "27093034029",
   "backlog_cursor": {
-    "issue_number": 695,
+    "issue_number": 703,
     "comment_cursor": 705
   },
   "comments_made": {
@@ -33,7 +33,7 @@
     "593": "2026-05-30",
     "590": "2026-05-30",
     "569": "2026-05-30",
-    "655": "2026-06-04",
+    "655": "2026-06-03",
     "639": "2026-06-03",
     "638": "2026-06-03",
     "661": "2026-06-03",
@@ -45,6 +45,10 @@
     "694": {
       "date": "2026-06-06",
       "note": "Confirmed WSL locale fix in current code, suggested latest installer"
+    },
+    "703": {
+      "date": "2026-06-07",
+      "note": "Root cause confirmed (VC runtime 14.29 too old for onnxruntime 1.26). Fix PR submitted (version check in Test-ReleaseNativeDependencies.ps1). Packaging follow-up needed."
     }
   },
   "labels_applied": {
@@ -73,12 +77,13 @@
     "570": {"pr": 571, "branch": "repo-assist/fix-issue-570-bump-version-0.5.0", "status": "open-merge-conflict", "date": "2026-05-28", "note": "Merge conflict. Left for human decision."},
     "583": {"pr": 585, "branch": "repo-assist/fix-issue-583-mojibake-resources", "status": "open", "date": "2026-05-29"},
     "590": {"pr": [603, 608], "status": "open-superseded", "note": "Human PR #650 by ranjeshj is better fix. RA PRs #603/#608 superseded."},
-    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "open", "date": "2026-05-31"},
-    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open", "date": "2026-06-01"},
-    "458": {"pr": 628, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open", "date": "2026-06-02"},
+    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "superseded", "note": "Fix merged to master via PR #594. PR #609 has merge conflict and should be closed."},
+    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open-superseded", "note": "Human PR #647 by ranjeshj is better fix. PR #615 should be closed."},
+    "458": {"pr": 628, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open-superseded", "note": "Human PR #646 by ranjeshj is better fix. PR #628 should be closed."},
     "661": {"pr": "superseded-by-666", "branch": "repo-assist/fix-issue-661-wsl-localized-version", "status": "superseded", "note": "Maintainer PR #666 (ranjeshj) merged."},
     "655": {"pr": 679, "branch": "repo-assist/fix-issue-655-object-field-editor", "status": "open", "date": "2026-06-04"},
-    "672": {"pr": 699, "branch": "repo-assist/fix-issue-672-error-toolcall-visual-order", "status": "open", "date": "2026-06-05"}
+    "672": {"pr": 699, "branch": "repo-assist/fix-issue-672-error-toolcall-visual-order", "status": "open", "date": "2026-06-05"},
+    "703": {"branch": "repo-assist/fix-issue-703-vc-runtime-min-version", "status": "open", "date": "2026-06-07", "note": "Adds minimum VC++ runtime version check (14.40.0.0) to Test-ReleaseNativeDependencies.ps1. Packaging fix (update VCRuntime.CefSharp.140) is follow-up work needing Windows/NuGet access."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -96,11 +101,10 @@
     "searchvalues-seam-perf-seam-edge-tests": {"pr": 704, "status": "open", "date": "2026-06-06"},
     "test-ssh-tunnel-state-machine-2026-06-06": {"pr": 706, "status": "open", "date": "2026-06-06"},
     "perf-shorten-path-and-websocket-decode": {
-      "pr": "pending-2026-06-07",
+      "pr": 708,
       "branch": "repo-assist/perf-shorten-path-and-websocket-decode-2026-06-07",
-      "status": "pending-push",
-      "date": "2026-06-07",
-      "note": "ShortenPath span-based traversal, cmd.IndexOf newline, pooled WebSocket char decode. +3 edge-case tests."
+      "status": "open",
+      "date": "2026-06-07"
     }
   },
   "engineering_attempts": {
@@ -108,7 +112,8 @@
     "nuget-audit-tests": {"pr": 539, "status": "merged"},
     "bump-nuget-packages-2026-05-29": {"pr": 578, "status": "open-merge-conflict", "note": "Superseded by bundle PR attempt"},
     "fix-issue-672": {"pr": 699, "status": "open", "date": "2026-06-05"},
-    "nuget-bundle-2026-06-05": {"status": "failed-push", "date": "2026-06-05", "note": "Dependabot PRs #621/#622/#623 now closed"}
+    "nuget-bundle-2026-06-05": {"status": "failed-push", "date": "2026-06-05", "note": "Dependabot PRs #621/#622/#623 now closed"},
+    "vc-runtime-version-check-703": {"branch": "repo-assist/fix-issue-703-vc-runtime-min-version", "status": "open", "date": "2026-06-07", "note": "Added minimum 14.40.0.0 version check to Test-ReleaseNativeDependencies.ps1 + regression test"}
   },
   "monthly_activity_issue": 618,
   "monthly_activity_may_closed": 435,
@@ -117,10 +122,12 @@
     "dependency_audit": "2026-06-05",
     "ci_pipeline_check": "2026-05-23",
     "treat_warnings_as_errors": "2026-05-23",
-    "nuget_audit_tests": "2026-05-25"
+    "nuget_audit_tests": "2026-05-25",
+    "vc_runtime_version_check": "2026-06-07"
   },
   "open_repo_assist_issues": [],
-  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539],
-  "notes": "Run 2026-06-07: Task 8 (perf: ShortenPath span, cmd.IndexOf newline, pooled WebSocket decode) + Task 1 (labelled #695 bug - user self-resolved by updating OpenClaw). Pre-existing test failures in Linux env: MxcPolicy Windows paths, McpHttpServer localhost. Not caused by my changes.",
+  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539, 685],
+  "superseded_repo_assist_prs": [603, 608, 609, 615, 628],
+  "notes": "Run 2026-06-07: Task 6 (Maintain PRs: confirmed PR #609 superseded by merged #594; PRs #608/#615/#628 superseded by human PRs #650/#647/#646; all other PRs clean) + Task 3 (Fix issue #703: added VC++ runtime minimum version check 14.40.0.0 to Test-ReleaseNativeDependencies.ps1; packaging follow-up needed). Tests: Tray 957 passed (+1 new test ReleaseWorkflow_VCRuntimeMinimumVersionIsEnforced); Shared 2041 passed, 8 pre-existing failures unchanged.",
   "monthly_activity_month": "2026-06"
 }
