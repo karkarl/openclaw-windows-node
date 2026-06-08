@@ -1,9 +1,9 @@
 {
   "last_run": "2026-06-08",
-  "last_run_id": "27110949954",
+  "last_run_id": "27142023867",
   "backlog_cursor": {
-    "issue_number": 710,
-    "comment_cursor": 711
+    "issue_number": 720,
+    "comment_cursor": 721
   },
   "comments_made": {
     "467": "2026-05-20",
@@ -41,8 +41,9 @@
     "697": {"date": "2026-06-06", "note": "Pointed to PR #701 for SSH custom port fix. Issue now closed."},
     "694": {"date": "2026-06-06", "note": "Confirmed WSL locale fix. Issue now closed."},
     "703": {"date": "2026-06-07", "note": "Root cause confirmed, fix PR #712 submitted. Superseded by maintainer PR #713. Issue now closed."},
-    "709": {"date": "2026-06-08", "note": "Root cause: EnterWizardErrorAsync disconnects before cancel, leaving stale server session. Fix PR submitted (branch repo-assist/fix-issue-709-wizard-stale-session)."},
-    "688": {"date": "2026-06-08", "note": "Explained Back button architecture constraint: requires gateway wizard.back RPC or client-side state replay."}
+    "709": {"date": "2026-06-08", "note": "Root cause: EnterWizardErrorAsync disconnects before cancel, leaving stale server session. Fix PR submitted (branch repo-assist/fix-issue-709-wizard-stale-session). Two duplicate PRs created: #717 and #718."},
+    "688": {"date": "2026-06-08", "note": "Explained Back button architecture constraint: requires gateway wizard.back RPC or client-side state replay."},
+    "720": {"date": "2026-06-08", "note": "Root cause confirmed: GatewayClientFactory.Create() passed bootstrapPairAsNode: credential.IsBootstrapToken, causing operator client to connect as node role with bootstrap tokens. Fix PR submitted (branch repo-assist/fix-issue-720-operator-qr-pair-role)."}
   },
   "labels_applied": {
     "460": ["enhancement"],
@@ -76,8 +77,9 @@
     "661": {"pr": "superseded-by-666", "status": "superseded", "note": "Maintainer PR #666 merged."},
     "655": {"pr": 679, "status": "merged", "date": "2026-06-04", "note": "Issue closed 2026-06-07."},
     "672": {"pr": 699, "status": "merged", "date": "2026-06-05", "note": "Issue closed."},
-    "703": {"pr": 712, "status": "closed-superseded", "date": "2026-06-07", "note": "Maintainer PR #713 fixed root cause (x64 VC++ from VS install). Issue closed 2026-06-07."},
-    "709": {"branch": "repo-assist/fix-issue-709-wizard-stale-session", "status": "open", "date": "2026-06-08", "note": "cancel wizard session before disconnect in EnterWizardErrorAsync and StartWizardAsync. Tests: Shared 2122 pass, Tray 973 pass."}
+    "703": {"pr": 712, "status": "closed-superseded", "date": "2026-06-07", "note": "Maintainer PR #713 fixed root cause. Issue closed 2026-06-07."},
+    "709": {"branch": "repo-assist/fix-issue-709-wizard-stale-session", "prs": ["#717", "#718"], "status": "open", "date": "2026-06-08", "note": "Two duplicate PRs created. cancel wizard session before disconnect in EnterWizardErrorAsync and StartWizardAsync."},
+    "720": {"branch": "repo-assist/fix-issue-720-operator-qr-pair-role", "status": "open", "date": "2026-06-08", "note": "bootstrapPairAsNode: false for operator client factory. Tests: Shared 2123 pass, Tray 974 pass, Connection 297 pass."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -94,7 +96,8 @@
     "chat-tool-error-regression-tests": {"pr": 692, "status": "merged", "date": "2026-06-05"},
     "searchvalues-seam-perf-seam-edge-tests": {"pr": 704, "status": "merged", "date": "2026-06-06"},
     "test-ssh-tunnel-state-machine-2026-06-06": {"pr": 706, "status": "merged", "date": "2026-06-06"},
-    "perf-shorten-path-and-websocket-decode": {"pr": 708, "status": "merged", "date": "2026-06-07"}
+    "perf-shorten-path-and-websocket-decode": {"pr": 708, "status": "merged", "date": "2026-06-07"},
+    "perf-single-pass-dict-remove": {"branch": "repo-assist/perf-single-pass-dict-remove", "status": "open", "date": "2026-06-08", "note": "TakePendingRequestMethod and TakePendingChatSend: TryGetValue+Remove -> Remove(key,out value)."}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
@@ -115,5 +118,5 @@
   "monthly_activity_month": "2026-06",
   "open_repo_assist_issues": [],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539, 548, 566, 571, 578, 585, 595, 603, 608, 609, 612, 615, 628, 635, 679, 685, 692, 699, 704, 706, 708, 712],
-  "notes": "Run 2026-06-08: Task 3 (Fix #709 wizard stale-session: EnterWizardErrorAsync called DisconnectAsync before cancel, leaving server session alive; fixed both EnterWizardErrorAsync and StartWizardAsync to call CancelCurrentSessionAsync instead; PR submitted on branch repo-assist/fix-issue-709-wizard-stale-session). Task 2 (commented on #709 root cause + PR; commented on #688 Back button architecture). Many prior PRs now merged: #679, #685, #692, #699, #704, #706, #708. Issue #703, #697, #655 now closed. PRs #548, #566, #595, #612, #635 closed without merging. PR #712 closed superseded by maintainer PR #713 (x64 VC++ from VS install)."
+  "notes": "Run 2026-06-08 (13:47 UTC): Task 3 (Fix #720 QR-code pairing stuck in node role: changed GatewayClientFactory to pass bootstrapPairAsNode:false for operator client; added tests; PR on branch repo-assist/fix-issue-720-operator-qr-pair-role). Task 8 (Perf: single-pass Remove(key,out value) for TakePendingRequestMethod and TakePendingChatSend; PR on branch repo-assist/perf-single-pass-dict-remove). Note: PRs #717 and #718 are duplicates for fix #709 - maintainer should close one. Prior run: Task 3+2 for #709 wizard stale-session and #688 Back button."
 }
