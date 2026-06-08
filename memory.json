@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-06-07",
-  "last_run_id": "27093034029",
+  "last_run": "2026-06-08",
+  "last_run_id": "27110949954",
   "backlog_cursor": {
-    "issue_number": 703,
-    "comment_cursor": 705
+    "issue_number": 710,
+    "comment_cursor": 711
   },
   "comments_made": {
     "467": "2026-05-20",
@@ -38,18 +38,11 @@
     "638": "2026-06-03",
     "661": "2026-06-03",
     "672": "2026-06-05",
-    "697": {
-      "date": "2026-06-06",
-      "note": "Pointed to PR #701 (christineyan4) for SSH custom port fix"
-    },
-    "694": {
-      "date": "2026-06-06",
-      "note": "Confirmed WSL locale fix in current code, suggested latest installer"
-    },
-    "703": {
-      "date": "2026-06-07",
-      "note": "Root cause confirmed (VC runtime 14.29 too old for onnxruntime 1.26). Fix PR submitted (version check in Test-ReleaseNativeDependencies.ps1). Packaging follow-up needed."
-    }
+    "697": {"date": "2026-06-06", "note": "Pointed to PR #701 for SSH custom port fix. Issue now closed."},
+    "694": {"date": "2026-06-06", "note": "Confirmed WSL locale fix. Issue now closed."},
+    "703": {"date": "2026-06-07", "note": "Root cause confirmed, fix PR #712 submitted. Superseded by maintainer PR #713. Issue now closed."},
+    "709": {"date": "2026-06-08", "note": "Root cause: EnterWizardErrorAsync disconnects before cancel, leaving stale server session. Fix PR submitted (branch repo-assist/fix-issue-709-wizard-stale-session)."},
+    "688": {"date": "2026-06-08", "note": "Explained Back button architecture constraint: requires gateway wizard.back RPC or client-side state replay."}
   },
   "labels_applied": {
     "460": ["enhancement"],
@@ -72,18 +65,19 @@
     "351": {"pr": 448, "branch": "repo-assist/fix-mcp-tool-descriptions", "status": "merged", "date": "2026-05-18"},
     "459": {"pr": 482, "branch": "repo-assist/fix-issue-459-session-key-missing", "status": "merged", "date": "2026-05-21"},
     "467": {"pr": 472, "branch": "repo-assist/fix-issue-467-wsl-parent-dir-cleanup", "status": "merged", "date": "2026-05-20"},
-    "460": {"pr": 540, "branch": "repo-assist/fix-issue-460-test-determinism", "status": "closed-no-merge", "note": "Fix committed to master (2ca3457). Issue should be closed."},
-    "462": {"pr": 531, "branch": "repo-assist/fix-issue-462-trackpad-scroll", "status": "closed-conflict", "note": "Fix committed to master (51c4b4fd). Issue still open."},
-    "570": {"pr": 571, "branch": "repo-assist/fix-issue-570-bump-version-0.5.0", "status": "open-merge-conflict", "date": "2026-05-28", "note": "Merge conflict. Left for human decision."},
-    "583": {"pr": 585, "branch": "repo-assist/fix-issue-583-mojibake-resources", "status": "open", "date": "2026-05-29"},
-    "590": {"pr": [603, 608], "status": "open-superseded", "note": "Human PR #650 by ranjeshj is better fix. RA PRs #603/#608 superseded."},
-    "593": {"pr": 609, "branch": "repo-assist/fix-issue-593-arm64-wsl-virt-message", "status": "superseded", "note": "Fix merged to master via PR #594. PR #609 has merge conflict and should be closed."},
-    "453": {"pr": 615, "branch": "repo-assist/fix-issue-453-attachment-sidecar", "status": "open-superseded", "note": "Human PR #647 by ranjeshj is better fix. PR #615 should be closed."},
-    "458": {"pr": 628, "branch": "repo-assist/fix-issue-458-keyless-diagnostic-reset-on-reconnect", "status": "open-superseded", "note": "Human PR #646 by ranjeshj is better fix. PR #628 should be closed."},
-    "661": {"pr": "superseded-by-666", "branch": "repo-assist/fix-issue-661-wsl-localized-version", "status": "superseded", "note": "Maintainer PR #666 (ranjeshj) merged."},
-    "655": {"pr": 679, "branch": "repo-assist/fix-issue-655-object-field-editor", "status": "open", "date": "2026-06-04"},
-    "672": {"pr": 699, "branch": "repo-assist/fix-issue-672-error-toolcall-visual-order", "status": "open", "date": "2026-06-05"},
-    "703": {"branch": "repo-assist/fix-issue-703-vc-runtime-min-version", "status": "open", "date": "2026-06-07", "note": "Adds minimum VC++ runtime version check (14.40.0.0) to Test-ReleaseNativeDependencies.ps1. Packaging fix (update VCRuntime.CefSharp.140) is follow-up work needing Windows/NuGet access."}
+    "460": {"pr": 540, "status": "closed-no-merge"},
+    "462": {"pr": 531, "status": "closed-conflict"},
+    "570": {"pr": 571, "status": "closed-conflict"},
+    "583": {"pr": 585, "status": "closed-no-merge"},
+    "590": {"pr": [603, 608], "status": "closed-superseded"},
+    "593": {"pr": 609, "status": "closed-superseded", "note": "Fix merged via PR #594."},
+    "453": {"pr": 615, "status": "closed-superseded", "note": "Human PR #647 merged."},
+    "458": {"pr": 628, "status": "closed-superseded", "note": "Human PR #646 merged."},
+    "661": {"pr": "superseded-by-666", "status": "superseded", "note": "Maintainer PR #666 merged."},
+    "655": {"pr": 679, "status": "merged", "date": "2026-06-04", "note": "Issue closed 2026-06-07."},
+    "672": {"pr": 699, "status": "merged", "date": "2026-06-05", "note": "Issue closed."},
+    "703": {"pr": 712, "status": "closed-superseded", "date": "2026-06-07", "note": "Maintainer PR #713 fixed root cause (x64 VC++ from VS install). Issue closed 2026-06-07."},
+    "709": {"branch": "repo-assist/fix-issue-709-wizard-stale-session", "status": "open", "date": "2026-06-08", "note": "cancel wizard session before disconnect in EnterWizardErrorAsync and StartWizardAsync. Tests: Shared 2122 pass, Tray 973 pass."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -92,31 +86,22 @@
     "channel-result-tests": {"pr": 528, "status": "merged"},
     "operatorscopehelper-tests": {"pr": 530, "status": "merged"},
     "activitystreamservice-tests": {"pr": 535, "status": "merged"},
-    "execcmdtoken-tests": {"pr": 548, "status": "open", "date": "2026-05-27"},
-    "json-options-cache": {"pr": 566, "status": "open", "date": "2026-05-28"},
-    "deriveoverall-tests": {"pr": 595, "status": "open", "date": "2026-05-30"},
-    "device-token-handoff-tests": {"pr": 612, "status": "open", "date": "2026-05-31"},
-    "async-event-handler-guard-tests": {"pr": 635, "status": "open", "date": "2026-06-02"},
-    "chat-tool-error-regression-tests": {"pr": 692, "status": "open", "date": "2026-06-05"},
-    "searchvalues-seam-perf-seam-edge-tests": {"pr": 704, "status": "open", "date": "2026-06-06"},
-    "test-ssh-tunnel-state-machine-2026-06-06": {"pr": 706, "status": "open", "date": "2026-06-06"},
-    "perf-shorten-path-and-websocket-decode": {
-      "pr": 708,
-      "branch": "repo-assist/perf-shorten-path-and-websocket-decode-2026-06-07",
-      "status": "open",
-      "date": "2026-06-07"
-    }
+    "execcmdtoken-tests": {"pr": 548, "status": "closed-no-merge", "date": "2026-05-27"},
+    "json-options-cache": {"pr": 566, "status": "closed-no-merge", "date": "2026-05-28"},
+    "deriveoverall-tests": {"pr": 595, "status": "closed-no-merge", "date": "2026-05-30"},
+    "device-token-handoff-tests": {"pr": 612, "status": "closed-no-merge", "date": "2026-05-31"},
+    "async-event-handler-guard-tests": {"pr": 635, "status": "closed-no-merge", "date": "2026-06-02"},
+    "chat-tool-error-regression-tests": {"pr": 692, "status": "merged", "date": "2026-06-05"},
+    "searchvalues-seam-perf-seam-edge-tests": {"pr": 704, "status": "merged", "date": "2026-06-06"},
+    "test-ssh-tunnel-state-machine-2026-06-06": {"pr": 706, "status": "merged", "date": "2026-06-06"},
+    "perf-shorten-path-and-websocket-decode": {"pr": 708, "status": "merged", "date": "2026-06-07"}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
     "nuget-audit-tests": {"pr": 539, "status": "merged"},
-    "bump-nuget-packages-2026-05-29": {"pr": 578, "status": "open-merge-conflict", "note": "Superseded by bundle PR attempt"},
-    "fix-issue-672": {"pr": 699, "status": "open", "date": "2026-06-05"},
-    "nuget-bundle-2026-06-05": {"status": "failed-push", "date": "2026-06-05", "note": "Dependabot PRs #621/#622/#623 now closed"},
-    "vc-runtime-version-check-703": {"branch": "repo-assist/fix-issue-703-vc-runtime-min-version", "status": "open", "date": "2026-06-07", "note": "Added minimum 14.40.0.0 version check to Test-ReleaseNativeDependencies.ps1 + regression test"}
+    "bump-nuget-packages-2026-05-29": {"pr": 578, "status": "closed-conflict"},
+    "vc-runtime-version-check-703": {"pr": 712, "status": "closed-superseded", "date": "2026-06-07", "note": "Superseded by maintainer PR #713"}
   },
-  "monthly_activity_issue": 618,
-  "monthly_activity_may_closed": 435,
   "engineering_checks": {
     "test_coverage_doc": "2026-05-22",
     "dependency_audit": "2026-06-05",
@@ -125,9 +110,10 @@
     "nuget_audit_tests": "2026-05-25",
     "vc_runtime_version_check": "2026-06-07"
   },
+  "monthly_activity_issue": 618,
+  "monthly_activity_may_closed": 435,
+  "monthly_activity_month": "2026-06",
   "open_repo_assist_issues": [],
-  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539, 685],
-  "superseded_repo_assist_prs": [603, 608, 609, 615, 628],
-  "notes": "Run 2026-06-07: Task 6 (Maintain PRs: confirmed PR #609 superseded by merged #594; PRs #608/#615/#628 superseded by human PRs #650/#647/#646; all other PRs clean) + Task 3 (Fix issue #703: added VC++ runtime minimum version check 14.40.0.0 to Test-ReleaseNativeDependencies.ps1; packaging follow-up needed). Tests: Tray 957 passed (+1 new test ReleaseWorkflow_VCRuntimeMinimumVersionIsEnforced); Shared 2041 passed, 8 pre-existing failures unchanged.",
-  "monthly_activity_month": "2026-06"
+  "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539, 548, 566, 571, 578, 585, 595, 603, 608, 609, 612, 615, 628, 635, 679, 685, 692, 699, 704, 706, 708, 712],
+  "notes": "Run 2026-06-08: Task 3 (Fix #709 wizard stale-session: EnterWizardErrorAsync called DisconnectAsync before cancel, leaving server session alive; fixed both EnterWizardErrorAsync and StartWizardAsync to call CancelCurrentSessionAsync instead; PR submitted on branch repo-assist/fix-issue-709-wizard-stale-session). Task 2 (commented on #709 root cause + PR; commented on #688 Back button architecture). Many prior PRs now merged: #679, #685, #692, #699, #704, #706, #708. Issue #703, #697, #655 now closed. PRs #548, #566, #595, #612, #635 closed without merging. PR #712 closed superseded by maintainer PR #713 (x64 VC++ from VS install)."
 }
