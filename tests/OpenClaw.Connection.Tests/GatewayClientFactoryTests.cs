@@ -6,8 +6,13 @@ namespace OpenClaw.Connection.Tests;
 
 public sealed class GatewayClientFactoryTests
 {
+    /// <summary>
+    /// Regression test for issue #720: the operator (chat) client must connect as "operator"
+    /// role even when the credential is a bootstrap token.  Setting bootstrapPairAsNode: false
+    /// for the operator client ensures chat works immediately after QR-code or setup-code pairing.
+    /// </summary>
     [Fact]
-    public void Create_BootstrapCredential_PairsAsNode()
+    public void Create_BootstrapCredential_PairsAsOperator()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "openclaw-gateway-factory-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -20,7 +25,8 @@ public sealed class GatewayClientFactoryTests
                 tempDir,
                 NullLogger.Instance);
 
-            Assert.Equal("node", GetConnectRole(lifecycle.DataClient));
+            // Operator client always connects as "operator", even with a bootstrap token.
+            Assert.Equal("operator", GetConnectRole(lifecycle.DataClient));
         }
         finally
         {

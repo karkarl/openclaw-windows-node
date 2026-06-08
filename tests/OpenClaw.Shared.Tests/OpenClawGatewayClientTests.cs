@@ -598,6 +598,31 @@ public class OpenClawGatewayClientTests
         Assert.False(auth.ContainsKey("deviceToken"));
     }
 
+    /// <summary>
+    /// Regression test for issue #720: the operator (chat) client must connect as "operator"
+    /// role even when the credential is a bootstrap token (QR-code or setup-code pairing).
+    /// GatewayClientFactory always passes bootstrapPairAsNode: false for the operator client.
+    /// </summary>
+    [Fact]
+    public void OperatorClient_WithBootstrapToken_ConnectsAsOperatorRole()
+    {
+        // bootstrapPairAsNode: false — this is what GatewayClientFactory now passes for the operator client.
+        var helper = new GatewayClientTestHelper(
+            tokenIsBootstrapToken: true,
+            bootstrapPairAsNode: false,
+            identityPath: CreateTempIdentityPath());
+        helper.SetDeviceTokenForTest(null);
+
+        var auth = helper.BuildAuthPayload();
+
+        // Must request "operator" role so chat works immediately after QR-code pairing.
+        Assert.Equal("operator", helper.GetConnectRole());
+        // Must send bootstrapToken (not plain token) so the gateway performs bootstrap pairing.
+        Assert.Equal("test-token", auth["bootstrapToken"]);
+        Assert.False(auth.ContainsKey("token"));
+        Assert.False(auth.ContainsKey("deviceToken"));
+    }
+
     [Fact]
     public void BootstrapNodeHandoff_HelloOkWithNodeRole_DoesNotStorePrimaryNodeTokenAsOperator()
     {

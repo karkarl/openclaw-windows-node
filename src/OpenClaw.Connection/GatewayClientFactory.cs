@@ -14,12 +14,16 @@ public sealed class GatewayClientFactory : IGatewayClientFactory
         string identityPath,
         IOpenClawLogger logger)
     {
+        // bootstrapPairAsNode is always false for the operator (chat) client: the operator
+        // client must connect as "operator" role regardless of credential type so that chat
+        // works immediately after QR-code or setup-code pairing.  The node-platform client
+        // has its own creation path (NodeConnector) which sets bootstrapPairAsNode as needed.
         var client = new OpenClawGatewayClient(
             gatewayUrl,
             credential.Token,
             logger,
             tokenIsBootstrapToken: credential.IsBootstrapToken,
-            bootstrapPairAsNode: credential.IsBootstrapToken,
+            bootstrapPairAsNode: false,
             identityPath: identityPath);
 
         return new GatewayClientLifecycleAdapter(client);
