@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using OpenClaw.Connection;
 using OpenClaw.Shared;
@@ -37,6 +38,12 @@ internal static class WslConstants
 internal static class WslInstallSupport
 {
     private static readonly Version s_minDirectNamedInstallVersion = new(2, 4, 4);
+    private static readonly System.Text.RegularExpressions.Regex s_wslProductTokenRegex = new(
+        @"(?<![A-Za-z0-9])WSL(?![A-Za-z0-9])",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex s_semanticVersionRegex = new(
+        @"(?<![\d.])(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?![\d.])",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     public const string UpdateUrl = "https://aka.ms/wslstorepage";
 
     public static string UpdateInstructions
@@ -54,27 +61,38 @@ internal static class WslInstallSupport
 
     public static bool TryParseWslVersion(string output, out Version version)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            Normalize(output),
-            @"WSL\s+version:\s*(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        if (!match.Success)
+        // Match the product token and version shape instead of localized label text.
+        // WSL is the stable product acronym; labels around it vary by Windows language
+        // and by UTF-16LE/NUL-stripped output shape.
+        foreach (var rawLine in Normalize(output).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
-            version = new Version();
-            return false;
+            var line = rawLine.Trim();
+            if (!s_wslProductTokenRegex.IsMatch(line))
+                continue;
+
+            var match = s_semanticVersionRegex.Match(line);
+            if (!match.Success)
+                continue;
+
+            version = ParseVersionMatch(match);
+            return true;
         }
 
+        version = new Version();
+        return false;
+    }
+
+    private static Version ParseVersionMatch(System.Text.RegularExpressions.Match match)
+    {
         var major = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
         var minor = int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
         var build = int.Parse(match.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
         var revision = match.Groups[4].Success
             ? int.Parse(match.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture)
             : -1;
-        version = revision >= 0
+        return revision >= 0
             ? new Version(major, minor, build, revision)
             : new Version(major, minor, build);
-        return true;
     }
 
     public static bool SupportsDirectNamedInstall(Version version)
@@ -90,18 +108,32 @@ internal static class WslInstallSupport
     // sentences are not, and over-broad fallbacks just create false
     // positives.
     public static bool TryGetEnvironmentIssue(string output, out string message)
+        => TryGetEnvironmentIssue(output, RuntimeInformation.OSArchitecture, out message);
+
+    // Architecture-aware overload. Internal so tests can exercise both x64
+    // and Arm64 wordings without depending on the host process arch.
+    internal static bool TryGetEnvironmentIssue(string output, Architecture architecture, out string message)
     {
         var text = Normalize(output);
 
-        // Firmware virtualization off (VT-x/AMD-V disabled in BIOS/UEFI).
-        // wsl.exe emits this when the Windows feature is installed but the
-        // CPU virtualization extension is turned off; remediation requires
-        // a trip into firmware settings, not `wsl --install`.
+        // Firmware virtualization off. wsl.exe emits this when the Windows
+        // feature is installed but the CPU virtualization extension is
+        // turned off; remediation requires a trip into firmware settings,
+        // not `wsl --install`. The remediation wording differs by CPU
+        // architecture: VT-x/AMD-V/SVM are x86-specific terms that don't
+        // exist on Arm64 (Surface Pro X / Pro 9 SQ3 / Pro 11), where the
+        // extensions are ARMv8 EL2 and the UEFI label is generic.
         if (Contains(text, "virtualization is not enabled"))
         {
-            message = "WSL2 requires hardware virtualization, but it is disabled in firmware. "
-                + "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
-                + "reboot, then retry setup.";
+            message = architecture == Architecture.Arm64
+                ? "WSL2 requires hardware virtualization, but it is disabled. "
+                    + "On ARM64 devices (e.g. Surface), enable virtualization in your device's UEFI "
+                    + "settings (look for 'Virtualization Support' or similar). On managed devices this "
+                    + "may be controlled by your organization's Intune / device-management policy. "
+                    + "Reboot, then retry setup."
+                : "WSL2 requires hardware virtualization, but it is disabled in firmware. "
+                    + "Enable VT-x/AMD-V (Intel VT or AMD SVM) in your computer's BIOS/UEFI settings, "
+                    + "reboot, then retry setup.";
             return true;
         }
 
@@ -1191,6 +1223,15 @@ public sealed class InstallCliStep : SetupStep
 public sealed class ConfigureGatewayStep : SetupStep
 {
     internal const string DevicePairPublicUrlKey = "plugins.entries.device-pair.config.publicUrl";
+    internal const string DevicePairEnabledKey = "plugins.entries.device-pair.enabled";
+    // Each `openclaw config set` emitted below spawns the Node CLI fresh inside WSL; on a
+    // newly created distro with a cold cache that is ~4-5s apiece. Budget the step by how
+    // many config commands we actually emit -- BuildConfigCommands grows with the
+    // device-pair keys and every Gateway.ExtraConfig entry -- with a floor so the minimal
+    // path keeps generous headroom. A fixed cap silently regresses as the list grows.
+    internal static readonly TimeSpan ConfigBaseBudget = TimeSpan.FromSeconds(45);
+    internal static readonly TimeSpan PerConfigCommandBudget = TimeSpan.FromSeconds(15);
+    internal static readonly TimeSpan MinConfigurationTimeout = TimeSpan.FromSeconds(180);
 
     public override string Id => "configure-gateway";
     public override string DisplayName => "Configure gateway";
@@ -1243,10 +1284,17 @@ public sealed class ConfigureGatewayStep : SetupStep
             echo "GATEWAY_CONFIGURED"
             """;
 
-        var result = await ctx.Commands.RunInWslAsync(distro, script, TimeSpan.FromSeconds(30), env, ct);
+        var timeout = ComputeConfigurationTimeout(configCommands);
+        var result = await ctx.Commands.RunInWslAsync(distro, script, timeout, env, ct);
 
         if (result.ExitCode != 0 || !result.Stdout.Contains("GATEWAY_CONFIGURED"))
+        {
+            if (result.TimedOut)
+                return StepResult.Fail(
+                    $"Gateway configuration timed out after {timeout.TotalSeconds:0}s while running openclaw config inside WSL.");
+
             return StepResult.Fail($"Gateway configuration failed (exit {result.ExitCode}): {result.Stderr}");
+        }
 
         ctx.Logger.StateChange("shared_gateway_token", null, "[SET]");
         return StepResult.Ok("Gateway configured");
@@ -1270,6 +1318,23 @@ public sealed class ConfigureGatewayStep : SetupStep
             configCommands += $"\n            openclaw config set {DevicePairPublicUrlKey} {ShellEscape(defaultPublicUrl)}";
         }
 
+        // The gateway ships the `device-pair` plugin bundled but DISABLED by default.
+        // Without it, every scope-upgrade / role-upgrade WS connect (how OAuth providers like
+        // Codex request the broader scopes needed to start their auth flow) hangs in
+        // "pending approval" forever. The provider CLI errors out before ever printing its
+        // verification URL, leaving the wizard stuck. Enable the plugin whenever we know how
+        // to reach it (i.e. we either wrote the default loopback URL above, or the user
+        // supplied their own publicUrl via ExtraConfig).
+        var hasDevicePairPublicUrl =
+            GetDefaultDevicePairPublicUrl(gw, port) is not null ||
+            gw.ExtraConfig?.ContainsKey(DevicePairPublicUrlKey) == true;
+        var devicePairExplicitlyConfigured =
+            gw.ExtraConfig?.ContainsKey(DevicePairEnabledKey) == true;
+        if (hasDevicePairPublicUrl && !devicePairExplicitlyConfigured)
+        {
+            configCommands += $"\n            openclaw config set {DevicePairEnabledKey} true";
+        }
+
         // Apply any extra config key/value pairs from config (shell-escape values)
         if (gw.ExtraConfig is { Count: > 0 })
         {
@@ -1284,6 +1349,27 @@ public sealed class ConfigureGatewayStep : SetupStep
         }
 
         return configCommands;
+    }
+
+    // Budget = base + per-command, floored. Scales the WSL timeout with the number of
+    // `openclaw config set` invocations the step emits so it cannot silently regress as
+    // BuildConfigCommands grows.
+    internal static TimeSpan ComputeConfigurationTimeout(string configCommands)
+    {
+        var budget = ConfigBaseBudget + PerConfigCommandBudget * CountConfigSetCommands(configCommands);
+        return budget > MinConfigurationTimeout ? budget : MinConfigurationTimeout;
+    }
+
+    private static int CountConfigSetCommands(string configCommands)
+    {
+        var count = 0;
+        foreach (var line in configCommands.Split('\n'))
+        {
+            if (line.Contains("openclaw config set", StringComparison.Ordinal))
+                count++;
+        }
+
+        return count;
     }
 
     internal static string? GetDefaultDevicePairPublicUrl(GatewayConfig gw, int port) =>
@@ -2606,7 +2692,7 @@ public sealed class VerifyEndToEndStep : SetupStep
             History = Array.Empty<object>()
         };
 
-        var json = System.Text.Json.JsonSerializer.Serialize(state, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(state, SetupConfig.JsonWriteOptions);
         await AtomicFile.WriteAllTextAsync(statePath, json, ct);
         ctx.Logger.Info($"Wrote setup-state.json: DistroName={ctx.DistroName}");
     }
@@ -2679,7 +2765,7 @@ public sealed class StartKeepaliveStep : SetupStep
             StartTimeUtc = DateTimeOffset.UtcNow,
             ProcessName = "wsl"
         };
-        var json = System.Text.Json.JsonSerializer.Serialize(marker, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(marker, SetupConfig.JsonWriteOptions);
         AtomicFile.WriteAllText(markerPath, json);
         ctx.Logger.Info($"Wrote keepalive marker: {markerPath}");
     }

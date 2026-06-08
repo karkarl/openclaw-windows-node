@@ -279,7 +279,7 @@ public sealed class SetupWizardRunner
             Steps = discoveredSteps
         };
 
-        var json = JsonSerializer.Serialize(template, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(template, SetupConfig.JsonWriteOptions);
         AtomicFile.WriteAllText(basePath, json);
         _ctx.Logger.Info($"Wizard answer template written: {basePath}");
         return basePath;
@@ -417,11 +417,17 @@ public sealed class SetupWizardRunner
         return false;
     }
 
-    private static int TimeoutFor(WizardPayload step, string? answer)
+    internal static int TimeoutFor(WizardPayload step, string? answer)
     {
-        var selectedOptionText = !string.IsNullOrWhiteSpace(answer)
+        var selectedValues = string.IsNullOrWhiteSpace(answer)
+            ? []
+            : step.StepType == "multiselect"
+                ? SplitMultiSelect(answer)
+                : [answer];
+        var selectedValueSet = selectedValues.ToHashSet(StringComparer.Ordinal);
+        var selectedOptionText = selectedValueSet.Count > 0
             ? string.Join(' ', step.Options
-                .Where(option => string.Equals(option.Value, answer, StringComparison.Ordinal))
+                .Where(option => selectedValueSet.Contains(option.Value))
                 .Select(option => $"{option.Label} {option.Hint}"))
             : "";
 
@@ -478,9 +484,9 @@ public sealed class SetupWizardRunner
         public static AnswerResolution Fail(string error) => new(false, false, "", error);
     }
 
-    private sealed record WizardOption(string Value, string Label, string Hint);
+    internal sealed record WizardOption(string Value, string Label, string Hint);
 
-    private sealed record WizardPayload(
+    internal sealed record WizardPayload(
         bool IsDone,
         string? SessionId,
         string StepId,

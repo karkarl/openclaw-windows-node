@@ -21,7 +21,7 @@ build/sign/publish release artifacts.
    ```powershell
    Select-String .\.github\workflows\ci.yml -Pattern `
      "Verify Release Executable Signing Policy", `
-     "OpenClaw.SetupEngine.exe", `
+     "OpenClaw.Tray.WinUI.exe", `
      "build-msix:", `
      "Paused for alpha"
    ```
@@ -46,7 +46,16 @@ build/sign/publish release artifacts.
      --limit 10
    ```
 
-5. Confirm the GitHub release is a prerelease and not latest for alpha tags.
+5. Confirm the workflow used the exact tag SemVer. Tagged builds fail before
+   publishing if GitVersion disagrees with the tag name.
+
+   ```powershell
+   $version = $tag -replace '^v', ''
+   .\scripts\Get-OpenClawVersion.ps1 -Variable SemVer
+   # Expected: $version
+   ```
+
+6. Confirm the GitHub release is a prerelease and not latest for alpha tags.
 
    ```powershell
    gh release view $tag --repo openclaw/openclaw-windows-node `
@@ -69,8 +78,9 @@ For the current alpha flow, ship only:
 - Inno setup installers:
   - `OpenClawCompanion-Setup-x64.exe`
   - `OpenClawCompanion-Setup-arm64.exe`
-- Portable ZIP payload for Updatum:
+- Portable ZIP payloads for Updatum:
   - `OpenClawTray-<version>-win-x64.zip`
+  - `OpenClawTray-<version>-win-arm64.zip`
 
 MSIX artifacts are intentionally paused for alpha while we focus on the Inno
 installer path and signed portable update payloads. Re-enable MSIX only when we
@@ -84,14 +94,11 @@ identity.
 OpenClaw-owned executables:
 
 - `OpenClaw.Tray.WinUI.exe`
-- `SetupEngine\OpenClaw.SetupEngine.exe`
-- `SetupEngine\OpenClaw.SetupEngine.UI.exe`
 
 Third-party/runtime executables that must not be OpenClaw-signed:
 
 - `tools\mxc\<arch>\wxc-exec.exe`
 - `createdump.exe`
-- `SetupEngine\createdump.exe`
 - `RestartAgent.exe`
 - `SetupEngine\RestartAgent.exe`
 
@@ -99,15 +106,23 @@ CI enforces this with `scripts\Test-ReleaseExecutableSignatures.ps1`. The
 verifier fails closed on unknown `.exe` files so future payload changes are
 reviewed deliberately.
 
-CI also checks native runtime dependencies before release packaging. The x64
-portable payload must ship `vcruntime140.dll` next to every `libsodium.dll`
-copy. The release job must Authenticode-verify Microsoft's x64 and ARM64 Visual
-C++ Runtime redistributables before passing the architecture-matching
-redistributable to Inno. The installer runs the redistributable before launching
-the tray so clean or stale Windows hosts can repair the runtime before Ed25519
-device keys are generated or loaded, and it skips the post-install tray launch
-if the runtime installer fails. ARM64 portable ZIPs are paused until the release
-pipeline has a trusted app-local ARM64 VC runtime source.
+CI also checks native runtime dependencies before release packaging. Both the
+x64 and ARM64 portable payloads must ship `vcruntime140.dll` next to every
+`libsodium.dll` copy. Both build legs source their loose VC runtime DLLs from
+the Visual Studio install on the CI runner (resolved via `vswhere` in
+`src\Directory.Build.targets`). This ensures the bundled CRT is new enough for
+`onnxruntime` — the `VCRuntime.CefSharp.140` NuGet is only used as a dev-time
+convenience for local `dotnet build` (not publish). The release validation
+script enforces a minimum VC++ runtime version floor (currently 14.38) to
+prevent regressions, and the x64 verifier load-probes the native TTS stack
+(`onnxruntime.dll`, `sherpa-onnx.dll`, and `sherpa-onnx-c-api.dll`) from the
+published payload so app-local runtime mismatches are caught before release.
+The release job must Authenticode-verify Microsoft's x64 and ARM64 Visual C++
+Runtime redistributables before passing the
+architecture-matching redistributable to Inno. The installer runs the
+redistributable before launching the tray so clean or stale Windows hosts can
+repair the runtime before Ed25519 device keys are generated or loaded, and it
+skips the post-install tray launch if the runtime installer fails.
 
 The current Azure Artifact Signing resource is:
 
@@ -181,8 +196,6 @@ Expected:
 - Installer EXEs are signed.
 - In ZIP payload:
   - `OpenClaw.Tray.WinUI.exe` is OpenClaw-signed.
-  - `SetupEngine\OpenClaw.SetupEngine.exe` is OpenClaw-signed.
-  - `SetupEngine\OpenClaw.SetupEngine.UI.exe` is OpenClaw-signed.
   - `wxc-exec.exe`, `createdump.exe`, and `RestartAgent.exe` are not
     OpenClaw-signed.
 
@@ -213,5 +226,8 @@ Only tag when `HEAD == origin/master`.
 - Do not add csproj `<Version>` release fallbacks; product versions come from
   GitVersion/tag history.
 - Release versions come from the tag (`vX.Y.Z` or `vX.Y.Z-alpha.N`).
+- Untagged `master` builds are prerelease builds. After `vX.Y.Z-alpha.N`, an
+  untagged commit may resolve to the next alpha prerelease, for example
+  `X.Y.Z-alpha.(N+1)`.
 - CI computes GitVersion outputs for artifact naming, while product builds use
   GitVersion-backed assembly metadata.
