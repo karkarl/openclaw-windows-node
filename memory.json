@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-06-08",
-  "last_run_id": "27142023867",
+  "last_run": "2026-06-09",
+  "last_run_id": "27177560094",
   "backlog_cursor": {
-    "issue_number": 720,
-    "comment_cursor": 721
+    "issue_number": 727,
+    "comment_cursor": 728
   },
   "comments_made": {
     "467": "2026-05-20",
@@ -41,9 +41,10 @@
     "697": {"date": "2026-06-06", "note": "Pointed to PR #701 for SSH custom port fix. Issue now closed."},
     "694": {"date": "2026-06-06", "note": "Confirmed WSL locale fix. Issue now closed."},
     "703": {"date": "2026-06-07", "note": "Root cause confirmed, fix PR #712 submitted. Superseded by maintainer PR #713. Issue now closed."},
-    "709": {"date": "2026-06-08", "note": "Root cause: EnterWizardErrorAsync disconnects before cancel, leaving stale server session. Fix PR submitted (branch repo-assist/fix-issue-709-wizard-stale-session). Two duplicate PRs created: #717 and #718."},
+    "709": {"date": "2026-06-08", "note": "Root cause: EnterWizardErrorAsync disconnects before cancel, leaving stale server session. Fix PRs #717 and #718 submitted (duplicates)."},
     "688": {"date": "2026-06-08", "note": "Explained Back button architecture constraint: requires gateway wizard.back RPC or client-side state replay."},
-    "720": {"date": "2026-06-08", "note": "Root cause confirmed: GatewayClientFactory.Create() passed bootstrapPairAsNode: credential.IsBootstrapToken, causing operator client to connect as node role with bootstrap tokens. Fix PR submitted (branch repo-assist/fix-issue-720-operator-qr-pair-role)."}
+    "720": {"date": "2026-06-08", "note": "Root cause confirmed: GatewayClientFactory.Create() passed bootstrapPairAsNode: credential.IsBootstrapToken, causing operator client to connect as node role with bootstrap tokens. Fix PR #721 submitted."},
+    "727": {"date": "2026-06-09", "note": "Welcomed first-time reporter, asked for version/repro details. Labelled bug+needs triage."}
   },
   "labels_applied": {
     "460": ["enhancement"],
@@ -60,7 +61,8 @@
     "554": ["refactor"],
     "703": ["bug"],
     "694": ["bug"],
-    "695": ["bug"]
+    "695": ["bug"],
+    "727": ["bug", "needs triage"]
   },
   "fix_attempts": {
     "351": {"pr": 448, "branch": "repo-assist/fix-mcp-tool-descriptions", "status": "merged", "date": "2026-05-18"},
@@ -78,8 +80,8 @@
     "655": {"pr": 679, "status": "merged", "date": "2026-06-04", "note": "Issue closed 2026-06-07."},
     "672": {"pr": 699, "status": "merged", "date": "2026-06-05", "note": "Issue closed."},
     "703": {"pr": 712, "status": "closed-superseded", "date": "2026-06-07", "note": "Maintainer PR #713 fixed root cause. Issue closed 2026-06-07."},
-    "709": {"branch": "repo-assist/fix-issue-709-wizard-stale-session", "prs": ["#717", "#718"], "status": "open", "date": "2026-06-08", "note": "Two duplicate PRs created. cancel wizard session before disconnect in EnterWizardErrorAsync and StartWizardAsync."},
-    "720": {"branch": "repo-assist/fix-issue-720-operator-qr-pair-role", "status": "open", "date": "2026-06-08", "note": "bootstrapPairAsNode: false for operator client factory. Tests: Shared 2123 pass, Tray 974 pass, Connection 297 pass."}
+    "709": {"branch": "repo-assist/fix-issue-709-wizard-stale-session", "prs": ["#717", "#718"], "status": "open", "date": "2026-06-08", "note": "Two duplicate PRs created. #718 is the more complete description; maintainer should close #717."},
+    "720": {"branch": "repo-assist/fix-issue-720-operator-qr-pair-role", "pr": 721, "status": "open", "date": "2026-06-08", "note": "bootstrapPairAsNode: false for operator client factory. Tests: Shared 2123 pass, Tray 974 pass, Connection 297 pass."}
   },
   "improve_attempts": {
     "deep-link-parser-tests": {"pr": 456, "status": "merged"},
@@ -97,7 +99,8 @@
     "searchvalues-seam-perf-seam-edge-tests": {"pr": 704, "status": "merged", "date": "2026-06-06"},
     "test-ssh-tunnel-state-machine-2026-06-06": {"pr": 706, "status": "merged", "date": "2026-06-06"},
     "perf-shorten-path-and-websocket-decode": {"pr": 708, "status": "merged", "date": "2026-06-07"},
-    "perf-single-pass-dict-remove": {"branch": "repo-assist/perf-single-pass-dict-remove", "status": "open", "date": "2026-06-08", "note": "TakePendingRequestMethod and TakePendingChatSend: TryGetValue+Remove -> Remove(key,out value)."}
+    "perf-single-pass-dict-remove": {"pr": 722, "status": "open", "date": "2026-06-08", "note": "TakePendingRequestMethod and TakePendingChatSend: TryGetValue+Remove -> Remove(key,out value)."},
+    "weblogin-result-consolidation": {"branch": "repo-assist/improve-weblogin-result-consolidation", "status": "open", "date": "2026-06-09", "note": "Merged WebLoginStartResult+WebLoginWaitResult into single WebLoginResult. Tray 974 pass, Shared 2122 pass (8 pre-existing failures). PR queued."}
   },
   "engineering_attempts": {
     "treat-warnings-as-errors": {"pr": 527, "status": "closed-no-merge"},
@@ -118,5 +121,5 @@
   "monthly_activity_month": "2026-06",
   "open_repo_assist_issues": [],
   "closed_repo_assist_prs": [448, 456, 464, 472, 482, 495, 522, 528, 530, 532, 535, 539, 548, 566, 571, 578, 585, 595, 603, 608, 609, 612, 615, 628, 635, 679, 685, 692, 699, 704, 706, 708, 712],
-  "notes": "Run 2026-06-08 (13:47 UTC): Task 3 (Fix #720 QR-code pairing stuck in node role: changed GatewayClientFactory to pass bootstrapPairAsNode:false for operator client; added tests; PR on branch repo-assist/fix-issue-720-operator-qr-pair-role). Task 8 (Perf: single-pass Remove(key,out value) for TakePendingRequestMethod and TakePendingChatSend; PR on branch repo-assist/perf-single-pass-dict-remove). Note: PRs #717 and #718 are duplicates for fix #709 - maintainer should close one. Prior run: Task 3+2 for #709 wizard stale-session and #688 Back button."
+  "notes": "Run 2026-06-09 (27177560094): Task 5 (refactor: consolidate WebLoginStartResult+WebLoginWaitResult into WebLoginResult; branch repo-assist/improve-weblogin-result-consolidation; PR queued). Task 3 (Labelled #727 bug+needs triage; commented on #727 welcoming first-time reporter). Task 11 (Updated monthly activity issue #618). Note: PRs #717 and #718 are duplicates for fix #709 — maintainer should close #717 (less complete description)."
 }
