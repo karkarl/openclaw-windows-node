@@ -428,16 +428,17 @@ jobs:
 
     - name: Build MSIX Package
       run: >
-        msbuild src/OpenClaw.Tray.WinUI/OpenClaw.Tray.WinUI.csproj
-        /p:Configuration=Release
-        /p:RuntimeIdentifier=${{ matrix.rid }}
-        /p:Platform=${{ matrix.platform }}
-        /p:PackageMsix=true
-        /p:GenerateAppxPackageOnBuild=true
-        /p:AppxPackageSigningEnabled=false
-        /p:AppxBundle=Never
-        /p:UapAppxPackageBuildMode=SideloadOnly
-        /p:AppxPackageDir=AppPackages\
+        dotnet publish src/OpenClaw.Tray.WinUI/OpenClaw.Tray.WinUI.csproj
+        -c Release
+        -r ${{ matrix.rid }}
+        --self-contained
+        -p:Platform=${{ matrix.platform }}
+        -p:PackageMsix=true
+        -p:GenerateAppxPackageOnBuild=true
+        -p:AppxPackageSigningEnabled=false
+        -p:AppxBundle=Never
+        -p:UapAppxPackageBuildMode=SideloadOnly
+        -p:AppxPackageDir=AppPackages\
 
     - name: Find MSIX Package
       id: find-msix
