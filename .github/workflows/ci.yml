@@ -424,9 +424,7 @@ jobs:
 
   build-msix:
     needs: [test, e2etests]
-    if: false # Paused; will be unpaused when MSIX-primary release pipeline lands (Phase 4).
     runs-on: ${{ matrix.rid == 'win-arm64' && 'windows-11-arm' || 'windows-latest' }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -518,8 +516,8 @@ jobs:
         path: ${{ steps.find-msix.outputs.msix_path }}
 
   release:
-    needs: [repo-hygiene, test, e2etests, build]
-    if: startsWith(github.ref, 'refs/tags/v') && needs.repo-hygiene.result == 'success' && needs.test.result == 'success' && needs.e2etests.result == 'success' && needs.build.result == 'success' && !cancelled()
+    needs: [repo-hygiene, test, e2etests, build, build-msix]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.repo-hygiene.result == 'success' && needs.test.result == 'success' && needs.e2etests.result == 'success' && needs.build.result == 'success' && needs.build-msix.result == 'success' && !cancelled()
     runs-on: windows-latest
     environment: release-signing
     permissions:
@@ -541,6 +539,18 @@ jobs:
       with:
         name: openclaw-tray-win-arm64
         path: artifacts/tray-win-arm64
+
+    - name: Download win-x64 MSIX artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: openclaw-msix-win-x64
+        path: artifacts/msix-win-x64
+
+    - name: Download win-arm64 MSIX artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: openclaw-msix-win-arm64
+        path: artifacts/msix-win-arm64
 
     - name: Disable NuGet source mapping for signing
       shell: pwsh
@@ -595,6 +605,32 @@ jobs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
 
+    - name: Sign x64 Release MSIX Package
+      uses: azure/artifact-signing-action@v2
+      with:
+        endpoint: https://eus.codesigning.azure.net/
+        signing-account-name: openclaw
+        certificate-profile-name: openclaw
+        files-folder: artifacts/msix-win-x64
+        files-folder-filter: msix
+        files-folder-depth: 1
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    - name: Sign ARM64 Release MSIX Package
+      uses: azure/artifact-signing-action@v2
+      with:
+        endpoint: https://eus.codesigning.azure.net/
+        signing-account-name: openclaw
+        certificate-profile-name: openclaw
+        files-folder: artifacts/msix-win-arm64
+        files-folder-filter: msix
+        files-folder-depth: 1
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
     - name: Verify x64 Release Executable Signing Policy
       shell: pwsh
       run: .\scripts\Test-ReleaseExecutableSignatures.ps1 -PayloadPath artifacts/tray-win-x64 -RequireSignedOpenClaw
@@ -620,22 +656,27 @@ jobs:
         generate_release_notes: true
         prerelease: ${{ contains(github.ref_name, '-') }}
         make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+        files: |
+          artifacts/msix-win-x64/*.msix
+          artifacts/msix-win-arm64/*.msix
         body: |
           ## OpenClaw Windows Hub ${{ github.ref_name }}
 
-          > MSIX installer artifacts arrive in a follow-up release once the
-          > MSIX-primary distribution pipeline lands.
+          ### Install
+
+          OpenClaw is distributed as an MSIX package via Windows AppInstaller.
+          Use the install links in the [README](https://github.com/openclaw/openclaw-windows-node#install)
+          for the recommended path — Windows handles silent auto-updates from there.
+
+          The `.msix` files attached below are the underlying signed packages.
+          Advanced users can install them directly with `Add-AppxPackage <file>`.
 
           ### Features
           - 🦞 System tray integration with gateway status
           - ✅ Code-signed with Azure Artifact Signing
+          - 🔄 Silent auto-updates via Windows AppInstaller
 
           ### Requirements
           - Windows 10 version 1903 or later
           - [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
           - OpenClaw gateway running locally
-
-          ### Quick Start
-          1. Extract the portable ZIP and run `OpenClaw.Tray.WinUI.exe`
-          2. Launch from system tray
-          3. Right-click tray icon → Settings to configure
