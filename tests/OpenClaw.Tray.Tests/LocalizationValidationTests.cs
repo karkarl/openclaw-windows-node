@@ -198,7 +198,7 @@ public class LocalizationValidationTests
         "ConfigPage_ConfigUnavailable",
         "ConfigPage_ConfigIsReadOnly",
         // ConnectionPage gateway terminal controls — surfaced after PR #597
-        // landed in master. Seeded English-only across all 5 locales using the
+        // landed in main. Seeded English-only across all 5 locales using the
         // same deferred-translation pattern as the AgentEventsPage / SkillsPage
         // / CronPage entries above. The Description_Format key takes the WSL
         // distro name as {0} and is formatted in ConnectionPage.xaml.cs.

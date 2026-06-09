@@ -5,8 +5,8 @@ Companion MSIX channel.
 
 Installed MSIX packages poll these architecture-specific raw GitHub URLs:
 
-- `https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller`
-- `https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-arm64.appinstaller`
+- `https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller`
+- `https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-arm64.appinstaller`
 
 The checked-in feed files are bootstrap placeholders at version `0.0.0.0` so
 the raw URLs exist before the first signed MSIX embeds them. End users never
@@ -15,7 +15,7 @@ background after the user installs from a real release.
 
 ## Release flow
 
-Release builds do **not** push these files directly to `master`. After a
+Release builds do **not** push these files directly to `main`. After a
 successful stable release tag:
 
 1. `.github/workflows/appinstaller-feed-pr.yml` is triggered (manually via
@@ -24,7 +24,7 @@ successful stable release tag:
    signed `.msix` release assets via `scripts/render-appinstaller.ps1`.
 3. The rendered files are validated via `scripts/validate-appinstaller-hosting.ps1`
    against the hosted GitHub release assets.
-4. A pull request is opened against `master` with the regenerated XML.
+4. A pull request is opened against `main` with the regenerated XML.
 5. Merging the PR is the human gate that advances installed clients to the
    new version.
 

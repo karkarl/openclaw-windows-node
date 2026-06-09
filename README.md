@@ -32,8 +32,8 @@ This monorepo contains the Windows hub, shared client libraries, and CLI utiliti
 
 Install via Windows AppInstaller (auto-updates from the stable feed):
 
-- **Install (x64)** — [openclaw-x64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller)
-- **Install (ARM64)** — [openclaw-arm64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-arm64.appinstaller)
+- **Install (x64)** — [openclaw-x64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller)
+- **Install (ARM64)** — [openclaw-arm64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-arm64.appinstaller)
 
 Click the link for your machine architecture; Windows opens the App Installer
 UI, prompts for consent, then installs the signed MSIX. Future updates are

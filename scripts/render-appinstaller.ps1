@@ -41,7 +41,7 @@
 .PARAMETER AppInstallerUri
   Absolute https:// URL of THIS rendered .appinstaller file on the stable
   channel (e.g.
-  https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller).
+  https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller).
   Embedded inside the AppInstaller so Windows AppInstaller knows where to poll
   for future updates.
 
@@ -59,7 +59,7 @@
     -IdentityName OpenClaw.Companion `
     -ProcessorArchitecture x64 `
     -MsixUri https://github.com/openclaw/openclaw-windows-node/releases/download/v0.5.3/OpenClawCompanion-0.5.3-win-x64.msix `
-    -AppInstallerUri https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller `
+    -AppInstallerUri https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller `
     -OutputPath installer/appinstaller/openclaw-x64.appinstaller
 #>
 

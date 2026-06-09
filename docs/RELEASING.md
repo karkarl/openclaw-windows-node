@@ -217,7 +217,7 @@ Only tag when `HEAD == origin/main`.
 - Do not add csproj `<Version>` release fallbacks; product versions come from
   GitVersion/tag history.
 - Release versions come from the tag (`vX.Y.Z` or `vX.Y.Z-alpha.N`).
-- Untagged `master` builds are prerelease builds. After `vX.Y.Z-alpha.N`, an
+- Untagged `main` builds are prerelease builds. After `vX.Y.Z-alpha.N`, an
   untagged commit may resolve to the next alpha prerelease, for example
   `X.Y.Z-alpha.(N+1)`.
 - CI computes GitVersion outputs for artifact naming, while product builds use

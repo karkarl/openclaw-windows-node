@@ -15,7 +15,7 @@
 
 .PARAMETER AppInstallerUri
   Stable hosted .appinstaller URL, e.g.
-  https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller.
+  https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller.
 
 .PARAMETER MsixUri
   Optional MSIX URL. When omitted, the script fetches AppInstallerUri (or
@@ -24,7 +24,7 @@
 .PARAMETER AppInstallerPath
   Optional local .appinstaller file to parse instead of fetching AppInstallerUri.
   Used by the feed-update PR workflow before the rendered file is merged to
-  master at the stable raw GitHub location.
+  main at the stable raw GitHub location.
 
 .PARAMETER AllowGitHubContentTypes
   Compatibility switch for GitHub-hosted release assets. GitHub release
@@ -34,7 +34,7 @@
 
 .EXAMPLE
   ./scripts/validate-appinstaller-hosting.ps1 `
-    -AppInstallerUri https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller `
+    -AppInstallerUri https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-x64.appinstaller `
     -AllowGitHubContentTypes
 #>
 

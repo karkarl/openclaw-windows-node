@@ -19,7 +19,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
-        ref: master
+        ref: main
         fetch-depth: 0
 
     - name: Render stable AppInstaller feed files
@@ -77,7 +77,7 @@ jobs:
         $x64Uri = Get-ReleaseAssetUri -AssetName $x64Asset.name
         $arm64Uri = Get-ReleaseAssetUri -AssetName $arm64Asset.name
 
-        $rawBase = "https://raw.githubusercontent.com/$repo/master/installer/appinstaller"
+        $rawBase = "https://raw.githubusercontent.com/$repo/main/installer/appinstaller"
         $x64FeedPath = Join-Path $feedDir 'openclaw-x64.appinstaller'
         $arm64FeedPath = Join-Path $feedDir 'openclaw-arm64.appinstaller'
 
@@ -149,11 +149,11 @@ bundled inside the .msix and never fetches a separate framework package.
 "@
         Set-Content -Path $bodyPath -Value $body -Encoding UTF8
 
-        $existingPr = gh pr list --repo $repo --base master --head $branch --json number --jq '.[0].number'
+        $existingPr = gh pr list --repo $repo --base main --head $branch --json number --jq '.[0].number'
         if ([string]::IsNullOrWhiteSpace($existingPr)) {
           gh pr create `
             --repo $repo `
-            --base master `
+            --base main `
             --head $branch `
             --title "chore(msix): update AppInstaller feed for $tag" `
             --body-file $bodyPath

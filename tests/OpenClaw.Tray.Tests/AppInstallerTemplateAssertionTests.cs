@@ -128,7 +128,7 @@ public sealed class AppInstallerTemplateAssertionTests
             var doc = XDocument.Load(path);
             XNamespace ns = "http://schemas.microsoft.com/appx/appinstaller/2018";
             Assert.Equal("0.0.0.0", (string?)doc.Root!.Attribute("Version"));
-            Assert.Equal($"https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/{fileName}",
+            Assert.Equal($"https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/{fileName}",
                 (string?)doc.Root.Attribute("Uri"));
 
             var mainPackage = doc.Descendants(ns + "MainPackage").Single();
@@ -182,7 +182,7 @@ public sealed class AppInstallerTemplateAssertionTests
         Assert.Contains("openclaw-x64.appinstaller", workflow);
         Assert.Contains("openclaw-arm64.appinstaller", workflow);
         Assert.Contains("gh pr create", workflow);
-        Assert.Contains("--base master", workflow);
+        Assert.Contains("--base main", workflow);
         Assert.Contains("validate-appinstaller-hosting.ps1", workflow);
         Assert.Contains("-AllowGitHubContentTypes", workflow);
         Assert.Contains("OpenClaw.Companion_${version}_x64.msix", workflow);
