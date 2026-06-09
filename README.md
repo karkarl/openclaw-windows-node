@@ -30,14 +30,18 @@ This monorepo contains the Windows hub, shared client libraries, and CLI utiliti
 >
 > **Managed WSL gateway?** Local setup creates a locked-down app-owned `OpenClawGateway` distro. See [docs/WSL_GATEWAY_ADMIN.md](docs/WSL_GATEWAY_ADMIN.md) for editing `openclaw.json` as the `openclaw` user and using root for protected-file administration.
 
-Direct downloads from the latest OpenClaw release:
+Install via Windows AppInstaller (auto-updates from the stable feed):
 
-<!--
-TODO(MSIX phase 7): Replace this placeholder with the canonical MSIX download
-links once the MSIX-primary release pipeline lands. The Inno `.exe` installer
-links that used to live here were removed when Inno was deleted.
--->
-- MSIX installer downloads coming soon — see [docs/SETUP.md](docs/SETUP.md).
+- **Install (x64)** — [openclaw-x64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-x64.appinstaller)
+- **Install (ARM64)** — [openclaw-arm64.appinstaller](https://raw.githubusercontent.com/openclaw/openclaw-windows-node/master/installer/appinstaller/openclaw-arm64.appinstaller)
+
+Click the link for your machine architecture; Windows opens the App Installer
+UI, prompts for consent, then installs the signed MSIX. Future updates are
+delivered automatically by Windows via the same feed URL — no in-app "Check
+for updates" button needed.
+
+> See [docs/SETUP.md](docs/SETUP.md) for step-by-step guidance and what to do
+> if the install link opens as plain text in your browser.
 
 ### Prerequisites
 - Windows 10 (20H2+) or Windows 11
