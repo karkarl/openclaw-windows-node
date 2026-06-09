@@ -355,7 +355,9 @@ jobs:
         if-no-files-found: warn
 
   build-msix:
-    needs: [test, e2etests]
+    # TEMP: needs:[test, e2etests] removed for faster iteration on this PR.
+    # Restore before merging — release job depends on all four.
+    needs: []
     runs-on: ${{ matrix.rid == 'win-arm64' && 'windows-11-arm' || 'windows-latest' }}
     strategy:
       fail-fast: false
@@ -411,7 +413,7 @@ jobs:
     - name: Patch MSIX manifest metadata
       shell: pwsh
       run: |
-        $version = "${{ needs.test.outputs.majorMinorPatch }}.0"
+        $version = "${{ steps.gitversion.outputs.majorMinorPatch }}.0"
         $isAlpha = "${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-') }}" -eq "true"
         $identityName = if ($isAlpha) { "OpenClaw.Companion.Alpha" } else { "OpenClaw.Companion" }
         $displayName = if ($isAlpha) { "OpenClaw Companion Alpha" } else { "OpenClaw Companion" }
@@ -465,7 +467,7 @@ jobs:
         if (-not (Test-Path $assemblyPath)) {
           throw "OpenClaw.Tray.WinUI.dll missing from MSIX payload at $assemblyPath"
         }
-        $expected = "${{ needs.test.outputs.semVer }}"
+        $expected = "${{ steps.gitversion.outputs.semVer }}"
         $metadata = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($assemblyPath)
         if ([string]::IsNullOrWhiteSpace($metadata.ProductVersion)) {
           throw "OpenClaw.Tray.WinUI.dll inside MSIX is missing ProductVersion metadata."
