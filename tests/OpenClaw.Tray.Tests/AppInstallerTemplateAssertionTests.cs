@@ -185,8 +185,8 @@ public sealed class AppInstallerTemplateAssertionTests
         Assert.Contains("--base master", workflow);
         Assert.Contains("validate-appinstaller-hosting.ps1", workflow);
         Assert.Contains("-AllowGitHubContentTypes", workflow);
-        Assert.Contains("OpenClawCompanion-$versionText-win-x64.msix", workflow);
-        Assert.Contains("OpenClawCompanion-$versionText-win-arm64.msix", workflow);
+        Assert.Contains("OpenClaw.Companion_${version}_x64.msix", workflow);
+        Assert.Contains("OpenClaw.Companion_${version}_arm64.msix", workflow);
 
         // MSIX is self-contained — the workflow must not fetch or pass a
         // separate WindowsAppRuntime asset.
@@ -194,7 +194,7 @@ public sealed class AppInstallerTemplateAssertionTests
         Assert.DoesNotContain("WindowsAppRuntimeUri", workflow);
 
         // Stable feed only — no wildcard alpha/staging file globbing.
-        Assert.DoesNotContain("OpenClawCompanion-*-win-x64.msix", workflow);
-        Assert.DoesNotContain("OpenClawCompanion-*-win-arm64.msix", workflow);
+        Assert.DoesNotContain("OpenClaw.Companion_*_x64.msix", workflow);
+        Assert.DoesNotContain("OpenClaw.Companion_*_arm64.msix", workflow);
     }
 }
