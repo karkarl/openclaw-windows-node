@@ -72,7 +72,7 @@
 
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:ExeServer Executable="$targetnametoken$.exe" DisplayName="OpenClaw Toast Activator" Arguments="-ToastActivated">
+            <com:ExeServer Executable="OpenClaw.Tray.WinUI.exe" DisplayName="OpenClaw Toast Activator" Arguments="-ToastActivated">
               <com:Class Id="EF9297B3-EEEB-4E50-8306-D1D118E04BC7" />
             </com:ExeServer>
           </com:ComServer>
