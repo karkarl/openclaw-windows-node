@@ -43,6 +43,14 @@ internal sealed class CanvasFullscreenController
         IsFullscreen = false;
     }
 
+    public void Reset()
+    {
+        IsFullscreen = false;
+        _previousPresenterKind = default;
+        _previousBounds = default;
+        _wasMaximized = false;
+    }
+
     private void Enter()
     {
         _previousPresenterKind = _appWindow.Presenter.Kind;

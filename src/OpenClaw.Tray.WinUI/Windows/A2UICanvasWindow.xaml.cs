@@ -83,7 +83,7 @@ public sealed partial class A2UICanvasWindow : WindowEx
         Closed += (_, _) =>
         {
             IsClosed = true;
-            _fullscreenController.Exit();
+            _fullscreenController.Reset();
             RootGrid.RemoveHandler(UIElement.KeyDownEvent, _canvasKeyDownHandler);
             try { _router.SurfaceCreated -= OnSurfaceCreated; }
             catch (Exception ex) { OpenClawTray.Services.Logger.Debug($"A2UICanvasWindow: unsubscribe SurfaceCreated failed: {ex.Message}"); }

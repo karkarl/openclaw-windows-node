@@ -532,7 +532,7 @@ public sealed partial class CanvasWindow : WindowEx
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         IsClosed = true;
-        _fullscreenController.Exit();
+        _fullscreenController.Reset();
         _gatewayToken = null;
 
         if (CanvasWebView.CoreWebView2 != null)

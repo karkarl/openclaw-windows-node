@@ -19,6 +19,8 @@ public sealed class CanvasFullscreenContractTests
         Assert.Contains("presenter.Maximize()", source);
         Assert.Contains("else\n            _appWindow.MoveAndResize(_previousBounds)", source);
         Assert.Contains("if (!_wasMaximized)", source);
+        Assert.Contains("public void Reset()", source);
+        Assert.Contains("IsFullscreen = false;\n        _previousPresenterKind = default;\n        _previousBounds = default;\n        _wasMaximized = false;", source);
     }
 
     [Fact]
@@ -38,7 +40,8 @@ public sealed class CanvasFullscreenContractTests
         Assert.Contains("catch (System.Text.Json.JsonException)", source);
         Assert.Contains("_fullscreenController.Toggle()", source);
         Assert.Contains("_fullscreenController.Exit()", source);
-        Assert.Contains("IsClosed = true;\n        _fullscreenController.Exit();", source);
+        Assert.Contains("IsClosed = true;\n        _fullscreenController.Reset();", source);
+        Assert.DoesNotContain("IsClosed = true;\n        _fullscreenController.Exit();", source);
     }
 
     [Fact]
@@ -53,7 +56,8 @@ public sealed class CanvasFullscreenContractTests
         Assert.Contains("else if (!args.Handled", source);
         Assert.Contains("_fullscreenController.Toggle()", source);
         Assert.Contains("_fullscreenController.Exit()", source);
-        Assert.Contains("IsClosed = true;\n            _fullscreenController.Exit();", source);
+        Assert.Contains("IsClosed = true;\n            _fullscreenController.Reset();", source);
+        Assert.DoesNotContain("IsClosed = true;\n            _fullscreenController.Exit();", source);
         Assert.Contains("RootGrid.RemoveHandler(UIElement.KeyDownEvent, _canvasKeyDownHandler)", source);
     }
 
