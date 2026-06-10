@@ -104,6 +104,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, long> _resetLocalSendWithoutRunStartSequences = new(); // sessionKey -> lifecycle sequence at local send start
     private readonly Dictionary<string, long> _resetLocalEchoSequences = new(); // sessionKey -> lifecycle sequence when local echo was observed
     private readonly Dictionary<string, List<PendingResetLifecycleStart>> _resetPendingLifecycleStarts = new(); // sessionKey -> lifecycle.start seen before proof
+    private readonly HashSet<string> _resetRemoteBackfillInFlight = new(); // threads proving a timestamp-less remote user frame via history
     private long _resetLifecycleStartSequence;
     private readonly HashSet<string> _resetRemoteUserSeen = new(); // threads with a fresh remote post-reset user frame
     private readonly Dictionary<string, string> _resetClearedSessionIds = new(); // sessionKey -> sessionId cleared by reset
@@ -1281,7 +1282,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         var rawText = message.Text ?? string.Empty;
         lock (_gate)
         {
-            if (ShouldDropChatMessageAfterResetLocked(msgThreadId, roleLower, rawText, message.Ts, out var consumeEchoText))
+            if (ShouldDropChatMessageAfterResetLocked(
+                msgThreadId,
+                roleLower,
+                rawText,
+                message.Ts,
+                out var consumeEchoText,
+                out var requestRemoteBackfill))
             {
                 if (consumeEchoText is not null &&
                     _localSentTexts.TryGetValue(msgThreadId, out var resetEchoQueue) &&
@@ -1289,6 +1296,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 {
                     TryConsumeLocalEchoLocked(msgThreadId, resetEchoQueue, consumeEchoText);
                 }
+
+                if (requestRemoteBackfill)
+                    _ = FetchRemoteUserMessageAsync(msgThreadId, openResetGateOnSuccess: true);
 
                 Logger.Debug($"[Reset] Dropping stale chat message after reset for threadId='{msgThreadId}' role='{roleLower}'");
                 return;
@@ -1737,7 +1747,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     /// Fetch the latest user message from history for a remotely-initiated turn.
     /// Called when lifecycle.start arrives for a thread we didn't locally initiate.
     /// </summary>
-    private async Task FetchRemoteUserMessageAsync(string threadId)
+    private async Task FetchRemoteUserMessageAsync(string threadId, bool openResetGateOnSuccess = false)
     {
         long requestResetVersion;
         long resetCutoffUtcMs;
@@ -1794,6 +1804,12 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     }
                 }
 
+                if (openResetGateOnSuccess)
+                {
+                    _resetRemoteUserSeen.Add(threadId);
+                    TryOpenResetGateFromPendingLifecycleLocked(threadId, acceptedRunId: null);
+                }
+
                 var meta = BuildLiveMetaLocked(threadId, lastUser.Ts);
                 snapshotToPublish = ApplyEventLocked(
                     threadId,
@@ -1807,6 +1823,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         catch (Exception ex)
         {
             Logger.Warn($"[REMOTE] Failed to fetch remote user message for threadId='{threadId}': {ex.Message}");
+        }
+        finally
+        {
+            if (openResetGateOnSuccess)
+            {
+                lock (_gate) { _resetRemoteBackfillInFlight.Remove(threadId); }
+            }
         }
     }
 
@@ -2950,6 +2973,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         _resetLocalSendWithoutRunStartSequences.Remove(threadId);
         _resetLocalEchoSequences.Remove(threadId);
         _resetPendingLifecycleStarts.Remove(threadId);
+        _resetRemoteBackfillInFlight.Remove(threadId);
         _resetRemoteUserSeen.Remove(threadId);
 
         return new ResetClearPersistence(saveAbortedIds, saveToolMeta, saveAttachmentMeta);
@@ -2996,9 +3020,11 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         string roleLower,
         string rawText,
         long tsMs,
-        out string? consumeEchoText)
+        out string? consumeEchoText,
+        out bool requestRemoteBackfill)
     {
         consumeEchoText = null;
+        requestRemoteBackfill = false;
         if (!_resetAwaitingUserMessage.Contains(threadId))
         {
             return IsPreResetTimestampLocked(threadId, tsMs, GetResetCutoffUtcMsLocked(threadId));
@@ -3024,6 +3050,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             _resetRemoteUserSeen.Add(threadId);
             if (TryOpenResetGateFromPendingLifecycleLocked(threadId, acceptedRunId: null))
                 return false;
+        }
+        else if (isFreshUser && _resetRemoteBackfillInFlight.Add(threadId))
+        {
+            requestRemoteBackfill = true;
         }
 
         return true;

@@ -508,6 +508,71 @@ public class OpenClawChatDataProviderTests
     }
 
     [Fact]
+    public async Task SessionResetCompletion_TimestamplessRemoteUserCanOpenGateViaHistoryBackfill()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
+        bridge.HistoryBehavior = _ => Task.FromResult(new ChatHistoryInfo
+        {
+            SessionKey = "main",
+            Messages = new[]
+            {
+                new ChatMessageInfo
+                {
+                    SessionKey = "main",
+                    Role = "user",
+                    Text = "remote no timestamp",
+                    Ts = 0
+                }
+            }
+        });
+        await provider.LoadAsync();
+        bridge.RaiseSessionCommandCompleted(new SessionCommandResult
+        {
+            Method = "sessions.reset",
+            Ok = true,
+            Key = "main"
+        });
+        snapshots.Clear();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "user",
+            Text = "remote no timestamp",
+            Ts = 0
+        });
+
+        for (var i = 0; i < 20; i++)
+        {
+            if (snapshots.Count > 0 &&
+                snapshots[^1].Timelines["main"].Entries.Any(e =>
+                    e.Kind == ChatTimelineItemKind.User &&
+                    e.Text == "remote no timestamp"))
+            {
+                break;
+            }
+            await Task.Delay(10);
+        }
+
+        var freshStart = MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "remote-run");
+        freshStart.Ts = DateTimeOffset.UtcNow.AddSeconds(1).ToUnixTimeMilliseconds();
+        bridge.RaiseAgent(freshStart);
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "main",
+            Role = "assistant",
+            State = "final",
+            Text = "remote response"
+        });
+
+        var latest = snapshots[^1];
+        Assert.Contains(latest.Timelines["main"].Entries, e =>
+            e.Kind == ChatTimelineItemKind.User && e.Text == "remote no timestamp");
+        Assert.Contains(latest.Timelines["main"].Entries, e =>
+            e.Kind == ChatTimelineItemKind.Assistant && e.Text == "remote response");
+    }
+
+    [Fact]
     public async Task SessionResetCompletion_LocalSendDoesNotReopenGateForStaleChatFrames()
     {
         var (bridge, provider, snapshots, _) = CreateProvider(new[] { MainSession() });
