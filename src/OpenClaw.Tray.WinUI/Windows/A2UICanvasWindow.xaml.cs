@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using OpenClaw.Shared;
 using OpenClawTray.A2UI.Actions;
@@ -45,6 +46,8 @@ public sealed partial class A2UICanvasWindow : WindowEx
     private readonly DispatcherQueue _dispatcher;
     private readonly A2UIRouter _router;
     private readonly DataModelStore _dataModel;
+    private readonly CanvasFullscreenController _fullscreenController;
+    private readonly KeyEventHandler _canvasKeyDownHandler;
 
     public bool IsClosed { get; private set; }
 
@@ -62,12 +65,15 @@ public sealed partial class A2UICanvasWindow : WindowEx
         WaitingForContentText.Text = OpenClawTray.Helpers.LocalizationHelper.GetString("Canvas_WaitingForContent");
 
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+        _fullscreenController = new CanvasFullscreenController(AppWindow);
+        _canvasKeyDownHandler = OnCanvasKeyDown;
         _dataModel = new DataModelStore(_dispatcher);
         var registry = ComponentRendererRegistry.BuildDefault(media);
         _router = new A2UIRouter(_dispatcher, _dataModel, registry, actions, logger);
 
         _router.SurfaceCreated += OnSurfaceCreated;
         _router.SurfaceDeleted += OnSurfaceDeleted;
+        RootGrid.AddHandler(UIElement.KeyDownEvent, _canvasKeyDownHandler, true);
 
         // Explicit teardown: unsubscribe router events and reset surfaces so
         // the router's component subscriptions don't outlive the window. The
@@ -77,6 +83,8 @@ public sealed partial class A2UICanvasWindow : WindowEx
         Closed += (_, _) =>
         {
             IsClosed = true;
+            _fullscreenController.Exit();
+            RootGrid.RemoveHandler(UIElement.KeyDownEvent, _canvasKeyDownHandler);
             try { _router.SurfaceCreated -= OnSurfaceCreated; }
             catch (Exception ex) { OpenClawTray.Services.Logger.Debug($"A2UICanvasWindow: unsubscribe SurfaceCreated failed: {ex.Message}"); }
             try { _router.SurfaceDeleted -= OnSurfaceDeleted; }
@@ -86,6 +94,25 @@ public sealed partial class A2UICanvasWindow : WindowEx
             _surfaceScrollers.Clear();
             _surfaceTabs.Clear();
         };
+    }
+
+    private void OnCanvasKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.KeyStatus.WasKeyDown)
+            return;
+
+        if (args.Key == global::Windows.System.VirtualKey.F11)
+        {
+            _fullscreenController.Toggle();
+            args.Handled = true;
+        }
+        else if (!args.Handled
+            && args.Key == global::Windows.System.VirtualKey.Escape
+            && _fullscreenController.IsFullscreen)
+        {
+            _fullscreenController.Exit();
+            args.Handled = true;
+        }
     }
 
     /// <summary>

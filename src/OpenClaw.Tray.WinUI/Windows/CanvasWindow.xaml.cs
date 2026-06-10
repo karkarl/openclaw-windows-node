@@ -54,6 +54,26 @@ public sealed partial class CanvasWindow : WindowEx
     private TypedEventHandler<CoreWebView2, CoreWebView2WebMessageReceivedEventArgs>? _webMessageReceivedHandler;
     private TypedEventHandler<CoreWebView2, CoreWebView2WebResourceRequestedEventArgs>? _webResourceRequestedHandler;
     private string? _webResourceRequestedFilter;
+    private readonly CanvasFullscreenController _fullscreenController;
+    private const string FullscreenShortcutMessageType = "openclaw-canvas-fullscreen-shortcut";
+    private const string FullscreenShortcutScript = """
+        window.addEventListener('keydown', event => {
+          if (event.repeat) return;
+          if (event.key === 'F11') {
+            window.chrome.webview.postMessage({ type: 'openclaw-canvas-fullscreen-shortcut', payload: { key: event.key } });
+            event.preventDefault();
+          } else if (event.key === 'Escape') {
+            const target = event.target;
+            const isEditable = target instanceof HTMLElement
+              && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+            queueMicrotask(() => {
+              if (!event.defaultPrevented && !isEditable) {
+                window.chrome.webview.postMessage({ type: 'openclaw-canvas-fullscreen-shortcut', payload: { key: event.key } });
+              }
+            });
+          }
+        }, true);
+        """;
 
     /// <summary>
     /// Fired when the SPA sends a message to the native side via
@@ -234,6 +254,7 @@ public sealed partial class CanvasWindow : WindowEx
         SetTitleBar(AppTitleBar);
         this.SetIcon("Assets\\openclaw.ico");
         _dispatcherQueue = DispatcherQueue;
+        _fullscreenController = new CanvasFullscreenController(AppWindow);
         this.Closed += OnWindowClosed;
         
         // Initialize WebView2
@@ -255,6 +276,7 @@ public sealed partial class CanvasWindow : WindowEx
             ErrorPanel.Visibility = Visibility.Collapsed;
             
             await CanvasWebView.EnsureCoreWebView2Async();
+            await CanvasWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(FullscreenShortcutScript);
 
             // Map local canvas files to a virtual hostname so canvas content
             // can be served without hitting the gateway HTTP server.
@@ -297,6 +319,12 @@ public sealed partial class CanvasWindow : WindowEx
                 var msg = WebBridgeMessage.TryParse(e.WebMessageAsJson);
                 if (msg != null)
                 {
+                    if (msg.Type == FullscreenShortcutMessageType)
+                    {
+                        HandleFullscreenShortcut(msg.PayloadJson);
+                        return;
+                    }
+
                     Logger.Debug($"[Canvas] bridge message from SPA, type={SanitizeBridgeLogValue(msg.Type)}");
                     BridgeMessageReceived?.Invoke(this, msg);
                 }
@@ -374,6 +402,37 @@ public sealed partial class CanvasWindow : WindowEx
             ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Text = $"Failed to initialize WebView2: {ex.Message}";
             _webViewReadyTcs.TrySetException(ex);
+        }
+    }
+
+    private void HandleFullscreenShortcut(string? payloadJson)
+    {
+        if (payloadJson is null)
+            return;
+
+        string? key;
+        try
+        {
+            using var payload = System.Text.Json.JsonDocument.Parse(payloadJson);
+            if (payload.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !payload.RootElement.TryGetProperty("key", out var keyElement)
+                || keyElement.ValueKind != System.Text.Json.JsonValueKind.String)
+                return;
+
+            key = keyElement.GetString();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return;
+        }
+
+        if (key == "F11")
+        {
+            _fullscreenController.Toggle();
+        }
+        else if (key == "Escape" && _fullscreenController.IsFullscreen)
+        {
+            _fullscreenController.Exit();
         }
     }
 
@@ -473,6 +532,7 @@ public sealed partial class CanvasWindow : WindowEx
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         IsClosed = true;
+        _fullscreenController.Exit();
         _gatewayToken = null;
 
         if (CanvasWebView.CoreWebView2 != null)
