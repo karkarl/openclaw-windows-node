@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TEMP test-only AppInstaller feed for validating Azure Trusted Signing +
+  AppInstaller silent-update on the user/kmahone/msix branch. Delete this
+  file before merging the branch to main.
+
+  How to use:
+    1. Push the FIRST signing-test tag, e.g. `git push origin v0.6.4-msixtest.3`.
+       CI publishes a prerelease GitHub Release with the signed MSIX named
+       `OpenClaw.Tray.WinUI_0.6.4.3_x64.msix`.
+    2. Install via ms-appinstaller link:
+         start ms-appinstaller:?source=https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller
+    3. To rehearse the auto-update path: bump the two Version="0.6.4.N"
+       attributes below and the MainPackage/@Uri release-tag segment to N+1,
+       commit the edit to this branch, then push a new tag
+       `v0.6.4-msixtest.<N+1>`. After CI publishes the new release, run:
+         Add-AppxPackage -AppInstallerFile https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller -ForceApplicationShutdown
+       Then verify the installed Identity Version advanced:
+         Get-AppxPackage OpenClaw.Companion.Alpha | Select Name, Version
+
+  Identity Name is OpenClaw.Companion.Alpha (msixtest tags contain '-', so the
+  build-msix Patch step rewrites the manifest to the .Alpha identity), so this
+  install lives side-by-side with any stable OpenClaw.Companion install.
+
+  The AppInstaller self-`Uri=` MUST be the exact URL Windows polls. raw.githubusercontent.com
+  serves files from the branch with a ~5 minute CDN cache; AppInstaller bypasses
+  that cache by sending its own If-Modified-Since header.
+
+  OnLaunch HoursBetweenUpdateChecks="0" means launching the installed app is
+  treated as an update poll trigger (default is 24h). UpdateBlocksActivation
+  means a pending update applies before the launch completes. ShowPrompt="true"
+  surfaces the OS update dialog so the rehearsal is visible (in production we
+  keep this false for silent tray-app updates).
+-->
+<AppInstaller
+  xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
+  Version="0.6.4.3"
+  Uri="https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller">
+
+  <MainPackage
+    Name="OpenClaw.Companion.Alpha"
+    Publisher="CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US"
+    Version="0.6.4.3"
+    ProcessorArchitecture="x64"
+    Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.6.4-msixtest.3/OpenClaw.Tray.WinUI_0.6.4.3_x64.msix" />
+
+  <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" UpdateBlocksActivation="true" ShowPrompt="true" />
+    <AutomaticBackgroundTask />
+  </UpdateSettings>
+</AppInstaller>
