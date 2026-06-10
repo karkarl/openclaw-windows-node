@@ -416,34 +416,12 @@ jobs:
       run: dotnet restore src/OpenClaw.Tray.WinUI -r ${{ matrix.rid }}
 
     - name: Patch MSIX manifest metadata
-      id: patch-manifest
       shell: pwsh
       run: |
         $version = "${{ steps.gitversion.outputs.majorMinorPatch }}.0"
         $isAlpha = "${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-') }}" -eq "true"
         $identityName = if ($isAlpha) { "OpenClaw.Companion.Alpha" } else { "OpenClaw.Companion" }
         $displayName = if ($isAlpha) { "OpenClaw Companion Alpha" } else { "OpenClaw Companion" }
-
-        # TEMP: for msixtest signing/AppInstaller rehearsal tags, use the tag's
-        # prerelease counter (the .N in v0.6.4-msixtest.N) as the 4th version
-        # part so successive test tags produce monotonically increasing MSIX
-        # Identity/@Version values (e.g. 0.6.4.3 then 0.6.4.4). Without this,
-        # both tags would resolve to 0.6.4.0 and AppInstaller would no-op the
-        # second install. Remove this block when the msixtest tag-verify TEMP
-        # skip in the test job is reverted.
-        $msixtestVersion = ""
-        $refName = "${{ github.ref_name }}"
-        if ($refName -match '^v\d+\.\d+\.\d+-msixtest\.(\d+)$') {
-          $msixtestVersion = "${{ steps.gitversion.outputs.majorMinorPatch }}.$([int]$Matches[1])"
-          $version = $msixtestVersion
-          Write-Host "TEMP msixtest override: MSIX Identity/@Version = $version"
-        }
-        # Exported so the Build step can pass -p:Version=<value>; required because
-        # SyncAppxManifestVersionTarget (OpenClaw.Tray.WinUI.csproj) re-derives
-        # the manifest Identity/@Version from $(Version)=$(GitVersion_SemVer)
-        # at build time and would otherwise clobber our .N override back to .0.
-        "msixtest_version=$msixtestVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
         $manifest = "src/OpenClaw.Tray.WinUI/Package.appxmanifest"
         [xml]$xml = Get-Content $manifest
         $xml.Package.Identity.Name = $identityName
@@ -454,11 +432,6 @@ jobs:
         Write-Host "Patched MSIX manifest to identity $identityName, display name '$displayName', version $version"
 
     - name: Build MSIX Package
-      # TEMP: the trailing format(...) appends -p:Version=0.6.4.N only for
-      # msixtest rehearsal tags so SyncAppxManifestVersionTarget writes the
-      # same 4-part literal back into the manifest at build time. Otherwise
-      # SyncAppxManifestVersionTarget would derive 0.6.4.0 from GitVersion's
-      # SemVer and clobber the Patch step's override.
       run: >
         dotnet publish src/OpenClaw.Tray.WinUI/OpenClaw.Tray.WinUI.csproj
         -c Release
@@ -471,7 +444,6 @@ jobs:
         -p:AppxBundle=Never
         -p:UapAppxPackageBuildMode=SideloadOnly
         -p:AppxPackageDir=AppPackages\
-        ${{ steps.patch-manifest.outputs.msixtest_version && format('-p:Version={0}', steps.patch-manifest.outputs.msixtest_version) || '' }}
 
     - name: Find MSIX Package
       id: find-msix

@@ -4,18 +4,28 @@
   AppInstaller silent-update on the user/kmahone/msix branch. Delete this
   file before merging the branch to main.
 
+  Version scheme: rehearsal bumps the PATCH part of the SemVer in the tag
+  (0.6.4 -> 0.6.5 -> ...) because GitVersion+SemVer tags are only 3 parts.
+  The MSIX Identity/@Version comes from build-msix Patch step as
+  majorMinorPatch + ".0" (so v0.6.4-msixtest.N -> 0.6.4.0). The trailing
+  `-msixtest.N` counter only differentiates rehearsal runs of the same
+  3-part version; we usually push a new patch number per rehearsal.
+
   How to use:
-    1. Push the FIRST signing-test tag, e.g. `git push origin v0.6.4-msixtest.3`.
-       CI publishes a prerelease GitHub Release with the signed MSIX named
-       `OpenClaw.Tray.WinUI_0.6.4.3_x64.msix`.
-    2. Install via ms-appinstaller link:
+    1. Install rehearsal. Pin Version below to 0.6.4.0 (the existing
+       v0.6.4-msixtest.3 release asset is the install source). Then:
          start ms-appinstaller:?source=https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller
-    3. To rehearse the auto-update path: bump the two Version="0.6.4.N"
-       attributes below and the MainPackage/@Uri release-tag segment to N+1,
-       commit the edit to this branch, then push a new tag
-       `v0.6.4-msixtest.<N+1>`. After CI publishes the new release, run:
-         Add-AppxPackage -AppInstallerFile https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller -ForceApplicationShutdown
-       Then verify the installed Identity Version advanced:
+    2. Update rehearsal. Push a higher-patch tag (e.g. v0.6.5-msixtest.1) and
+       wait for CI to publish its release. Bump all 4 placeholders below:
+         <AppInstaller Version="0.6.5.0">
+         <MainPackage Version="0.6.5.0"
+                      Uri=".../v0.6.5-msixtest.1/OpenClaw.Tray.WinUI_0.6.5.0_x64.msix" />
+       Commit + push the edit. Then either:
+         a. Quit the installed Alpha tray and relaunch from Start menu — the
+            <OnLaunch> prompt should appear, click Update.
+         b. Or force from PowerShell:
+              Add-AppxPackage -AppInstallerFile <feed-url> -ForceApplicationShutdown
+       Verify the installed Identity Version advanced:
          Get-AppxPackage OpenClaw.Companion.Alpha | Select Name, Version
 
   Identity Name is OpenClaw.Companion.Alpha (msixtest tags contain '-', so the
@@ -34,18 +44,19 @@
 -->
 <AppInstaller
   xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
-  Version="0.6.4.3"
+  Version="0.6.4.0"
   Uri="https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller">
 
   <MainPackage
     Name="OpenClaw.Companion.Alpha"
     Publisher="CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US"
-    Version="0.6.4.3"
+    Version="0.6.4.0"
     ProcessorArchitecture="x64"
-    Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.6.4-msixtest.3/OpenClaw.Tray.WinUI_0.6.4.3_x64.msix" />
+    Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.6.4-msixtest.3/OpenClaw.Tray.WinUI_0.6.4.0_x64.msix" />
 
   <UpdateSettings>
     <OnLaunch HoursBetweenUpdateChecks="0" UpdateBlocksActivation="true" ShowPrompt="true" />
     <AutomaticBackgroundTask />
   </UpdateSettings>
 </AppInstaller>
+
