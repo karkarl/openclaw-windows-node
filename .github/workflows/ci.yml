@@ -107,7 +107,12 @@ jobs:
       uses: gittools/actions/gitversion/execute@v4
 
     - name: Verify tag version output
-      if: startsWith(github.ref, 'refs/tags/v')
+      # TEMP: skip the strict tag/SemVer match for msixtest signing-pipeline
+      # rehearsal tags. GitVersion ignores the tag's prerelease label when it
+      # does not match the branch's auto-derived label, so on a feature branch
+      # `v0.6.4-msixtest.1` resolves to `0.6.4-<branch-slug>.<height>`. Revert
+      # the contains-check below before merging this branch to main.
+      if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, 'msixtest')
       shell: pwsh
       run: |
         $expected = "${{ github.ref_name }}" -replace '^v', ''
