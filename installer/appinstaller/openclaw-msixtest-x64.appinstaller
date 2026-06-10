@@ -43,7 +43,7 @@
   keep this false for silent tray-app updates).
 -->
 <AppInstaller
-  xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
+  xmlns="http://schemas.microsoft.com/appx/appinstaller/2021"
   Version="0.6.4.0"
   Uri="https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/openclaw-msixtest-x64.appinstaller">
 
