@@ -2395,7 +2395,7 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 RunId = payload.TryGetProperty("runId", out var rid) ? rid.GetString() ?? "" : "",
                 Seq = payload.TryGetProperty("seq", out var seqProp) && seqProp.ValueKind == JsonValueKind.Number ? seqProp.GetInt32() : 0,
                 Stream = payload.TryGetProperty("stream", out var streamProp2) ? streamProp2.GetString() ?? "" : "",
-                Ts = payload.TryGetProperty("ts", out var tsProp) && tsProp.ValueKind == JsonValueKind.Number ? tsProp.GetDouble() : 0,
+                Ts = ExtractChatTimestampMs(payload),
                 Data = payload.TryGetProperty("data", out var dataProp) ? dataProp.Clone() : default,
                 SessionKey = sessionKey,
                 Summary = payload.TryGetProperty("summary", out var sumProp) ? sumProp.GetString() : null
@@ -2554,12 +2554,15 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         // from common locations so any reasonable shape lights up the chat
         // footer pills.
         var (inTok, outTok, respTok, ctxPct) = ExtractChatUsage(payload);
+        var tsMs = ExtractChatTimestampMs(payload);
 
         // Try new format: payload.message.role + payload.message.content[].text
         if (payload.TryGetProperty("message", out var message))
         {
             var role = message.TryGetProperty("role", out var roleProp) ? roleProp.GetString() ?? "" : "";
             var state = payload.TryGetProperty("state", out var stateProp) ? stateProp.GetString() : null;
+            if (tsMs == 0)
+                tsMs = ExtractChatTimestampMs(message);
 
             // Usage block may also live on the inner ``message`` object.
             if (inTok is null && outTok is null && respTok is null && ctxPct is null)
@@ -2570,7 +2573,7 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 var text = ExtractMessageText(message);
                 if (string.IsNullOrEmpty(text)) return;
 
-                EmitChatMessageReceived(sessionKey, role, text, state, inTok, outTok, respTok, ctxPct);
+                EmitChatMessageReceived(sessionKey, role, text, state, tsMs, inTok, outTok, respTok, ctxPct);
 
                 if (role == "assistant" && string.Equals(state, "final", StringComparison.OrdinalIgnoreCase))
                 {
@@ -2591,7 +2594,7 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
 
             if (!string.IsNullOrEmpty(text))
             {
-                EmitChatMessageReceived(sessionKey, role, text, state, inTok, outTok, respTok, ctxPct);
+                EmitChatMessageReceived(sessionKey, role, text, state, tsMs, inTok, outTok, respTok, ctxPct);
 
                 if (role == "assistant")
                 {
@@ -2653,7 +2656,7 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         return (input, output, response, ctx);
     }
 
-    private void EmitChatMessageReceived(string sessionKey, string role, string text, string? state,
+    private void EmitChatMessageReceived(string sessionKey, string role, string text, string? state, long tsMs,
         int? inputTokens = null, int? outputTokens = null, int? responseTokens = null, int? contextPct = null)
     {
         try
@@ -2664,6 +2667,7 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
                 Role = role,
                 Text = text,
                 State = state,
+                Ts = tsMs,
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
                 ResponseTokens = responseTokens,
@@ -2674,6 +2678,34 @@ public class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatewayClient
         {
             _logger.Warn($"ChatMessageReceived handler threw: {ex.Message}");
         }
+    }
+
+    private static long ExtractChatTimestampMs(JsonElement node)
+    {
+        if (node.ValueKind != JsonValueKind.Object)
+            return 0;
+
+        foreach (var key in new[] { "timestamp", "ts" })
+        {
+            if (!node.TryGetProperty(key, out var value) ||
+                value.ValueKind != JsonValueKind.Number ||
+                !value.TryGetDouble(out var raw))
+            {
+                continue;
+            }
+
+            var ms = raw > 10_000_000_000 ? raw : raw * 1000;
+            try
+            {
+                return DateTimeOffset.FromUnixTimeMilliseconds((long)ms).ToUnixTimeMilliseconds();
+            }
+            catch
+            {
+                continue;
+            }
+        }
+
+        return 0;
     }
 
     private void EmitRawChatEvent(JsonElement payload)
