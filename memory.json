@@ -1,38 +1,11 @@
 {
   "last_run": "2026-06-11",
-  "last_run_id": "27317506718",
+  "last_run_id": "27351031059",
   "backlog_cursor": {
     "issue_number": 727,
     "comment_cursor": 728
   },
   "comments_made": {
-    "467": "2026-05-20",
-    "363": "2026-05-17",
-    "368": "2026-05-17",
-    "371": "2026-05-17",
-    "367": "2026-05-17",
-    "369": "2026-05-17",
-    "370": "2026-05-17",
-    "357": "2026-05-14",
-    "350": "2026-05-14",
-    "99": "2026-05-10",
-    "246": "2026-05-01",
-    "252": "2026-05-01",
-    "453": "2026-06-01",
-    "458": "2026-06-02",
-    "462": "2026-05-23",
-    "338": "2026-05-23",
-    "372": "2026-05-24",
-    "460": "2026-05-27",
-    "552": "2026-05-27",
-    "554": "2026-05-31",
-    "555": "2026-05-27",
-    "563": "2026-05-28",
-    "570": "2026-05-28",
-    "583": "2026-05-29",
-    "593": "2026-05-30",
-    "590": "2026-05-30",
-    "569": "2026-05-30",
     "655": "2026-06-03",
     "639": "2026-06-03",
     "638": "2026-06-03",
@@ -89,6 +62,10 @@
     "662": {
       "date": "2026-06-11",
       "note": "Root cause identified: PairOperatorStep missing Windows-side health check. Fix PR submitted (pair-operator gateway health check). 248 SetupEngine tests pass."
+    },
+    "677": {
+      "date": "2026-06-11",
+      "note": "Identified device-pair plugin not loaded in gateway CLI <2026.6.0. Workaround: upgrade to v0.6.3. Fix PR submitted."
     }
   },
   "labels_applied": {
@@ -237,7 +214,7 @@
       "pr": 734,
       "status": "open",
       "date": "2026-06-10",
-      "note": "Guard BootstrapAsync via SetupExistingGatewayClassifier.HasAnyExistingGatewayConnection(). 996 tray tests pass. PR #735 is duplicate \u2014 should be closed."
+      "note": "Guard BootstrapAsync via SetupExistingGatewayClassifier.HasAnyExistingGatewayConnection(). 996 tray tests pass. PR #735 is duplicate — should be closed."
     },
     "669": {
       "branch": "repo-assist/feat-canvas-fullscreen-669",
@@ -325,21 +302,11 @@
     }
   },
   "engineering_attempts": {
-    "treat-warnings-as-errors": {
-      "pr": 527,
-      "status": "closed-no-merge"
-    },
-    "nuget-audit-tests": {
-      "pr": 539,
-      "status": "merged"
-    },
-    "bump-nuget-packages-2026-05-29": {
-      "pr": 578,
-      "status": "closed-conflict"
-    },
-    "vc-runtime-version-check-703": {
-      "pr": 712,
-      "status": "closed-superseded"
+    "device-pair-plugin-not-found-fix-677": {
+      "branch": "repo-assist/eng-device-pair-plugin-not-found-2026-06-11",
+      "status": "open",
+      "date": "2026-06-11",
+      "note": "Added IsPluginNotFoundError detection in AutoApproveNodePairing + AutoApprovePairing. Returns Terminal StepResult with upgrade guidance instead of retrying. 253 tests pass."
     }
   },
   "monthly_activity_issue": 618,
@@ -381,5 +348,5 @@
     708,
     712
   ],
-  "notes": "Run 2026-06-11 (27317506718): Task 3 (fix PR for #662 pair-operator gateway health check \u2014 PairOperatorStep missing Windows-side health check; mirrors PairNodeStep pattern; 248 SetupEngine tests pass). Task 2 (commented #662: root cause + fix PR; followed up #727: asked which step fails on v0.6.3). PR #721 closed by maintainer. PR #735 is duplicate of #734 (both fix #729) \u2014 maintainer should close #735. Next: monitor open Repo Assist PRs (#717/#718/#722/#728/#734/#738/new #662 fix) for CI failures or merge conflicts."
+  "notes": "Run 2026-06-11 (27351031059): Task 2 (commented #677: device-pair plugin not found in gateway CLI <2026.6.0, workaround upgrade to v0.6.3). Task 4 (created fix PR for #677 - added IsPluginNotFoundError to ApprovalRequestHelper, updated AutoApproveNodePairing + AutoApprovePairing to return Terminal on plugin-not-found). PR #743 is now the pair-operator health check (from last run). Duplicate PRs: #735 dup of #734, #717 dup of #718 - maintainer should close. Next: monitor open Repo Assist PRs (#717/#718/#722/#728/#734/#738/#743/new device-pair fix) for CI failures or merge conflicts."
 }
