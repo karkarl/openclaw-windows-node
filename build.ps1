@@ -31,10 +31,34 @@
     on stock Windows (Add-AppxPackage -AllowUnsigned only works under very
     specific developer-mode conditions that do not cover this package).
 
+.PARAMETER OpenClawChannel
+    Which MSIX release channel to build (only meaningful with -PackageMsix):
+
+      Dev    - Local builds. Identity OpenClaw.Companion.Dev, no embedded
+               AppInstaller, no auto-update. Default for -PackageMsix.
+
+      Alpha  - Tester builds. Identity OpenClaw.Companion.Alpha, embedded
+               AppInstaller pointing at the alpha polled feed on main. CI uses
+               this for tags matching vX.Y.Z-alpha.N.
+
+      Stable - Production builds. Identity OpenClaw.Companion, embedded
+               AppInstaller pointing at the stable polled feed on main. CI uses
+               this for tags matching vX.Y.Z.
+
+    Stable and Alpha require -OpenClawReleaseTag so the embedded AppInstaller's
+    MainPackage Uri can reference the matching GitHub release.
+
+.PARAMETER OpenClawReleaseTag
+    Git tag corresponding to this MSIX, e.g. v0.6.4 or v0.6.4-alpha.1. Required
+    when -OpenClawChannel is Stable or Alpha. Used by the embedded AppInstaller's
+    MainPackage Uri to reference the right GitHub release asset.
+
 .EXAMPLE
     .\build.ps1
     .\build.ps1 -Project WinUI -Configuration Release
     .\build.ps1 -Project WinUI -PackageMsix
+    .\build.ps1 -Project WinUI -PackageMsix -OpenClawChannel Alpha -OpenClawReleaseTag v0.6.4-alpha.1
+    .\build.ps1 -Project WinUI -PackageMsix -OpenClawChannel Stable -OpenClawReleaseTag v0.6.4
     .\build.ps1 -CheckOnly
 #>
 
@@ -49,7 +73,12 @@ param(
 
     [switch]$NoTrustRepository,
 
-    [switch]$PackageMsix
+    [switch]$PackageMsix,
+
+    [ValidateSet("Dev", "Alpha", "Stable")]
+    [string]$OpenClawChannel = "Dev",
+
+    [string]$OpenClawReleaseTag
 )
 
 $ErrorActionPreference = "Stop"
@@ -321,8 +350,21 @@ function Build-Project($name, $path, $useRid = $false, $publishMsix = $false) {
     if ($publishMsix) {
         # MSIX file production: dotnet publish so the self-contained layout MSIX
         # tooling packages matches what end-users install. -p:PackageMsix=true
-        # turns on GenerateAppxPackageOnBuild in the csproj.
-        $dotnetArgs = @("publish", $path, "-c", $Configuration, "-r", $rid, "--self-contained", "-p:PackageMsix=true")
+        # turns on GenerateAppxPackageOnBuild in the csproj. The csproj's
+        # SyncAppxManifestVersionTarget reads $(OpenClawChannel) to pick the
+        # Identity Name / DisplayName / embedded-AppInstaller behavior; default
+        # Dev produces an OpenClaw.Companion.Dev MSIX with no auto-update.
+        $dotnetArgs = @(
+            "publish", $path,
+            "-c", $Configuration,
+            "-r", $rid,
+            "--self-contained",
+            "-p:PackageMsix=true",
+            "-p:OpenClawChannel=$OpenClawChannel"
+        )
+        if ($OpenClawReleaseTag) {
+            $dotnetArgs += "-p:OpenClawReleaseTag=$OpenClawReleaseTag"
+        }
     } elseif ($useRid) {
         # WinUI requires runtime identifier for self-contained WebView2 support.
         $dotnetArgs = @("build", $path, "-c", $Configuration, "-r", $rid)
@@ -398,6 +440,17 @@ if ($PackageMsix) {
         exit 1
     }
 
+    # Stable and Alpha embed an AppInstaller that references a specific GitHub
+    # release asset — without a tag we can't compute that URI.
+    if ($OpenClawChannel -in @("Stable", "Alpha") -and -not $OpenClawReleaseTag) {
+        Write-Error "-OpenClawChannel $OpenClawChannel requires -OpenClawReleaseTag (e.g. v0.6.4-alpha.1 or v0.6.4)"
+        exit 1
+    }
+    if ($OpenClawChannel -eq "Dev" -and $OpenClawReleaseTag) {
+        Write-Warning "-OpenClawReleaseTag '$OpenClawReleaseTag' is ignored for Dev channel (Dev MSIXs do not embed an AppInstaller)"
+    }
+    Write-Info "MSIX channel: $OpenClawChannel$(if ($OpenClawReleaseTag) { " (release tag: $OpenClawReleaseTag)" })"
+
     $devPfx = Join-Path $env:LOCALAPPDATA "OpenClawTray\dev-msix.pfx"
     if (Test-Path $devPfx) {
         Write-Success "Dev MSIX signing cert found: $devPfx"
@@ -408,6 +461,8 @@ if ($PackageMsix) {
         Write-Host "  .\scripts\setup-dev-msix-cert.ps1" -ForegroundColor White
         exit 1
     }
+} elseif ($OpenClawChannel -ne "Dev" -or $OpenClawReleaseTag) {
+    Write-Warning "-OpenClawChannel/-OpenClawReleaseTag are only meaningful with -PackageMsix; ignoring."
 }
 
 for ($i = 0; $i -lt $toBuild.Count; $i++) {

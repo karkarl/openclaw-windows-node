@@ -41,6 +41,13 @@
   <PropertyGroup>
     <WindowsPackageType>MSIX</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+
+    <!-- MSIX channel: Stable / Alpha / Dev. Selects Identity Name, DisplayName,
+         and whether to embed an AppInstaller for auto-update. CI sets this from
+         tag pattern (-p:OpenClawChannel=Stable for vX.Y.Z, Alpha for
+         vX.Y.Z-alpha.N, Dev for everything else); local builds default to Dev.
+         Channel matrix lives in SyncAppxManifestVersionTarget below. -->
+    <OpenClawChannel Condition="'$(OpenClawChannel)' == ''">Dev</OpenClawChannel>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PackageMsix)' == 'true'">
@@ -97,12 +104,13 @@
     <None Include="..\OpenClaw.SetupEngine\default-config.json"
              Link="default-config.json"
              CopyToOutputDirectory="PreserveNewest" />
-    <!-- TEMP rehearsal: embed the AppInstaller XML inside the MSIX payload so
-         the manifest's <uap13:AutoUpdate><uap13:AppInstaller File="..." /> can
-         resolve it at install time. Lets us bypass the broken external feed
-         install path on raw.githubusercontent.com. Reverted with
-         delete-msixtest-appinstaller-file todo. -->
-    <Content Include="openclaw-update.appinstaller" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Embedded AppInstaller for Stable/Alpha MSIXs. Generated at build time
+         by the RenderEmbeddedAppInstaller target below from the per-channel
+         source file in installer/appinstaller/. Dev builds neither render the
+         file nor include it. The file is gitignored. -->
+    <Content Include="openclaw-update.appinstaller"
+             CopyToOutputDirectory="PreserveNewest"
+             Condition="'$(OpenClawChannel)' != 'Dev'" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -122,9 +130,12 @@
     Package.appxmanifest carries a baseline Version in source (e.g. 1.0.0.0) so the always-packaged
     dev path (WinAppCLI loose-layout register, VS F5) can use the in-source manifest as-is. The
     real release version is patched in only when actually producing a .msix file (PackageMsix=true),
-    so default `dotnet build` runs leave the file untouched and git stays clean. CI's manifest patch
-    step (.github/workflows/ci.yml) only writes Identity/Name and DisplayName; Version is written
-    by this target from the GitVersion-derived $(Version).
+    so default `dotnet build` runs leave the file untouched and git stays clean.
+
+    This task ALSO patches Identity Name and DisplayName based on $(OpenClawChannel)
+    (Stable / Alpha / Dev) and conditionally removes the <uap13:AutoUpdate> element
+    for Dev MSIX builds. See the "Channel" PropertyGroup below for the channel
+    -> identity/display-name mapping.
 
     Uses a regex string-replace (not XmlPoke) to preserve the manifest's hand-formatted layout.
     The MSIX Identity/Version must be a 4-part version (X.Y.Z.W) with no pre-release suffix;
@@ -134,6 +145,9 @@
     <ParameterGroup>
       <ManifestPath ParameterType="System.String" Required="true" />
       <FourPartVersion ParameterType="System.String" Required="true" />
+      <IdentityName ParameterType="System.String" Required="true" />
+      <DisplayName ParameterType="System.String" Required="true" />
+      <RemoveAutoUpdate ParameterType="System.Boolean" Required="false" />
     </ParameterGroup>
     <Task>
       <Code Type="Fragment" Language="cs">
@@ -143,21 +157,69 @@
             Log.LogError("SyncAppxManifestVersion: '" + FourPartVersion + "' is not a valid 4-part numeric MSIX version.");
             return false;
         }
+        // Validate identity name shape (matches all current channels: OpenClaw.Companion[.Alpha|.Dev]).
+        if (!System.Text.RegularExpressions.Regex.IsMatch(IdentityName, @"^[A-Za-z][A-Za-z0-9\.\-]*$")) {
+            Log.LogError("SyncAppxManifestVersion: '" + IdentityName + "' is not a valid AppX Identity Name.");
+            return false;
+        }
 
         var text = System.IO.File.ReadAllText(ManifestPath);
-        // Tolerate attribute-order, whitespace around '=', single or double quotes, and case
-        // variations on the Version attribute name. Capture the opening and closing quote
-        // characters so we re-emit them unchanged.
-        var regex = new System.Text.RegularExpressions.Regex(
+
+        // 1) Identity/@Version.
+        var versionRegex = new System.Text.RegularExpressions.Regex(
             "(<Identity\\b[^>]*?\\bVersion\\s*=\\s*[\"'])[^\"']+([\"'])",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!regex.IsMatch(text)) {
+        if (!versionRegex.IsMatch(text)) {
             Log.LogError("SyncAppxManifestVersion: could not find Identity/@Version in " + ManifestPath);
             return false;
         }
-        var updated = regex.Replace(text, "${1}" + FourPartVersion + "$2", 1);
-        if (updated == text) {
-            return true;
+        text = versionRegex.Replace(text, "${1}" + FourPartVersion + "$2", 1);
+
+        // 2) Identity/@Name.
+        var nameRegex = new System.Text.RegularExpressions.Regex(
+            "(<Identity\\b[^>]*?\\bName\\s*=\\s*[\"'])[^\"']+([\"'])",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!nameRegex.IsMatch(text)) {
+            Log.LogError("SyncAppxManifestVersion: could not find Identity/@Name in " + ManifestPath);
+            return false;
+        }
+        text = nameRegex.Replace(text, "${1}" + IdentityName + "$2", 1);
+
+        // 3) Properties/DisplayName (element text content). Anchored to the
+        //    direct child of <Properties> so we don't accidentally also rewrite
+        //    PublisherDisplayName below it. Singleline so '.' would match newlines,
+        //    but we limit with non-greedy and require the closing tag on the same
+        //    text run via [^<]*.
+        var propsDisplayNameRegex = new System.Text.RegularExpressions.Regex(
+            "(<Properties[^>]*>\\s*<DisplayName>)[^<]*(</DisplayName>)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!propsDisplayNameRegex.IsMatch(text)) {
+            Log.LogError("SyncAppxManifestVersion: could not find Properties/DisplayName in " + ManifestPath);
+            return false;
+        }
+        text = propsDisplayNameRegex.Replace(text, "${1}" + DisplayName + "$2", 1);
+
+        // 4) Application/VisualElements/@DisplayName.
+        var veDisplayNameRegex = new System.Text.RegularExpressions.Regex(
+            "(<uap:VisualElements\\b[^>]*?\\bDisplayName\\s*=\\s*[\"'])[^\"']+([\"'])",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!veDisplayNameRegex.IsMatch(text)) {
+            Log.LogError("SyncAppxManifestVersion: could not find VisualElements/@DisplayName in " + ManifestPath);
+            return false;
+        }
+        text = veDisplayNameRegex.Replace(text, "${1}" + DisplayName + "$2", 1);
+
+        // 5) Optionally strip <uap13:AutoUpdate>...</uap13:AutoUpdate> for Dev MSIXs.
+        //    The (?s) flag lets '.' match newlines so the multi-line element is captured.
+        //    Eats one leading newline/whitespace too so we don't leave a blank line behind.
+        if (RemoveAutoUpdate) {
+            var autoUpdateRegex = new System.Text.RegularExpressions.Regex(
+                @"(?s)\s*<uap13:AutoUpdate\b[^>]*>.*?</uap13:AutoUpdate>\s*",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (autoUpdateRegex.IsMatch(text)) {
+                text = autoUpdateRegex.Replace(text, System.Environment.NewLine + "  ", 1);
+            }
+            // It's OK if the element wasn't there (e.g. earlier Dev build already stripped it).
         }
 
         // Clear any read-only attribute (some non-Git SCMs mark files read-only) so the
@@ -176,7 +238,7 @@
         // sure the temp file never lingers (it isn't in .gitignore and would otherwise show
         // up in `git status` if Replace throws something other than FileNotFoundException).
         var tempPath = ManifestPath + ".sync-tmp";
-        System.IO.File.WriteAllText(tempPath, updated);
+        System.IO.File.WriteAllText(tempPath, text);
         try {
             try {
                 System.IO.File.Replace(tempPath, ManifestPath, destinationBackupFileName: null);
@@ -193,7 +255,11 @@
                 }
             } catch { /* best-effort cleanup */ }
         }
-        Log.LogMessage(MessageImportance.High, "Synced Package.appxmanifest Identity/@Version to " + FourPartVersion);
+        Log.LogMessage(MessageImportance.High,
+            "Synced Package.appxmanifest: Identity Name=" + IdentityName +
+            ", Version=" + FourPartVersion +
+            ", DisplayName=" + DisplayName +
+            (RemoveAutoUpdate ? ", AutoUpdate removed (Dev)" : ""));
         ]]>
       </Code>
     </Task>
@@ -214,6 +280,28 @@
          this, the target would silently skip and the baseline version in the source
          manifest would ship in the .msix package. -->
     <Error Text="MSIX packaging requested (PackageMsix=true) but Version is empty. Ensure GitVersion can read this repository's tag history or pass /p:Version=X.Y[.Z]." Condition="'$(Version)' == ''" />
+
+    <!-- Channel selection. Stable / Alpha / Dev. $(OpenClawChannel) is
+         defaulted at the top of this csproj; CI overrides via -p:OpenClawChannel=...
+         based on the tag pattern. The default is Dev so local builds and any
+         untagged CI builds never carry the production identity or auto-update
+         wiring. -->
+    <PropertyGroup>
+      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Stable'">OpenClaw.Companion</_OpenClawIdentityName>
+      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Alpha'">OpenClaw.Companion.Alpha</_OpenClawIdentityName>
+      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Dev'">OpenClaw.Companion.Dev</_OpenClawIdentityName>
+
+      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Stable'">OpenClaw Companion</_OpenClawDisplayName>
+      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Alpha'">OpenClaw Companion Alpha</_OpenClawDisplayName>
+      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Dev'">OpenClaw Companion Dev</_OpenClawDisplayName>
+
+      <_OpenClawRemoveAutoUpdate Condition="'$(OpenClawChannel)' == 'Dev'">true</_OpenClawRemoveAutoUpdate>
+      <_OpenClawRemoveAutoUpdate Condition="'$(_OpenClawRemoveAutoUpdate)' == ''">false</_OpenClawRemoveAutoUpdate>
+    </PropertyGroup>
+
+    <Error Text="Unknown OpenClawChannel '$(OpenClawChannel)'. Valid values: Stable, Alpha, Dev."
+           Condition="'$(_OpenClawIdentityName)' == ''" />
+
     <PropertyGroup>
       <_AppxManifestPath>$(MSBuildThisFileDirectory)Package.appxmanifest</_AppxManifestPath>
       <_StrippedVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(Version)', '[-+].*$', ''))</_StrippedVersion>
@@ -223,7 +311,76 @@
       <_AppxManifestVersion Condition="'$(_VersionDotCount)' == '1'">$(_StrippedVersion).0.0</_AppxManifestVersion>
     </PropertyGroup>
     <Error Text="Cannot derive 4-part MSIX version from &lt;Version&gt;$(Version)&lt;/Version&gt;. Use the form X.Y or X.Y.Z (optionally with -prerelease or +meta suffix)." Condition="'$(_AppxManifestVersion)' == ''" />
-    <SyncAppxManifestVersion ManifestPath="$(_AppxManifestPath)" FourPartVersion="$(_AppxManifestVersion)" />
+    <SyncAppxManifestVersion ManifestPath="$(_AppxManifestPath)"
+                             FourPartVersion="$(_AppxManifestVersion)"
+                             IdentityName="$(_OpenClawIdentityName)"
+                             DisplayName="$(_OpenClawDisplayName)"
+                             RemoveAutoUpdate="$(_OpenClawRemoveAutoUpdate)" />
+  </Target>
+
+  <!--
+    Render the embedded openclaw-update.appinstaller from the per-channel source
+    file in installer/appinstaller/. Stable and Alpha MSIXs ship this file in
+    their payload; Package.appxmanifest's <uap13:AutoUpdate><uap13:AppInstaller
+    File="openclaw-update.appinstaller"/> references it. Dev MSIXs skip this
+    target (and the SyncAppxManifestVersion task above also strips the
+    <uap13:AutoUpdate> manifest element for them, so the missing file is fine).
+
+    The committed source files (openclaw-update.{stable,alpha}.appinstaller)
+    carry literal placeholder text in attribute values that XmlPoke overwrites
+    here: {{VERSION}} -> the build's MSIX Identity Version, {{ARCH}} -> the
+    target architecture, {{MAIN_PACKAGE_URI}} -> the github.com release-asset
+    URL of THIS MSIX. The AppInstaller self-Uri is also patched to point at
+    the per-arch polled feed file on main.
+  -->
+  <Target Name="RenderEmbeddedAppInstaller"
+          BeforeTargets="BeforeBuild;_GenerateCurrentProjectAppxManifest"
+          DependsOnTargets="SyncAppxManifestVersionTarget"
+          Condition="'$(PackageMsix)' == 'true' And '$(OpenClawChannel)' != 'Dev'">
+
+    <Error Text="RenderEmbeddedAppInstaller requires -p:OpenClawReleaseTag=vX.Y.Z (or -p:OpenClawReleaseTag=vX.Y.Z-alpha.N) so the embedded MainPackage Uri can reference the matching GitHub release."
+           Condition="'$(OpenClawReleaseTag)' == ''" />
+
+    <PropertyGroup>
+      <_OpenClawEmbedArch Condition="'$(RuntimeIdentifier)' == 'win-arm64'">arm64</_OpenClawEmbedArch>
+      <_OpenClawEmbedArch Condition="'$(_OpenClawEmbedArch)' == '' And '$(Platform)' == 'ARM64'">arm64</_OpenClawEmbedArch>
+      <_OpenClawEmbedArch Condition="'$(_OpenClawEmbedArch)' == ''">x64</_OpenClawEmbedArch>
+
+      <_OpenClawEmbedSource>$(OpenClawRepoRoot)installer\appinstaller\openclaw-update.$(OpenClawChannel.ToLowerInvariant()).appinstaller</_OpenClawEmbedSource>
+      <_OpenClawEmbedOutput>$(MSBuildThisFileDirectory)openclaw-update.appinstaller</_OpenClawEmbedOutput>
+
+      <_OpenClawFeedFilename Condition="'$(OpenClawChannel)' == 'Stable'">openclaw-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
+      <_OpenClawFeedFilename Condition="'$(OpenClawChannel)' == 'Alpha'">openclaw-alpha-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
+      <_OpenClawFeedUri>https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/$(_OpenClawFeedFilename)</_OpenClawFeedUri>
+
+      <_OpenClawMainPackageUri>https://github.com/openclaw/openclaw-windows-node/releases/download/$(OpenClawReleaseTag)/OpenClaw.Tray.WinUI_$(_AppxManifestVersion)_$(_OpenClawEmbedArch).msix</_OpenClawMainPackageUri>
+    </PropertyGroup>
+
+    <Error Text="RenderEmbeddedAppInstaller: source file not found at $(_OpenClawEmbedSource)"
+           Condition="!Exists('$(_OpenClawEmbedSource)')" />
+
+    <Copy SourceFiles="$(_OpenClawEmbedSource)"
+          DestinationFiles="$(_OpenClawEmbedOutput)" />
+
+    <!-- XmlPoke's Namespaces param is a literal XML string of <Namespace> entries,
+         not an ItemGroup. The 'ai' prefix is local to these XPath queries. -->
+    <PropertyGroup>
+      <_OpenClawAppInstallerNamespaces>&lt;Namespace Prefix="ai" Uri="http://schemas.microsoft.com/appx/appinstaller/2018" /&gt;</_OpenClawAppInstallerNamespaces>
+    </PropertyGroup>
+
+    <XmlPoke XmlInputPath="$(_OpenClawEmbedOutput)" Namespaces="$(_OpenClawAppInstallerNamespaces)"
+             Query="/ai:AppInstaller/@Version"                          Value="$(_AppxManifestVersion)" />
+    <XmlPoke XmlInputPath="$(_OpenClawEmbedOutput)" Namespaces="$(_OpenClawAppInstallerNamespaces)"
+             Query="/ai:AppInstaller/@Uri"                              Value="$(_OpenClawFeedUri)" />
+    <XmlPoke XmlInputPath="$(_OpenClawEmbedOutput)" Namespaces="$(_OpenClawAppInstallerNamespaces)"
+             Query="/ai:AppInstaller/ai:MainPackage/@Version"           Value="$(_AppxManifestVersion)" />
+    <XmlPoke XmlInputPath="$(_OpenClawEmbedOutput)" Namespaces="$(_OpenClawAppInstallerNamespaces)"
+             Query="/ai:AppInstaller/ai:MainPackage/@ProcessorArchitecture" Value="$(_OpenClawEmbedArch)" />
+    <XmlPoke XmlInputPath="$(_OpenClawEmbedOutput)" Namespaces="$(_OpenClawAppInstallerNamespaces)"
+             Query="/ai:AppInstaller/ai:MainPackage/@Uri"               Value="$(_OpenClawMainPackageUri)" />
+
+    <Message Importance="high"
+             Text="Rendered embedded AppInstaller: channel=$(OpenClawChannel) arch=$(_OpenClawEmbedArch) version=$(_AppxManifestVersion) release-tag=$(OpenClawReleaseTag)" />
   </Target>
 
   <!-- Fail fast on RIDs we have no wxc-exec binary for, so x86/non-Windows

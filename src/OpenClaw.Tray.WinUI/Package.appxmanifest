@@ -18,22 +18,29 @@
        zeros). For .msix file production (build.ps1 -PackageMsix / CI build-msix
        job) SyncAppxManifestVersionTarget in OpenClaw.Tray.WinUI.csproj
        overwrites this with the GitVersion-derived $(Version); see
-       docs/VERSIONING.md. -->
+       docs/VERSIONING.md.
+
+       Identity Name and DisplayName below default to the Stable channel.
+       SyncAppxManifestVersionTarget rewrites them per $(OpenClawChannel)
+       (Stable / Alpha / Dev). For Dev builds the same target also strips the
+       embedded-AppInstaller element from the Properties block below so Dev
+       MSIXs do not poll for updates. -->
   <Identity
     Name="OpenClaw.Companion"
     Publisher="CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US"
-    Version="0.6.4.0" />
+    Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>OpenClaw Companion</DisplayName>
     <PublisherDisplayName>OpenClaw Foundation</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <!-- TEMP rehearsal: embed openclaw-update.appinstaller in the MSIX payload
-         so Windows registers auto-update polling against its <AppInstaller Uri>
-         at install time. Avoids the broken ms-appinstaller://?source= protocol
-         (disabled by default since Dec 2023) and the raw.githubusercontent.com
-         text/plain MIME issue on the install-time AppInstaller parse.
-         Reverted with delete-msixtest-appinstaller-file todo. -->
+    <!-- Embedded AppInstaller-based silent auto-update for Stable/Alpha MSIXs.
+         The referenced openclaw-update.appinstaller file is generated at build
+         time by the RenderEmbeddedAppInstaller target in OpenClaw.Tray.WinUI.csproj
+         from installer/appinstaller/openclaw-update.{stable,alpha}.appinstaller.
+         Dev MSIX builds strip this entire element at build time (via
+         SyncAppxManifestVersion's RemoveAutoUpdate=true) so the resulting
+         package does not poll for updates. -->
     <uap13:AutoUpdate>
       <uap13:AppInstaller File="openclaw-update.appinstaller" />
     </uap13:AutoUpdate>
