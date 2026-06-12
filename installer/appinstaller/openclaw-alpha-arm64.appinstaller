@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller
+  xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
+  Version="0.0.0.0"
+  Uri="https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/openclaw-alpha-arm64.appinstaller">
+
+  <MainPackage
+    Name="OpenClaw.Companion.Alpha"
+    Publisher="CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US"
+    Version="0.0.0.0"
+    ProcessorArchitecture="arm64"
+    Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.0.0-alpha.1/OpenClawCompanion-0.0.0-alpha.1-win-arm64.msix" />
+
+  <UpdateSettings>
+    <AutomaticBackgroundTask />
+  </UpdateSettings>
+</AppInstaller>
