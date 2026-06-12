@@ -415,21 +415,24 @@ jobs:
     - name: Restore
       run: dotnet restore src/OpenClaw.Tray.WinUI -r ${{ matrix.rid }}
 
-    - name: Patch MSIX manifest metadata
+    - name: Determine release channel
+      id: channel
       shell: pwsh
+      # Map the tag pattern to one of Stable / Alpha / Dev. The csproj's
+      # SyncAppxManifestVersionTarget consumes -p:ReleaseChannel=... to pick
+      # Identity Name, DisplayName, and whether to embed an AppInstaller.
       run: |
-        $version = "${{ steps.gitversion.outputs.majorMinorPatch }}.0"
-        $isAlpha = "${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-') }}" -eq "true"
-        $identityName = if ($isAlpha) { "OpenClaw.Companion.Alpha" } else { "OpenClaw.Companion" }
-        $displayName = if ($isAlpha) { "OpenClaw Companion Alpha" } else { "OpenClaw Companion" }
-        $manifest = "src/OpenClaw.Tray.WinUI/Package.appxmanifest"
-        [xml]$xml = Get-Content $manifest
-        $xml.Package.Identity.Name = $identityName
-        $xml.Package.Identity.Version = $version
-        $xml.Package.Properties.DisplayName = $displayName
-        $xml.Package.Applications.Application.VisualElements.DisplayName = $displayName
-        $xml.Save((Resolve-Path $manifest))
-        Write-Host "Patched MSIX manifest to identity $identityName, display name '$displayName', version $version"
+        $tag = "${{ github.ref_name }}"
+        $isTaggedRelease = "${{ startsWith(github.ref, 'refs/tags/v') }}" -eq "true"
+        if ($isTaggedRelease -and $tag -match '^v\d+\.\d+\.\d+$') {
+          $channel = 'Stable'
+        } elseif ($isTaggedRelease -and $tag -match '^v\d+\.\d+\.\d+-alpha(\.\d+)?$') {
+          $channel = 'Alpha'
+        } else {
+          $channel = 'Dev'
+        }
+        Write-Host "Tag '$tag' -> ReleaseChannel '$channel'"
+        "channel=$channel" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
     - name: Build MSIX Package
       run: >
@@ -444,6 +447,8 @@ jobs:
         -p:AppxBundle=Never
         -p:UapAppxPackageBuildMode=SideloadOnly
         -p:AppxPackageDir=AppPackages\
+        -p:ReleaseChannel=${{ steps.channel.outputs.channel }}
+        -p:ReleaseTag=${{ github.ref_name }}
 
     - name: Find MSIX Package
       id: find-msix
