@@ -351,7 +351,12 @@
 
       <_OpenClawFeedFilename Condition="'$(ReleaseChannel)' == 'Stable'">openclaw-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
       <_OpenClawFeedFilename Condition="'$(ReleaseChannel)' == 'Alpha'">openclaw-alpha-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
-      <_OpenClawFeedUri>https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/$(_OpenClawFeedFilename)</_OpenClawFeedUri>
+      <!-- TEMP rehearsal (revert-embedded-feed-branch-url): the embedded
+           AppInstaller's self-Uri points at the user/kmahone/msix branch
+           instead of main so installed alpha builds poll the branch's disk
+           feed during the rehearsal. Revert this string to .../main/...
+           before merging this branch to main. -->
+      <_OpenClawFeedUri>https://raw.githubusercontent.com/openclaw/openclaw-windows-node/user%2Fkmahone%2Fmsix/installer/appinstaller/$(_OpenClawFeedFilename)</_OpenClawFeedUri>
 
       <_OpenClawMainPackageUri>https://github.com/openclaw/openclaw-windows-node/releases/download/$(ReleaseTag)/OpenClaw.Tray.WinUI_$(_AppxManifestVersion)_$(_OpenClawEmbedArch).msix</_OpenClawMainPackageUri>
     </PropertyGroup>

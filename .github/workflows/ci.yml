@@ -421,12 +421,18 @@ jobs:
       # Map the tag pattern to one of Stable / Alpha / Dev. The csproj's
       # SyncAppxManifestVersionTarget consumes -p:ReleaseChannel=... to pick
       # Identity Name, DisplayName, and whether to embed an AppInstaller.
+      #
+      # TEMP rehearsal (revert-msixtest-as-alpha): msixtest tags map to Alpha
+      # so we can exercise the full Alpha-channel install + silent-update
+      # flow on this branch with throwaway tags. After merging to main,
+      # msixtest tags should fall through to Dev (their original purpose:
+      # signing-pipeline-only validation without auto-update).
       run: |
         $tag = "${{ github.ref_name }}"
         $isTaggedRelease = "${{ startsWith(github.ref, 'refs/tags/v') }}" -eq "true"
         if ($isTaggedRelease -and $tag -match '^v\d+\.\d+\.\d+$') {
           $channel = 'Stable'
-        } elseif ($isTaggedRelease -and $tag -match '^v\d+\.\d+\.\d+-alpha(\.\d+)?$') {
+        } elseif ($isTaggedRelease -and $tag -match '^v\d+\.\d+\.\d+-(alpha|msixtest)(\.\d+)?$') {
           $channel = 'Alpha'
         } else {
           $channel = 'Dev'
