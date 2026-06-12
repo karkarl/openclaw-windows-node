@@ -16,6 +16,7 @@
     Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.6.9-msixtest.1/OpenClaw.Tray.WinUI_0.6.9.0_x64.msix" />
 
   <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" UpdateBlocksActivation="true" ShowPrompt="true" />
     <AutomaticBackgroundTask />
   </UpdateSettings>
 </AppInstaller>

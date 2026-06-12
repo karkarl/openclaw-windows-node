@@ -16,6 +16,7 @@
     Uri="https://github.com/openclaw/openclaw-windows-node/releases/download/v0.0.0-alpha.1/OpenClawCompanion-0.0.0-alpha.1-win-arm64.msix" />
 
   <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" UpdateBlocksActivation="true" ShowPrompt="true" />
     <AutomaticBackgroundTask />
   </UpdateSettings>
 </AppInstaller>

@@ -25,7 +25,7 @@
     Uri="{{MAIN_PACKAGE_URI}}" />
 
   <UpdateSettings>
-    <OnLaunch HoursBetweenUpdateChecks="24" UpdateBlocksActivation="false" ShowPrompt="true" />
+    <OnLaunch HoursBetweenUpdateChecks="0" UpdateBlocksActivation="true" ShowPrompt="true" />
     <AutomaticBackgroundTask />
   </UpdateSettings>
 </AppInstaller>
