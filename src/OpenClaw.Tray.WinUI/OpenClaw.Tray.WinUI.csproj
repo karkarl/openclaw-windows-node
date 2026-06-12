@@ -44,10 +44,10 @@
 
     <!-- MSIX channel: Stable / Alpha / Dev. Selects Identity Name, DisplayName,
          and whether to embed an AppInstaller for auto-update. CI sets this from
-         tag pattern (-p:OpenClawChannel=Stable for vX.Y.Z, Alpha for
+         tag pattern (-p:ReleaseChannel=Stable for vX.Y.Z, Alpha for
          vX.Y.Z-alpha.N, Dev for everything else); local builds default to Dev.
          Channel matrix lives in SyncAppxManifestVersionTarget below. -->
-    <OpenClawChannel Condition="'$(OpenClawChannel)' == ''">Dev</OpenClawChannel>
+    <ReleaseChannel Condition="'$(ReleaseChannel)' == ''">Dev</ReleaseChannel>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PackageMsix)' == 'true'">
@@ -110,7 +110,7 @@
          file nor include it. The file is gitignored. -->
     <Content Include="openclaw-update.appinstaller"
              CopyToOutputDirectory="PreserveNewest"
-             Condition="'$(OpenClawChannel)' != 'Dev'" />
+             Condition="'$(ReleaseChannel)' != 'Dev'" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -132,7 +132,7 @@
     real release version is patched in only when actually producing a .msix file (PackageMsix=true),
     so default `dotnet build` runs leave the file untouched and git stays clean.
 
-    This task ALSO patches Identity Name and DisplayName based on $(OpenClawChannel)
+    This task ALSO patches Identity Name and DisplayName based on $(ReleaseChannel)
     (Stable / Alpha / Dev) and conditionally removes the <uap13:AutoUpdate> element
     for Dev MSIX builds. See the "Channel" PropertyGroup below for the channel
     -> identity/display-name mapping.
@@ -281,25 +281,25 @@
          manifest would ship in the .msix package. -->
     <Error Text="MSIX packaging requested (PackageMsix=true) but Version is empty. Ensure GitVersion can read this repository's tag history or pass /p:Version=X.Y[.Z]." Condition="'$(Version)' == ''" />
 
-    <!-- Channel selection. Stable / Alpha / Dev. $(OpenClawChannel) is
-         defaulted at the top of this csproj; CI overrides via -p:OpenClawChannel=...
+    <!-- Channel selection. Stable / Alpha / Dev. $(ReleaseChannel) is
+         defaulted at the top of this csproj; CI overrides via -p:ReleaseChannel=...
          based on the tag pattern. The default is Dev so local builds and any
          untagged CI builds never carry the production identity or auto-update
          wiring. -->
     <PropertyGroup>
-      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Stable'">OpenClaw.Companion</_OpenClawIdentityName>
-      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Alpha'">OpenClaw.Companion.Alpha</_OpenClawIdentityName>
-      <_OpenClawIdentityName Condition="'$(OpenClawChannel)' == 'Dev'">OpenClaw.Companion.Dev</_OpenClawIdentityName>
+      <_OpenClawIdentityName Condition="'$(ReleaseChannel)' == 'Stable'">OpenClaw.Companion</_OpenClawIdentityName>
+      <_OpenClawIdentityName Condition="'$(ReleaseChannel)' == 'Alpha'">OpenClaw.Companion.Alpha</_OpenClawIdentityName>
+      <_OpenClawIdentityName Condition="'$(ReleaseChannel)' == 'Dev'">OpenClaw.Companion.Dev</_OpenClawIdentityName>
 
-      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Stable'">OpenClaw Companion</_OpenClawDisplayName>
-      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Alpha'">OpenClaw Companion Alpha</_OpenClawDisplayName>
-      <_OpenClawDisplayName Condition="'$(OpenClawChannel)' == 'Dev'">OpenClaw Companion Dev</_OpenClawDisplayName>
+      <_OpenClawDisplayName Condition="'$(ReleaseChannel)' == 'Stable'">OpenClaw Companion</_OpenClawDisplayName>
+      <_OpenClawDisplayName Condition="'$(ReleaseChannel)' == 'Alpha'">OpenClaw Companion Alpha</_OpenClawDisplayName>
+      <_OpenClawDisplayName Condition="'$(ReleaseChannel)' == 'Dev'">OpenClaw Companion Dev</_OpenClawDisplayName>
 
-      <_OpenClawRemoveAutoUpdate Condition="'$(OpenClawChannel)' == 'Dev'">true</_OpenClawRemoveAutoUpdate>
+      <_OpenClawRemoveAutoUpdate Condition="'$(ReleaseChannel)' == 'Dev'">true</_OpenClawRemoveAutoUpdate>
       <_OpenClawRemoveAutoUpdate Condition="'$(_OpenClawRemoveAutoUpdate)' == ''">false</_OpenClawRemoveAutoUpdate>
     </PropertyGroup>
 
-    <Error Text="Unknown OpenClawChannel '$(OpenClawChannel)'. Valid values: Stable, Alpha, Dev."
+    <Error Text="Unknown ReleaseChannel '$(ReleaseChannel)'. Valid values: Stable, Alpha, Dev."
            Condition="'$(_OpenClawIdentityName)' == ''" />
 
     <PropertyGroup>
@@ -336,24 +336,24 @@
   <Target Name="RenderEmbeddedAppInstaller"
           BeforeTargets="BeforeBuild;_GenerateCurrentProjectAppxManifest"
           DependsOnTargets="SyncAppxManifestVersionTarget"
-          Condition="'$(PackageMsix)' == 'true' And '$(OpenClawChannel)' != 'Dev'">
+          Condition="'$(PackageMsix)' == 'true' And '$(ReleaseChannel)' != 'Dev'">
 
-    <Error Text="RenderEmbeddedAppInstaller requires -p:OpenClawReleaseTag=vX.Y.Z (or -p:OpenClawReleaseTag=vX.Y.Z-alpha.N) so the embedded MainPackage Uri can reference the matching GitHub release."
-           Condition="'$(OpenClawReleaseTag)' == ''" />
+    <Error Text="RenderEmbeddedAppInstaller requires -p:ReleaseTag=vX.Y.Z (or -p:ReleaseTag=vX.Y.Z-alpha.N) so the embedded MainPackage Uri can reference the matching GitHub release."
+           Condition="'$(ReleaseTag)' == ''" />
 
     <PropertyGroup>
       <_OpenClawEmbedArch Condition="'$(RuntimeIdentifier)' == 'win-arm64'">arm64</_OpenClawEmbedArch>
       <_OpenClawEmbedArch Condition="'$(_OpenClawEmbedArch)' == '' And '$(Platform)' == 'ARM64'">arm64</_OpenClawEmbedArch>
       <_OpenClawEmbedArch Condition="'$(_OpenClawEmbedArch)' == ''">x64</_OpenClawEmbedArch>
 
-      <_OpenClawEmbedSource>$(OpenClawRepoRoot)installer\appinstaller\openclaw-update.$(OpenClawChannel.ToLowerInvariant()).appinstaller</_OpenClawEmbedSource>
+      <_OpenClawEmbedSource>$(OpenClawRepoRoot)installer\appinstaller\openclaw-update.$(ReleaseChannel.ToLowerInvariant()).appinstaller</_OpenClawEmbedSource>
       <_OpenClawEmbedOutput>$(MSBuildThisFileDirectory)openclaw-update.appinstaller</_OpenClawEmbedOutput>
 
-      <_OpenClawFeedFilename Condition="'$(OpenClawChannel)' == 'Stable'">openclaw-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
-      <_OpenClawFeedFilename Condition="'$(OpenClawChannel)' == 'Alpha'">openclaw-alpha-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
+      <_OpenClawFeedFilename Condition="'$(ReleaseChannel)' == 'Stable'">openclaw-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
+      <_OpenClawFeedFilename Condition="'$(ReleaseChannel)' == 'Alpha'">openclaw-alpha-$(_OpenClawEmbedArch).appinstaller</_OpenClawFeedFilename>
       <_OpenClawFeedUri>https://raw.githubusercontent.com/openclaw/openclaw-windows-node/main/installer/appinstaller/$(_OpenClawFeedFilename)</_OpenClawFeedUri>
 
-      <_OpenClawMainPackageUri>https://github.com/openclaw/openclaw-windows-node/releases/download/$(OpenClawReleaseTag)/OpenClaw.Tray.WinUI_$(_AppxManifestVersion)_$(_OpenClawEmbedArch).msix</_OpenClawMainPackageUri>
+      <_OpenClawMainPackageUri>https://github.com/openclaw/openclaw-windows-node/releases/download/$(ReleaseTag)/OpenClaw.Tray.WinUI_$(_AppxManifestVersion)_$(_OpenClawEmbedArch).msix</_OpenClawMainPackageUri>
     </PropertyGroup>
 
     <Error Text="RenderEmbeddedAppInstaller: source file not found at $(_OpenClawEmbedSource)"
@@ -380,7 +380,7 @@
              Query="/ai:AppInstaller/ai:MainPackage/@Uri"               Value="$(_OpenClawMainPackageUri)" />
 
     <Message Importance="high"
-             Text="Rendered embedded AppInstaller: channel=$(OpenClawChannel) arch=$(_OpenClawEmbedArch) version=$(_AppxManifestVersion) release-tag=$(OpenClawReleaseTag)" />
+             Text="Rendered embedded AppInstaller: channel=$(ReleaseChannel) arch=$(_OpenClawEmbedArch) version=$(_AppxManifestVersion) release-tag=$(ReleaseTag)" />
   </Target>
 
   <!-- Fail fast on RIDs we have no wxc-exec binary for, so x86/non-Windows
