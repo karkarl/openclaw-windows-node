@@ -1,12 +1,11 @@
 {
-  "last_run": "2026-06-12",
-  "last_run_id": "27418705896",
+  "last_run": "2026-06-13",
+  "last_run_id": "27452404232",
   "monthly_activity_issue": 618,
   "backlog_comment_cursor": 727,
   "open_repo_assist_prs": [
     "#717",
     "#718",
-    "#722",
     "#728",
     "#734",
     "#735",
@@ -14,7 +13,7 @@
     "#743",
     "#747",
     "#749",
-    "pending-exec-approvals-test"
+    "#750"
   ],
   "comments_made": {
     "641": {
@@ -68,15 +67,16 @@
     "730": {
       "date": "2026-06-09",
       "note": "Confirmed root cause. Issue closed by maintainer."
+    },
+    "710": {
+      "date": "2026-06-13",
+      "note": "Summarized what PR #741 covers (scoping, stuck UI, token forwarding) vs. remaining gateway-side work (unknown requestId, token rotation)."
     }
   },
   "fix_attempts": {
     "709": {
       "branch": "repo-assist/fix-issue-709-wizard-stale-session",
-      "prs": [
-        "#717",
-        "#718"
-      ],
+      "prs": ["#717", "#718"],
       "status": "open",
       "date": "2026-06-08",
       "note": "Two PRs. #718 preferred; #717 should be closed."
@@ -96,10 +96,11 @@
       "note": "F11/Esc fullscreen via AppWindow.SetPresenter."
     },
     "662": {
-      "branch": "repo-assist/fix-issue-662-pair-operator-gateway-health-check",
+      "branch": "repo-assist/fix-issue-662-pair-operator-gateway-health-check-69d5305cd33dda68",
       "pr": 743,
       "status": "open",
-      "date": "2026-06-11"
+      "date": "2026-06-11",
+      "note": "Rebased on main 2026-06-13 after #741 merge. Conflict in SetupStepsTests.cs resolved by keeping both new tests."
     },
     "677": {
       "branch": "repo-assist/eng-device-pair-plugin-not-found-2026-06-11-8f330ecd7f643284",
@@ -116,11 +117,12 @@
     },
     "exec-approvals-tilde-expansion": {
       "branch": "repo-assist/test-exec-approvals-store-path-expansion-2026-06-12",
-      "pr": "pending",
+      "pr": 750,
       "status": "open",
       "date": "2026-06-12",
       "note": "2 tests for ExpandHomePrefix tilde-only and tilde-prefixed-openClawHome edge cases."
     }
   },
-  "notes": "Run 2026-06-12 (27418705896): Task 2 commented on #667; Task 3 ExecApprovalsStore tilde expansion tests PR submitted. Next: monitor open PRs for CI failures; get PR number for ExecApprovals test PR."
+  "merged_prs": ["#722"],
+  "notes": "Run 2026-06-13: Task 6 rebased PR #743 (conflict with #741 in SetupStepsTests.cs, resolved); Task 2 commented on #710 (PR #741 coverage summary). PR #722 was merged into main. Next: monitor PRs #718/#728 which may overlap with #741."
 }
