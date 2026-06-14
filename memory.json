@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-06-13",
-  "last_run_id": "27467329232",
+  "last_run": "2026-06-14",
+  "last_run_id": "27484722532",
   "monthly_activity_issue": 618,
   "backlog_comment_cursor": 729,
   "open_repo_assist_prs": [
@@ -15,6 +15,18 @@
     "#749",
     "#750"
   ],
+  "pr_merge_state": {
+    "717": "unknown (duplicate, should close)",
+    "718": "clean",
+    "728": "clean",
+    "734": "clean",
+    "735": "unknown (duplicate, should close)",
+    "738": "clean",
+    "743": "dirty - merge conflict in SetupStepsTests.cs; push blocked by protected-files (3 attempts); maintainer comment left 2026-06-14",
+    "747": "clean",
+    "749": "clean",
+    "750": "clean"
+  },
   "comments_made": {
     "641": {
       "date": "2026-06-10",
@@ -79,6 +91,10 @@
     "730": {
       "date": "2026-06-09",
       "note": "Confirmed root cause. Issue closed by maintainer."
+    },
+    "743": {
+      "date": "2026-06-14",
+      "note": "PR maintenance comment: explained protected-files block, gave manual rebase instructions."
     }
   },
   "fix_attempts": {
@@ -108,7 +124,7 @@
       "pr": 743,
       "status": "open",
       "date": "2026-06-11",
-      "note": "Rebased on main 2026-06-13 (run 27467329232). Only 2 files changed: SetupSteps.cs and SetupStepsTests.cs. No ci.yml. Tests: SetupEngine 248 passed (1 pre-existing Linux failure), Shared 2229 passed, Tray 1049 passed."
+      "note": "Merge conflict in SetupStepsTests.cs (resolved locally 2026-06-14, rebased to ff38d84). Push repeatedly blocked by protected-files check (3 runs). Maintainer comment left 2026-06-14 with manual force-push instructions. Tests: SetupEngine 248 passed, Shared 2229 passed, Tray 1049 passed."
     },
     "677": {
       "branch": "repo-assist/eng-device-pair-plugin-not-found-2026-06-11-8f330ecd7f643284",
@@ -136,5 +152,5 @@
     "661": "fixed in PR #666 (merged), verified in v0.6.3 by TurboTheTurtle on 2026-06-13",
     "720": "fixed in PR #741 (merged), verified by fuller-stack-dev on 2026-06-12"
   },
-  "notes": "Run 2026-06-13 (27467329232): Rebased PR #743 cleanly on main (no ci.yml); commented on #661 (v0.6.3 verified) and #682 (gateway-side root cause). Issues #661 and #720 are fixed on main and in v0.6.3 - ready for maintainer closure. Issue #754 protected files warning resolved by clean rebase."
+  "notes": "Run 2026-06-14 (27484722532): Task 6 - checked all 10 Repo Assist PRs: #718,#728,#734,#738,#747,#749,#750 are clean; #743 dirty (merge conflict). PR #743 rebase blocked 3x by protected-files; commented with manual fix instructions. Issues #661 and #720 are fixed on main and in v0.6.3 - ready for maintainer closure. #717 and #735 are duplicates waiting to be closed. Task 3 - no new fixable issues (all fixable ones have open PRs)."
 }
