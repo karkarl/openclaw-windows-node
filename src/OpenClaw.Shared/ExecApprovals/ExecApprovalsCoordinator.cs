@@ -100,13 +100,19 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
         if (pass1 is ExecHostPolicyDecision.AllowOutcome)
         {
             // Pre-approved path (security=Full, ask=Off or allowlist satisfied): skip prompt.
+            // Fail closed if the approved executable cannot be pinned to a resolved path.
+            var preApprovedExecution = BuildApprovedExecution(identity, sanitizedEnv);
+            if (preApprovedExecution is null)
+                return LogAndReturn(ExecApprovalV2Result.InternalError("unresolved-executable-on-allow"),
+                    correlationId, promptAttempted: false, fallbackUsed: false, canonical: context.DisplayCommand);
+
             // Side effects are best-effort: a metadata write failure must not flip an allow to a deny.
             try { await RecordAllowlistUsageAsync(context).ConfigureAwait(false); }
             catch (Exception ex) { _logger.Warn($"[EXEC-APPROVALS] [{correlationId}] side-effect: record-usage failed (non-fatal): {ex.Message}"); }
             _logger.Info($"[EXEC-APPROVALS] [{correlationId}] path=new " +
                 $"canonical=\"{SanitizeForLog(context.DisplayCommand)}\" decision=allow " +
                 $"reason=approved fallbackUsed=false promptAttempted=false");
-            return ExecApprovalV2Result.Allow();
+            return ExecApprovalV2Result.Allow(preApprovedExecution);
         }
         // RequiresPromptOutcome → continue to prompt/fallback block
 
@@ -186,7 +192,14 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
             _promptLock.Release();
         }
 
-        // Step 8: side effects — strictly after the final allow decision.
+        // Step 8: build payload before any store writes — a fail-closed payload result
+        // must not leave persistent allowlist state behind.
+        var execution = BuildApprovedExecution(identity, sanitizedEnv);
+        if (execution is null)
+            return LogAndReturn(ExecApprovalV2Result.InternalError("unresolved-executable-on-allow"),
+                correlationId, promptAttempted, fallbackUsed, canonical: context.DisplayCommand);
+
+        // Step 9: side effects — only reached when the payload is valid.
         // Each side effect is independently best-effort so a failure in one does not skip the other.
         if (persistAllowlistEntry && context.Security == ExecSecurity.Allowlist)
         {
@@ -196,13 +209,13 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
         try { await RecordAllowlistUsageAsync(context).ConfigureAwait(false); }
         catch (Exception ex) { _logger.Warn($"[EXEC-APPROVALS] [{correlationId}] side-effect: record-usage failed (non-fatal): {ex.Message}"); }
 
-        // Step 9: final allow log
+        // Step 10: final allow log
         _logger.Info($"[EXEC-APPROVALS] [{correlationId}] path=new " +
             $"canonical=\"{SanitizeForLog(context.DisplayCommand)}\" decision=allow " +
             $"reason=approved fallbackUsed={fallbackUsed} promptAttempted={promptAttempted}");
 
         // Step 10: return Allow
-        return ExecApprovalV2Result.Allow();
+        return ExecApprovalV2Result.Allow(execution);
         }
         catch (Exception ex)
         {
@@ -215,6 +228,50 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
             _logger.Error(msg, ex);
             return ExecApprovalV2Result.InternalError("unexpected-exception");
         }
+    }
+
+    // Builds the approved execution payload from the RESOLVED executable path, never
+    // the raw argv[0]. The command must execute with the same canonical identity it
+    // was evaluated under: a relative argv[0] in the payload would let Windows
+    // re-resolve it against PATH/cwd at execution time (a hijack), and the
+    // direct-argv runner rejects non-absolute executables anyway. Returns null when
+    // the executable could not be resolved to a path — the caller fails closed
+    // rather than execute a command whose identity we cannot pin.
+    internal static ExecApprovedExecution? BuildApprovedExecution(
+        CanonicalCommandIdentity identity,
+        IReadOnlyDictionary<string, string>? sanitizedEnv)
+    {
+        var resolvedPath = identity.Resolution?.ResolvedPath;
+        if (string.IsNullOrEmpty(resolvedPath))
+            return null;
+
+        // A batch script (.bat/.cmd) cannot run without cmd.exe, which re-parses the
+        // arguments and breaks the verbatim-argv guarantee. The direct-argv runner
+        // rejects these too; reject here as well so the fail-closed result is reached
+        // before any approval state is written, not after.
+        if (resolvedPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)
+            || resolvedPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // If any env wrapper in the chain carries modifiers (VAR=val assignments or
+        // flags), the direct-argv payload cannot faithfully carry those semantics: the
+        // modifier would be silently dropped, and the process would run in a different
+        // environment than the one that was approved. This walks the full unwrap chain
+        // so a nested form such as `env env FOO=bar node` is caught, not just the outer
+        // wrapper. Fail closed rather than execute a command that differs from what was
+        // evaluated.
+        if (ExecEnvInvocationUnwrapper.AnyWrapperHasModifiers(identity.Command))
+            return null;
+
+        // Transparent env wrappers (no modifiers) are safe to unwrap: the inner
+        // command is the real executable and the args are preserved verbatim.
+        var effective = ExecEnvInvocationUnwrapper.UnwrapForResolution(identity.Command);
+        var argv = new string[effective.Count];
+        argv[0] = resolvedPath;
+        for (var i = 1; i < effective.Count; i++)
+            argv[i] = effective[i];
+
+        return new ExecApprovedExecution(argv, identity.Cwd, identity.TimeoutMs, sanitizedEnv);
     }
 
     // Persists allowAlways patterns after an AllowAlways prompt decision (non-empty only).
