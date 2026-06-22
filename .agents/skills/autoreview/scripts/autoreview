@@ -338,7 +338,8 @@ def sample_process_metrics(repo: Path, pid: int) -> tuple[float, float, int, str
         try:
             rss_kb += int(fields[1])
         except ValueError:
-            pass
+            # Some ps variants can emit non-numeric RSS for transient child rows.
+            continue
         cpu_seconds += parse_ps_time(fields[2])
     if not states:
         return None
