@@ -345,4 +345,5 @@ public class MxcAvailabilityTests
             try { File.Delete(fakeExe); } catch { /* best-effort */ }
         }
     }
+
 }

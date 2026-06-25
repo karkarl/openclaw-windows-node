@@ -191,17 +191,19 @@ public sealed partial class SandboxPage : Page
     /// MXC availability AND the current sandbox toggle state. Three visual states:
     ///   1. Available + ON   → 🛡 "Sandbox is on" + toggle visible
     ///   2. Available + OFF  → ⚠ "Sandbox is off — high risk" + toggle visible
-    ///   3. Unavailable      → ⚠ "Sandbox unavailable — commands run uncontained" + toggle hidden
-    /// When MXC is unavailable the toggle is hidden and MxcCommandRunner falls
-    /// back to host execution with a warning so older Windows builds are not
-    /// completely blocked.
+    ///   3. Unavailable + ON → ⚠ "Sandbox unavailable — host fallback" or "commands blocked" + toggle visible
+    ///   4. Unavailable + OFF → ⚠ "Sandbox is off — host execution" + toggle visible
+    /// When MXC is unavailable and sandboxing is enabled, MxcCommandRunner uses
+    /// compatibility host fallback by default and blocks only when strict fallback
+    /// blocking is explicitly enabled.
     /// </summary>
     private void UpdateSandboxStatusCard()
     {
         var availability = _cachedAvailability;
         var enabled = SandboxEnabledToggle.IsOn;
+        var blockHostFallback = CurrentApp.Settings?.SystemRunBlockHostFallbackWhenMxcUnavailable ?? false;
 
-        UpdateUnavailableActionBar(availability);
+        UpdateUnavailableActionBar(availability, enabled);
 
         if (availability is null)
         {
@@ -217,9 +219,23 @@ public sealed partial class SandboxPage : Page
         if (!available)
         {
             SandboxStatusIcon.Text = "⚠";
-            SandboxStatusTitle.Text = "Node Sandbox unavailable — commands run uncontained";
-            SandboxStatusSubtext.Text = "Containment isn't available on this PC, so commands run without sandbox protection.";
-            SandboxEnabledToggle.Visibility = Visibility.Collapsed;
+            SandboxEnabledToggle.Visibility = Visibility.Visible;
+
+            if (enabled && blockHostFallback)
+            {
+                SandboxStatusTitle.Text = "Node Sandbox unavailable — commands blocked";
+                SandboxStatusSubtext.Text = "Containment isn't available on this PC, and strict fallback blocking is on, so agent-started commands are blocked.";
+            }
+            else if (enabled)
+            {
+                SandboxStatusTitle.Text = "Node Sandbox unavailable — host fallback";
+                SandboxStatusSubtext.Text = "Containment isn't available on this PC, so agent-started commands run on the host without sandbox protection.";
+            }
+            else
+            {
+                SandboxStatusTitle.Text = "Node Sandbox is off — host execution";
+                SandboxStatusSubtext.Text = "Containment isn't available and Node Sandbox is off, so agent-started commands run on the host without sandbox protection.";
+            }
             return;
         }
 
@@ -260,7 +276,7 @@ public sealed partial class SandboxPage : Page
     ///   - wxc-exec.exe missing → "Show install instructions"
     ///   - Anything else → no primary action, just the learn-more hyperlink
     /// </summary>
-    private void UpdateUnavailableActionBar(OpenClaw.Shared.Mxc.MxcAvailability? availability)
+    private void UpdateUnavailableActionBar(OpenClaw.Shared.Mxc.MxcAvailability? availability, bool sandboxEnabled)
     {
         // Null = still probing; hide the bar until we have a verdict.
         if (availability is null || availability.HasAnyBackend)
@@ -286,6 +302,11 @@ public sealed partial class SandboxPage : Page
             && !availability.IsAppContainerAvailable;
 
         var isSetupIssue = !availability.IsWxcExecResolvable;
+        var blockHostFallback = sandboxEnabled
+            && (CurrentApp.Settings?.SystemRunBlockHostFallbackWhenMxcUnavailable ?? false);
+        var unavailableBehavior = blockHostFallback
+            ? "Commands are blocked while sandboxing is unavailable because strict fallback blocking is enabled. "
+            : "Commands will run on the host without sandbox protection while sandboxing is unavailable. ";
 
         if (isProbeError)
         {
@@ -301,7 +322,7 @@ public sealed partial class SandboxPage : Page
         {
             UnavailableActionBar.Title = "Your Windows version doesn't support sandboxing yet";
             UnavailableActionMessage.Text =
-                $"{reasonText}\n\nCommands run uncontained on this machine — sandboxing requires a recent Windows build with the AppContainer primitives shipped. " +
+                $"{reasonText}\n\n{unavailableBehavior}Sandboxing requires a recent Windows build with the AppContainer primitives shipped. " +
                 "Install the latest Windows updates (or join the Windows Insider Program for the newest builds) to enable containment.";
             UnavailablePrimaryButton.Content = "Open Windows Update";
             UnavailablePrimaryButton.Tag = "windowsupdate";
@@ -311,7 +332,7 @@ public sealed partial class SandboxPage : Page
         {
             UnavailableActionBar.Title = "Sandboxing components are missing";
             UnavailableActionMessage.Text =
-                $"{reasonText}\n\nThe wxc-exec binary couldn't be located, so commands run uncontained. " +
+                $"{reasonText}\n\nThe wxc-exec binary couldn't be located. {unavailableBehavior}" +
                 "If this is a developer build, build the tray app so wxc-exec.exe is copied into the output folder. " +
                 "Otherwise reinstall the companion app to restore sandboxing.";
             UnavailablePrimaryButton.Content = "Show install instructions";
@@ -320,8 +341,10 @@ public sealed partial class SandboxPage : Page
         }
         else
         {
-            UnavailableActionBar.Title = "Sandbox unavailable — commands run uncontained";
-            UnavailableActionMessage.Text = reasonText;
+            UnavailableActionBar.Title = blockHostFallback
+                ? "Sandbox unavailable — commands blocked"
+                : "Sandbox unavailable — host fallback";
+            UnavailableActionMessage.Text = $"{reasonText}\n\n{unavailableBehavior}";
             UnavailablePrimaryButton.Visibility = Visibility.Collapsed;
         }
 

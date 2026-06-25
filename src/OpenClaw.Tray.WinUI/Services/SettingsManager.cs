@@ -18,6 +18,7 @@ public class SettingsManager
     private readonly string _settingsDirectory;
     private readonly string _settingsFilePath;
     private const string ProtectedSecretPrefix = "dpapi:";
+    private const int CurrentSettingsSchemaVersion = 1;
     private static readonly byte[] ProtectedSecretEntropy = Encoding.UTF8.GetBytes("OpenClawTray.Settings.v1");
 
     public static string SettingsDirectoryPath => GetDefaultSettingsDirectory();
@@ -143,8 +144,10 @@ public class SettingsManager
     public string? PreferredGatewayId { get => _data.PreferredGatewayId; set => _data = _data with { PreferredGatewayId = value }; }
 
     // ── MXC sandbox ─────────────────────────────────────────────────────
-    /// <summary>Master switch for system.run containment. When true (default), system.run runs sandboxed and is denied if MXC is unavailable. When false, system.run runs on host like before.</summary>
+    /// <summary>Master switch for system.run containment. When true (default), system.run uses MXC when available and falls back to host execution when unavailable unless strict fallback blocking is enabled. When false, system.run runs on host like before.</summary>
     public bool SystemRunSandboxEnabled { get => _data.SystemRunSandboxEnabled; set => _data = _data with { SystemRunSandboxEnabled = value }; }
+    /// <summary>When true, sandbox-enabled system.run blocks instead of using the compatibility host fallback if MXC is unavailable. Default false.</summary>
+    public bool SystemRunBlockHostFallbackWhenMxcUnavailable { get => _data.SystemRunBlockHostFallbackWhenMxcUnavailable; set => _data = _data with { SystemRunBlockHostFallbackWhenMxcUnavailable = value }; }
     /// <summary>When sandboxed, allow system.run commands to reach the public internet. Default false.</summary>
     public bool SystemRunAllowOutbound { get => _data.SystemRunAllowOutbound; set => _data = _data with { SystemRunAllowOutbound = value }; }
 
@@ -199,7 +202,7 @@ public class SettingsManager
                 var loaded = SettingsData.FromJson(json);
                 if (loaded != null)
                 {
-                    _data = NormalizeLoadedData(loaded);
+                    _data = NormalizeLoadedData(loaded, json);
                 }
             }
         }
@@ -213,6 +216,7 @@ public class SettingsManager
 
     private static SettingsData CreateDefaultData() => new()
     {
+        SettingsSchemaVersion = CurrentSettingsSchemaVersion,
         GatewayUrl = "ws://localhost:18789",
         UseSshTunnel = false,
         SshTunnelUser = "",
@@ -266,6 +270,7 @@ public class SettingsManager
         SkippedUpdateTag = "",
         PreferredGatewayId = null,
         SystemRunSandboxEnabled = true,
+        SystemRunBlockHostFallbackWhenMxcUnavailable = false,
         SystemRunAllowOutbound = false,
         SandboxClipboard = SandboxClipboardMode.None,
         SandboxDocumentsAccess = null,
@@ -276,11 +281,12 @@ public class SettingsManager
         SandboxMaxOutputBytes = 4 * 1024 * 1024
     };
 
-    private static SettingsData NormalizeLoadedData(SettingsData loaded)
+    private static SettingsData NormalizeLoadedData(SettingsData loaded, string? rawJson = null)
     {
         var defaults = CreateDefaultData();
         var data = loaded with
         {
+            SettingsSchemaVersion = CurrentSettingsSchemaVersion,
             GatewayUrl = loaded.GatewayUrl ?? defaults.GatewayUrl,
             SshTunnelUser = loaded.SshTunnelUser ?? defaults.SshTunnelUser,
             SshTunnelHost = loaded.SshTunnelHost ?? defaults.SshTunnelHost,
@@ -302,6 +308,7 @@ public class SettingsManager
             PreferredGatewayId = loaded.PreferredGatewayId ?? defaults.PreferredGatewayId,
             UserRules = loaded.UserRules != null ? new List<UserNotificationRule>(loaded.UserRules) : new(),
             SandboxCustomFolders = CloneSandboxCustomFolders(loaded.SandboxCustomFolders),
+            SystemRunBlockHostFallbackWhenMxcUnavailable = loaded.SystemRunBlockHostFallbackWhenMxcUnavailable,
             SandboxTimeoutMs = loaded.SandboxTimeoutMs > 0 ? loaded.SandboxTimeoutMs : defaults.SandboxTimeoutMs,
             SandboxMaxOutputBytes = loaded.SandboxMaxOutputBytes > 0 ? loaded.SandboxMaxOutputBytes : defaults.SandboxMaxOutputBytes,
             McpOnlyMode = null
