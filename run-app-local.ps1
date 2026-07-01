@@ -146,8 +146,20 @@ if (-not $targetFramework) {
     throw "Unable to determine TargetFramework from $projectPath."
 }
 
-$architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-$runtimeIdentifier = if ($architecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) { "win-arm64" } else { "win-x64" }
+# Match build.ps1's architecture detection so this script looks in the same
+# output folder the build wrote to. build.ps1 uses $env:PROCESSOR_ARCHITECTURE,
+# which reflects the PowerShell process architecture (and therefore the RID that
+# `dotnet build -r` produced). Using [RuntimeInformation]::OSArchitecture here can
+# disagree (e.g. an x64-emulated shell on an ARM64 device), sending us to a folder
+# that was never built.
+$architecture = $env:PROCESSOR_ARCHITECTURE
+$runtimeIdentifier = switch ($architecture) {
+    "ARM64" { "win-arm64" }
+    "AMD64" { "win-x64" }
+    "x86"   { "win-x86" }
+    "ARM"   { "win-arm" }
+    default { "win-x64" }
+}
 $outputDir = Join-Path $repoRoot "src\OpenClaw.Tray.WinUI\bin\$Configuration\$targetFramework\$runtimeIdentifier"
 $exePath = Join-Path $outputDir "OpenClaw.Tray.WinUI.exe"
 
