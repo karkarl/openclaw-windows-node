@@ -324,9 +324,6 @@ Write-Header "Building Projects ($Configuration)"
 # Detect runtime identifier based on architecture
 $rid = switch ($arch) {
     "ARM64" { "win-arm64" }
-    "AMD64" { "win-x64" }
-    "x86"   { "win-x86" }
-    "ARM"   { "win-arm" }
     default { "win-x64" }
 }
 Write-Info "Runtime identifier: $rid"

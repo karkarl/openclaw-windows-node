@@ -155,9 +155,6 @@ if (-not $targetFramework) {
 $architecture = $env:PROCESSOR_ARCHITECTURE
 $runtimeIdentifier = switch ($architecture) {
     "ARM64" { "win-arm64" }
-    "AMD64" { "win-x64" }
-    "x86"   { "win-x86" }
-    "ARM"   { "win-arm" }
     default { "win-x64" }
 }
 $outputDir = Join-Path $repoRoot "src\OpenClaw.Tray.WinUI\bin\$Configuration\$targetFramework\$runtimeIdentifier"
