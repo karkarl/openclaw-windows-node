@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds and launches the WinUI tray app for local development.
 
@@ -245,7 +245,7 @@ try {
     } else {
         $process = Start-Process -FilePath $exePath -WorkingDirectory $outputDir -PassThru
         Write-Host "Started OpenClaw Tray (PID: $($process.Id))" -ForegroundColor Green
-        Write-Host "Hint: Look for the OpenClaw tray icon in the system tray (bottom-right). It may be hidden under the ^ button." -ForegroundColor Cyan
+        Write-Host "Hint: Look for the 🦞 OpenClaw tray icon in the system tray (bottom-right). It may be hidden under the ^ button." -ForegroundColor Cyan
         $exitCode = 0
     }
 } finally {

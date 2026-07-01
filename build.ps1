@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Build script for OpenClaw Windows Hub
 
