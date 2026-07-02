@@ -1739,6 +1739,8 @@ public sealed partial class ConnectionPage : Page
             VerticalAlignment = VerticalAlignment.Center,
             Tag = row.Id,
         };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(overflowBtn,
+            string.Format(LocalizationHelper.GetString("ConnectionPage_GatewayOptionsA11y"), row.DisplayName));
         overflowBtn.Content = new FontIcon
         {
             Glyph = Helpers.FluentIconCatalog.MoreOverflow,
@@ -1789,6 +1791,7 @@ public sealed partial class ConnectionPage : Page
         grid.Children.Add(overflowBtn);
 
         card.Child = grid;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(card, row.DisplayName);
         return card;
     }
 

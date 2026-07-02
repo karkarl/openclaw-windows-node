@@ -5303,6 +5303,9 @@ Assurez-vous que la passerelle est en cours d'exécution.</value>
   <data name="ConnectionPage_OpenDashboard" xml:space="preserve">
     <value>Ouvrir le tableau de bord</value>
   </data>
+  <data name="ConnectionPage_GatewayOptionsA11y" xml:space="preserve">
+    <value>Options pour {0}</value>
+  </data>
   <data name="ConnectionPage_DisconnectAction" xml:space="preserve">
     <value>Déconnecter</value>
   </data>

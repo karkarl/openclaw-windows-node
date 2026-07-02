@@ -5307,6 +5307,9 @@ Make sure the gateway is running.</value>
   <data name="ConnectionPage_OpenDashboard" xml:space="preserve">
     <value>Open dashboard</value>
   </data>
+  <data name="ConnectionPage_GatewayOptionsA11y" xml:space="preserve">
+    <value>Options for {0}</value>
+  </data>
   <data name="ConnectionPage_DisconnectAction" xml:space="preserve">
     <value>Disconnect</value>
   </data>

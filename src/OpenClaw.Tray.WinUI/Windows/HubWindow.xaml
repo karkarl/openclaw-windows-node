@@ -368,6 +368,7 @@
 
             <NavigationView
                 x:Name="NavView"
+                AutomationProperties.Name="Main navigation"
                 IsBackButtonVisible="Collapsed"
                 IsSettingsVisible="False"
                 IsPaneToggleButtonVisible="False"
@@ -415,52 +416,52 @@
 
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_82" x:Name="NavChat" Tag="chat" Content="Chat">
-                    <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Chat_Icon}"/></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Chat_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItemSeparator/>
 
             <NavigationViewItemHeader x:Uid="HubWindow_NavigationViewItemHeader_87" x:Name="NavGatewayHeader" Content="Gateway"/>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_88" Tag="connection" Content="Connection">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Connection_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Connection_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_91" x:Name="NavSessions" Tag="sessions" Content="Sessions">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Sessions_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Sessions_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_97" x:Name="NavSkills" Tag="skills" Content="Skills">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Skills_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Skills_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_109" x:Name="NavChannels" Tag="channels" Content="Channels">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Channels_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Channels_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_112" x:Name="NavInstances" Tag="instances" Content="Instances">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Instances_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Instances_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_124" x:Name="NavCron" Tag="cron" Content="Cron">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Cron_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Cron_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <!-- Advanced — consolidates gateway-oriented pages -->
             <NavigationViewItem x:Uid="HubWindow_Advanced" x:Name="NavAdvanced" Content="Advanced" SelectsOnInvoked="False">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Advanced_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Advanced_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                 <NavigationViewItem.MenuItems>
                     <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_94" Tag="agentevents" Content="Event Stream">
-                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource AgentEvents_Icon}"/></NavigationViewItem.Icon>
+                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource AgentEvents_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                     </NavigationViewItem>
                     <NavigationViewItem x:Uid="AgentsNavItem" x:Name="AgentsNavItem" Content="Agents" SelectsOnInvoked="False" IsExpanded="True">
-                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Agents_Icon}"/></NavigationViewItem.Icon>
+                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Agents_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                         <NavigationViewItem.MenuItems>
                             <NavigationViewItem x:Uid="DefaultAgentNavItem" x:Name="DefaultAgentNavItem" Content="main" Tag="agent:main">
-                                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Agents_Icon}"/></NavigationViewItem.Icon>
+                                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Agents_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                             </NavigationViewItem>
                         </NavigationViewItem.MenuItems>
                     </NavigationViewItem>
                     <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_115" Tag="bindings" Content="Bindings">
-                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Bindings_Icon}"/></NavigationViewItem.Icon>
+                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Bindings_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                     </NavigationViewItem>
                     <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_118" Tag="config" Content="Config">
-                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Config_Icon}"/></NavigationViewItem.Icon>
+                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Config_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                     </NavigationViewItem>
                     <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_121" Tag="usage" Content="Usage">
-                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Usage_Icon}"/></NavigationViewItem.Icon>
+                        <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Usage_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
                     </NavigationViewItem>
                 </NavigationViewItem.MenuItems>
             </NavigationViewItem>
@@ -468,25 +469,25 @@
 
             <NavigationViewItemHeader x:Uid="HubWindow_NavigationViewItemHeader_129" Content="This Computer"/>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_Voice" Tag="voice" Content="Voice &amp; Audio">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Voice_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Voice_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_136" Tag="permissions" Content="Permissions">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Permissions_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Permissions_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_Sandbox" Tag="sandbox" Content="Sandbox">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Sandbox_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Sandbox_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_133" Tag="settings" Content="Settings">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Settings_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Settings_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
         </NavigationView.MenuItems>
 
         <NavigationView.FooterMenuItems>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_Notifications" Tag="notifications" Content="Notifications">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Notifications_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Notifications_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_145" x:Name="NavDiagnostics" Tag="debug" Content="Debug">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Debug_Icon}"/></NavigationViewItem.Icon>
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Debug_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 

@@ -125,7 +125,8 @@
                     <StackPanel Spacing="8" Margin="0,4,0,12">
                         <TextBlock x:Name="UnavailableActionMessage" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="UnavailablePrimaryButton" Click="OnUnavailableActionClick" Style="{ThemeResource AccentButtonStyle}" />
+                            <Button x:Name="UnavailablePrimaryButton" Click="OnUnavailableActionClick" Style="{ThemeResource AccentButtonStyle}"
+                                    AutomationProperties.Name="Sandbox action" />
                             <HyperlinkButton x:Uid="SandboxPage_LearnMoreAboutMXC" Content="Learn more about MXC sandboxing"
                                              NavigateUri="https://github.com/microsoft/mxc" />
                         </StackPanel>
@@ -163,7 +164,8 @@
                                 Padding="20,18"
                                 MinHeight="130"
                                 CornerRadius="8"
-                                Click="OnPresetLockedClick">
+                                Click="OnPresetLockedClick"
+                                AutomationProperties.Name="Locked Down preset: No internet, no clipboard, no standard user folders">
                             <StackPanel Spacing="8">
                                 <TextBlock x:Uid="SandboxPage_LockedDown" Text="🔒 Locked Down"
                                            FontSize="18"
@@ -184,7 +186,8 @@
                                 Padding="20,18"
                                 MinHeight="130"
                                 CornerRadius="8"
-                                Click="OnPresetBalancedClick">
+                                Click="OnPresetBalancedClick"
+                                AutomationProperties.Name="Recommended preset: Internet on, read-only on Documents, Downloads, Desktop">
                             <StackPanel Spacing="8">
                                 <TextBlock x:Uid="SandboxPage_Recommended" Text="🛡 Recommended"
                                            FontSize="18"
@@ -205,7 +208,8 @@
                                 Padding="20,18"
                                 MinHeight="130"
                                 CornerRadius="8"
-                                Click="OnPresetPermissiveClick">
+                                Click="OnPresetPermissiveClick"
+                                AutomationProperties.Name="Unprotected preset: Internet on, read and write on Documents, Downloads, Desktop">
                             <StackPanel Spacing="8">
                                 <TextBlock x:Uid="SandboxPage_Unprotected" Text="⚠ Unprotected"
                                            FontSize="18"
@@ -255,6 +259,7 @@
                             <TextBlock x:Uid="SandboxPage_Documents" Grid.Row="0" Grid.Column="0" Text="Documents" VerticalAlignment="Center"/>
                             <ComboBox x:Name="DocsAccessCombo" Grid.Row="0" Grid.Column="1"
                                       HorizontalAlignment="Stretch"
+                                      AutomationProperties.Name="Documents access level"
                                       SelectionChanged="OnDocsAccessChanged">
                                 <ComboBoxItem x:Uid="SandboxPage_Blocked" Content="Blocked" Tag="None" />
                                 <ComboBoxItem x:Uid="SandboxPage_ReadOnly" Content="Read only" Tag="ReadOnly" />
@@ -264,6 +269,7 @@
                             <TextBlock x:Uid="SandboxPage_Downloads" Grid.Row="1" Grid.Column="0" Text="Downloads" VerticalAlignment="Center"/>
                             <ComboBox x:Name="DownloadsAccessCombo" Grid.Row="1" Grid.Column="1"
                                       HorizontalAlignment="Stretch"
+                                      AutomationProperties.Name="Downloads access level"
                                       SelectionChanged="OnDownloadsAccessChanged">
                                 <ComboBoxItem x:Uid="SandboxPage_Blocked2" Content="Blocked" Tag="None" />
                                 <ComboBoxItem x:Uid="SandboxPage_ReadOnly2" Content="Read only" Tag="ReadOnly" />
@@ -273,6 +279,7 @@
                             <TextBlock x:Uid="SandboxPage_Desktop" Grid.Row="2" Grid.Column="0" Text="Desktop" VerticalAlignment="Center"/>
                             <ComboBox x:Name="DesktopAccessCombo" Grid.Row="2" Grid.Column="1"
                                       HorizontalAlignment="Stretch"
+                                      AutomationProperties.Name="Desktop access level"
                                       SelectionChanged="OnDesktopAccessChanged">
                                 <ComboBoxItem x:Uid="SandboxPage_Blocked3" Content="Blocked" Tag="None" />
                                 <ComboBoxItem x:Uid="SandboxPage_ReadOnly3" Content="Read only" Tag="ReadOnly" />

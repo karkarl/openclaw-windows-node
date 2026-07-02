@@ -5304,6 +5304,9 @@ Controleer of de gateway actief is.</value>
   <data name="ConnectionPage_OpenDashboard" xml:space="preserve">
     <value>Dashboard openen</value>
   </data>
+  <data name="ConnectionPage_GatewayOptionsA11y" xml:space="preserve">
+    <value>Opties voor {0}</value>
+  </data>
   <data name="ConnectionPage_DisconnectAction" xml:space="preserve">
     <value>Verbinding verbreken</value>
   </data>

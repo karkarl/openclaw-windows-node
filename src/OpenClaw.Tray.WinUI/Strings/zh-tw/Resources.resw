@@ -5303,6 +5303,9 @@
   <data name="ConnectionPage_OpenDashboard" xml:space="preserve">
     <value>開啟儀表板</value>
   </data>
+  <data name="ConnectionPage_GatewayOptionsA11y" xml:space="preserve">
+    <value>{0} 的選項</value>
+  </data>
   <data name="ConnectionPage_DisconnectAction" xml:space="preserve">
     <value>中斷連線</value>
   </data>
