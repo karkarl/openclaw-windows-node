@@ -11,7 +11,7 @@ namespace OpenClawTray.Services;
 public static class AutoStartManager
 {
     private const string RegistryKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string AppName = "OpenClawTray";
+    private static readonly string AppName = AppIdentity.AutoStartRegistryName;
 
     public static bool IsAutoStartEnabled()
     {

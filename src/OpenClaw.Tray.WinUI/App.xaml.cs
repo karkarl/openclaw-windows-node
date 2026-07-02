@@ -235,7 +235,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
     private static readonly string DataPath = DataDirOverride
         ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OpenClawTray");
+            AppIdentity.IsDev ? "OpenClawTray-Dev" : "OpenClawTray");
     private static readonly string DeepLinkPipeName =
         DeepLinkSecurityPolicy.BuildCurrentUserScopedPipeName(DataPath);
     // Operator/node identity store. In normal installs this is %APPDATA%\OpenClawTray.
@@ -245,7 +245,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         ?? Path.Combine(
             Environment.GetEnvironmentVariable("OPENCLAW_TRAY_APPDATA_DIR")
                 ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "OpenClawTray");
+            AppIdentity.IsDev ? "OpenClawTray-Dev" : "OpenClawTray");
     private readonly AppCrashLogger _crashLogger = new(Path.Combine(DataPath, "crash.log"));
     private static readonly AppRunMarker s_runMarker = new(Path.Combine(DataPath, "run.marker"));
 
@@ -331,6 +331,14 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         _crashLogger.Log("UnhandledException", e.Exception);
         e.Handled = true; // Try to prevent crash
     }
+
+    /// <summary>
+    /// Returns true if <paramref name="arg"/> looks like a deep link URI for this build variant.
+    /// Dev builds accept both <c>openclaw-dev://</c> and <c>openclaw://</c> for compatibility.
+    /// </summary>
+    private static bool IsDeepLinkArg(string arg) =>
+        arg.StartsWith($"{AppIdentity.ProtocolScheme}://", StringComparison.OrdinalIgnoreCase)
+        || (AppIdentity.IsDev && arg.StartsWith("openclaw://", StringComparison.OrdinalIgnoreCase));
 
     private void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
     {
@@ -429,7 +437,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // (round 2, Scott #5). The suffixed test-isolation variant is
         // intentionally not covered by AppMutex — production installs only
         // ever use the unsuffixed name.
-        var mutexName = "OpenClawTray";
+        var mutexName = AppIdentity.MutexBaseName;
         if (DataDirOverride is not null)
         {
             var hash = System.Security.Cryptography.SHA256.HashData(
@@ -456,10 +464,10 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         {
             // Forward deep link args to running instance (command-line or protocol activation)
             var deepLink = protocolUri
-                ?? (_startupArgs.Length > 1 && _startupArgs[1].StartsWith("openclaw://", StringComparison.OrdinalIgnoreCase)
+                ?? (_startupArgs.Length > 1 && IsDeepLinkArg(_startupArgs[1])
                     ? _startupArgs[1] : null)
                 ?? (string.Equals(_postSetupLaunch, "chat", StringComparison.OrdinalIgnoreCase)
-                    ? "openclaw://chat" : null);
+                    ? $"{AppIdentity.ProtocolScheme}://chat" : null);
             if (deepLink != null)
             {
                 SendDeepLinkToRunningInstance(deepLink);
@@ -721,7 +729,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
         // Process startup deep link (command-line or MSIX protocol activation)
         var startupDeepLink = _pendingProtocolUri
-            ?? (_startupArgs.Length > 1 && _startupArgs[1].StartsWith("openclaw://", StringComparison.OrdinalIgnoreCase)
+            ?? (_startupArgs.Length > 1 && IsDeepLinkArg(_startupArgs[1])
                 ? _startupArgs[1] : null);
         if (!setupShownDuringStartup && startupDeepLink != null)
         {
@@ -729,7 +737,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         }
         else if (!setupShownDuringStartup && string.Equals(_postSetupLaunch, "chat", StringComparison.OrdinalIgnoreCase))
         {
-            await HandleDeepLinkAsync("openclaw://chat");
+            await HandleDeepLinkAsync($"{AppIdentity.ProtocolScheme}://chat");
         }
 
         Logger.Info("Application started (WinUI 3)");

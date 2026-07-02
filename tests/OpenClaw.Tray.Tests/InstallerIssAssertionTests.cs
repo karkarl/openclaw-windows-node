@@ -16,15 +16,17 @@ public sealed class InstallerIssAssertionTests
     public void Installer_HasAppMutexMatchingTraySingleInstance()
     {
         var iss = File.ReadAllText(Path.Combine(TestRepositoryPaths.GetRepositoryRoot(), "installer.iss"));
-        Assert.Contains("AppMutex=OpenClawTray", iss);
+        // Release build uses "OpenClawTray" mutex; dev build uses "OpenClawTray-Dev".
+        // The installer default (non-DevBuild) must match the release mutex.
+        Assert.Contains("AppMutex={#MyMutex}", iss);
+        Assert.Contains(@"#define MyMutex ""OpenClawTray""", iss);
         Assert.Contains("Inno requires \"{{\" to emit a literal opening brace in AppId.", iss);
-        Assert.Contains("AppId={{M0LTB0T-TRAY-4PP1-D3N7}", iss);
-        Assert.DoesNotContain("AppId={{M0LTB0T-TRAY-4PP1-D3N7}}", iss);
+        Assert.Contains(@"#define MyAppId ""{{M0LTB0T-TRAY-4PP1-D3N7}""", iss);
 
-        // The matching tray-side mutex name must be present in App.xaml.cs.
+        // The matching tray-side mutex name must be present in App.xaml.cs via AppIdentity.
         var appXamlCs = File.ReadAllText(Path.Combine(
             TestRepositoryPaths.GetRepositoryRoot(), "src", "OpenClaw.Tray.WinUI", "App.xaml.cs"));
-        Assert.Contains("var mutexName = \"OpenClawTray\";", appXamlCs);
+        Assert.Contains("var mutexName = AppIdentity.MutexBaseName;", appXamlCs);
     }
 
     [Fact]
@@ -46,12 +48,12 @@ public sealed class InstallerIssAssertionTests
         Assert.Contains(@"#define MyAppName ""OpenClaw Companion""", iss);
         Assert.Contains(@"#define MyCompression ""lzma""", iss);
         Assert.Contains(@"#define MySolidCompression ""yes""", iss);
-        Assert.Contains("OutputBaseFilename=OpenClawCompanion-Setup-{#MyAppArch}", iss);
+        Assert.Contains("OutputBaseFilename=OpenClawCompanion{#MyOutputSuffix}-Setup-{#MyAppArch}", iss);
         Assert.Contains(@"Name: ""{group}\{#MyAppName}""; Filename: ""{app}\{#MyAppExeName}""", iss);
-        Assert.Contains(@"Name: ""{group}\OpenClaw Gateway Setup""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://setup""", iss);
-        Assert.Contains(@"Name: ""{group}\OpenClaw Companion Settings""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://commandcenter""", iss);
-        Assert.Contains(@"Name: ""{group}\OpenClaw Chat""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://chat""", iss);
-        Assert.Contains(@"Name: ""{group}\Check for Updates""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""openclaw://check-updates""", iss);
+        Assert.Contains(@"Name: ""{group}\OpenClaw Gateway Setup""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""{#MyProtocol}://setup""", iss);
+        Assert.Contains(@"Name: ""{group}\OpenClaw Companion Settings""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""{#MyProtocol}://commandcenter""", iss);
+        Assert.Contains(@"Name: ""{group}\OpenClaw Chat""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""{#MyProtocol}://chat""", iss);
+        Assert.Contains(@"Name: ""{group}\Check for Updates""; Filename: ""{app}\{#MyAppExeName}""; Parameters: ""{#MyProtocol}://check-updates""", iss);
     }
 
     [Fact]
@@ -112,11 +114,14 @@ public sealed class InstallerIssAssertionTests
     {
         var iss = File.ReadAllText(Path.Combine(TestRepositoryPaths.GetRepositoryRoot(), "installer.iss"));
 
-        Assert.Contains(@"Subkey: ""Software\Classes\openclaw""", iss);
+        // Protocol registration uses preprocessor variable {#MyProtocol}
+        Assert.Contains(@"Subkey: ""Software\Classes\{#MyProtocol}""", iss);
         Assert.Contains(@"ValueName: ""URL Protocol""", iss);
-        Assert.Contains(@"Subkey: ""Software\Classes\openclaw\shell\open\command""", iss);
+        Assert.Contains(@"Subkey: ""Software\Classes\{#MyProtocol}\shell\open\command""", iss);
         Assert.Contains(@"{app}\{#MyAppExeName}", iss);
         Assert.Contains(@"""%1""", iss);
+        // Ensure release default protocol is "openclaw"
+        Assert.Contains(@"#define MyProtocol ""openclaw""", iss);
     }
 
     [Fact]

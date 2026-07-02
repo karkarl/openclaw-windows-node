@@ -362,7 +362,7 @@ public sealed class AppRefactorContractTests
         Assert.Contains("\"--post-setup-restart\"", source);
         Assert.Contains("\"--wait-for-pid\"", source);
         Assert.Contains("\"--post-setup-launch\"", source);
-        Assert.Contains("? \"openclaw://chat\" : null", source);
+        Assert.Contains("$\"{AppIdentity.ProtocolScheme}://chat\"", source);
         Assert.Contains("WaitForRestartSourceIfRequested(Environment.GetCommandLineArgs())", source);
         AssertInOrder(source, "WaitForRestartSourceIfRequested(Environment.GetCommandLineArgs())", "_mutex = new Mutex");
         Assert.DoesNotContain("setupWindow.TryNavigateToWizard()", source);

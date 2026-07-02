@@ -1,5 +1,22 @@
 ; OpenClaw Companion Inno Setup Script (WinUI version)
-#define MyAppName "OpenClaw Companion"
+; Pass /DDevBuild=1 to produce a side-by-side dev installer.
+#ifdef DevBuild
+  #define MyAppName "OpenClaw Companion (Dev)"
+  #define MyAppId "{{M0LTB0T-TRAY-4PP1-DEV}"
+  #define MyInstallDir "OpenClawTray-Dev"
+  #define MyMutex "OpenClawTray-Dev"
+  #define MyProtocol "openclaw-dev"
+  #define MyOutputSuffix "-Dev"
+  #define MyAutoStartName "OpenClawTray-Dev"
+#else
+  #define MyAppName "OpenClaw Companion"
+  #define MyAppId "{{M0LTB0T-TRAY-4PP1-D3N7}"
+  #define MyInstallDir "OpenClawTray"
+  #define MyMutex "OpenClawTray"
+  #define MyProtocol "openclaw"
+  #define MyOutputSuffix ""
+  #define MyAutoStartName "OpenClawTray"
+#endif
 #define MyAppPublisher "Scott Hanselman"
 #define MyAppURL "https://github.com/openclaw/openclaw-windows-node"
 #define MyAppExeName "OpenClaw.Tray.WinUI.exe"
@@ -20,17 +37,17 @@
 [Setup]
 ; Inno requires "{{" to emit a literal opening brace in AppId.
 ; Do not add a second closing brace here; that creates a malformed uninstall registry key.
-AppId={{M0LTB0T-TRAY-4PP1-D3N7}
+AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL=https://github.com/openclaw/openclaw-windows-node/issues
 AppUpdatesURL=https://github.com/openclaw/openclaw-windows-node/releases
-DefaultDirName={localappdata}\OpenClawTray
+DefaultDirName={localappdata}\{#MyInstallDir}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=OpenClawCompanion-Setup-{#MyAppArch}
+OutputBaseFilename=OpenClawCompanion{#MyOutputSuffix}-Setup-{#MyAppArch}
 Compression={#MyCompression}
 SolidCompression={#MySolidCompression}
 WizardStyle=modern
@@ -41,7 +58,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Mutex name matches App.xaml.cs (`new Mutex(true, "OpenClawTray", …)`).
 ; Tray and Inno run in the same user session, so the bare name resolves
 ; against Local\OpenClawTray — no Global\ prefix needed.
-AppMutex=OpenClawTray
+AppMutex={#MyMutex}
 #if MyAppArch == "arm64"
 ArchitecturesInstallIn64BitMode=arm64
 ArchitecturesAllowed=arm64
@@ -86,17 +103,17 @@ Source: "{#vcRedist}"; DestDir: "{tmp}"; DestName: "vc_redist.exe"; Flags: delet
 #endif
 
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\openclaw"; ValueType: string; ValueName: ""; ValueData: "URL:OpenClaw Protocol"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\openclaw"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\openclaw\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"
-Root: HKCU; Subkey: "Software\Classes\openclaw\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKCU; Subkey: "Software\Classes\{#MyProtocol}"; ValueType: string; ValueName: ""; ValueData: "URL:OpenClaw Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\{#MyProtocol}"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\{#MyProtocol}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"
+Root: HKCU; Subkey: "Software\Classes\{#MyProtocol}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\OpenClaw Gateway Setup"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://setup"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\OpenClaw Companion Settings"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://commandcenter"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\OpenClaw Chat"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://chat"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\Check for Updates"; Filename: "{app}\{#MyAppExeName}"; Parameters: "openclaw://check-updates"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\OpenClaw Gateway Setup"; Filename: "{app}\{#MyAppExeName}"; Parameters: "{#MyProtocol}://setup"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\OpenClaw Companion Settings"; Filename: "{app}\{#MyAppExeName}"; Parameters: "{#MyProtocol}://commandcenter"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\OpenClaw Chat"; Filename: "{app}\{#MyAppExeName}"; Parameters: "{#MyProtocol}://chat"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Check for Updates"; Filename: "{app}\{#MyAppExeName}"; Parameters: "{#MyProtocol}://check-updates"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon

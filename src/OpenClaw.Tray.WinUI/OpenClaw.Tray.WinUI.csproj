@@ -14,6 +14,15 @@
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
+  <!-- Dev build identity: allows side-by-side installation with Release.
+       Set DevBuild=true explicitly, or it defaults to true for Debug configuration. -->
+  <PropertyGroup Condition="'$(DevBuild)' == '' And '$(Configuration)' == 'Debug'">
+    <DevBuild>true</DevBuild>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(DevBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);DEV_BUILD</DefineConstants>
+  </PropertyGroup>
+
   <!-- Map $(Platform) to $(RuntimeIdentifier) so self-contained WinUI F5/debug produces a launchable EXE. -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -190,6 +199,64 @@
     </PropertyGroup>
     <Error Text="Cannot derive 4-part MSIX version from &lt;Version&gt;$(Version)&lt;/Version&gt;. Use the form X.Y or X.Y.Z (optionally with -prerelease or +meta suffix)." Condition="'$(_AppxManifestVersion)' == ''" />
     <SyncAppxManifestVersion ManifestPath="$(_AppxManifestPath)" FourPartVersion="$(_AppxManifestVersion)" />
+  </Target>
+
+  <!--
+    Dev-build MSIX identity patching: changes Identity/Name and DisplayName so the dev
+    variant installs side-by-side with release (like WinUI Gallery Dev/Release channels).
+    Runs only for MSIX dev builds; CI's manifest patch step handles Alpha/Release channels.
+  -->
+  <UsingTask TaskName="PatchAppxManifestIdentity" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ManifestPath ParameterType="System.String" Required="true" />
+      <IdentityName ParameterType="System.String" Required="true" />
+      <DisplayName ParameterType="System.String" Required="true" />
+      <ProtocolName ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        var text = System.IO.File.ReadAllText(ManifestPath);
+
+        // Patch Identity Name attribute
+        var nameRegex = new System.Text.RegularExpressions.Regex(
+            "(<Identity\\b[^>]*?\\bName\\s*=\\s*[\"'])[^\"']+([\"'])",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = nameRegex.Replace(text, "${1}" + IdentityName + "$2", 1);
+
+        // Patch Properties/DisplayName element
+        var propsDisplayRegex = new System.Text.RegularExpressions.Regex(
+            "(<DisplayName>)[^<]+(</DisplayName>)");
+        text = propsDisplayRegex.Replace(text, "${1}" + DisplayName + "$2", 2);
+
+        // Patch VisualElements DisplayName attribute
+        var visualRegex = new System.Text.RegularExpressions.Regex(
+            "(DisplayName\\s*=\\s*\")[^\"]+(\")");
+        text = visualRegex.Replace(text, "${1}" + DisplayName + "$2");
+
+        // Patch Protocol Name attribute (openclaw -> openclaw-dev)
+        var protocolRegex = new System.Text.RegularExpressions.Regex(
+            "(<uap:Protocol\\s+Name\\s*=\\s*\")[^\"]+(\")");
+        text = protocolRegex.Replace(text, "${1}" + ProtocolName + "$2", 1);
+
+        System.IO.File.WriteAllText(ManifestPath, text);
+        Log.LogMessage(MessageImportance.High,
+            "Patched Package.appxmanifest: Identity=" + IdentityName +
+            ", DisplayName='" + DisplayName + "', Protocol=" + ProtocolName);
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="PatchDevAppxManifestIdentity"
+          AfterTargets="SyncAppxManifestVersionTarget"
+          BeforeTargets="_GenerateCurrentProjectAppxManifest"
+          Condition="'$(WindowsPackageType)' == 'MSIX' And '$(DevBuild)' == 'true'">
+    <PatchAppxManifestIdentity
+      ManifestPath="$(MSBuildThisFileDirectory)Package.appxmanifest"
+      IdentityName="OpenClaw.Companion.Dev"
+      DisplayName="OpenClaw Companion (Dev)"
+      ProtocolName="openclaw-dev" />
   </Target>
 
   <!-- Fail fast on RIDs we have no wxc-exec binary for, so x86/non-Windows
