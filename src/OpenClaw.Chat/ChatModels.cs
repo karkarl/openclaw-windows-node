@@ -156,6 +156,21 @@ public record ChatTimelineState(
         System.Collections.Immutable.ImmutableDictionary<string, string>.Empty);
 }
 
+public enum ChatQueuedMessageSendState
+{
+    Queued,
+    Sending,
+    Failed
+}
+
+public record ChatQueuedMessage(
+    string Id,
+    string Text,
+    DateTimeOffset CreatedAt,
+    string LocalNonce,
+    ChatQueuedMessageSendState SendState = ChatQueuedMessageSendState.Queued,
+    string? ErrorText = null);
+
 public record ChatHistoryPage(ChatEvent[] Events, int NextSince, int PrevBefore, bool HasMore);
 
 public abstract record ChatEvent;
@@ -195,7 +210,8 @@ public record ChatDataSnapshot(
     IReadOnlyList<ChatModelChoice>? ModelChoices = null,
     IReadOnlyList<OpenClaw.Shared.GatewayCommand>? AvailableCommands = null,
     bool CommandsSupported = true,
-    IReadOnlyDictionary<string, long>? TimelineGenerations = null);
+    IReadOnlyDictionary<string, long>? TimelineGenerations = null,
+    IReadOnlyDictionary<string, IReadOnlyList<ChatQueuedMessage>>? QueuedMessagesByThread = null);
 
 /// <summary>
 /// Describes where the UI may send the next chat message. Distinct from

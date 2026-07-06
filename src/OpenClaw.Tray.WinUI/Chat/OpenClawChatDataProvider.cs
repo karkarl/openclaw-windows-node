@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Encodings.Web;
@@ -28,6 +29,8 @@ internal static class LocalizationHelper
         "Chat_Permission_Deny" => "Deny once",
         "Chat_Permission_CommandApprovalTitle" => "Command approval requested",
         "Chat_Permission_ResultSubmittedFormat" => "Approval {0} submitted for {1}.",
+        "Chat_Error_SendReturnedStatusFormat" => "Gateway returned send status '{0}'.",
+        "Chat_Error_SendFailedFormat" => "Send failed: {0}",
         _ => resourceKey
     };
 }
@@ -97,6 +100,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, ChatTimelineState> _timelines = new();
     private readonly Dictionary<string, LocalInlineApproval> _localInlineApprovals = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _activeRunIds = new();   // sessionKey → runId
+    private readonly Dictionary<string, long> _activeRunStartSequences = new(); // sessionKey → lifecycle.start sequence
     private readonly Dictionary<string, int> _pendingAbortCounts = new(); // threads → count of pending aborts waiting for lifecycle.start
     private readonly HashSet<string> _abortedRunIds = new();             // runIds whose events should be suppressed
     private readonly HashSet<string> _abortedThreads = new();            // threads with active abort — suppress chat messages (no runId on those)
@@ -114,6 +118,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, long> _resetCutoffUtcMs = new(); // sessionKey -> local reset time
     private readonly HashSet<string> _resetAwaitingUserMessage = new(); // threads reset and waiting for first post-reset turn
     private readonly Dictionary<string, HashSet<string>> _resetIgnoredRunIds = new(); // sessionKey -> pre-reset run IDs to drop
+    private readonly Dictionary<string, Dictionary<string, Queue<DateTimeOffset>>> _resetSubmittedLocalEchoTexts = new(); // sessionKey -> pre-reset local user echoes that reached the gateway
     private readonly Dictionary<string, HashSet<string>> _resetAcceptedRunIds = new(); // sessionKey -> post-reset run IDs allowed to open the gate
     private readonly Dictionary<string, long> _resetLocalSendWithoutRunVersions = new(); // sessionKey -> reset generation for no-runId sends
     private readonly Dictionary<string, long> _resetLocalSendWithoutRunStartSequences = new(); // sessionKey -> lifecycle sequence at local send start
@@ -121,6 +126,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, List<PendingResetLifecycleStart>> _resetPendingLifecycleStarts = new(); // sessionKey -> lifecycle.start seen before proof
     private readonly HashSet<string> _resetRemoteBackfillInFlight = new(); // threads proving a timestamp-less remote user frame via history
     private long _resetLifecycleStartSequence;
+    private long _lifecycleStartSequence;
     private readonly HashSet<string> _resetRemoteUserSeen = new(); // threads with a fresh remote post-reset user frame
     private readonly Dictionary<string, string> _resetClearedSessionIds = new(); // sessionKey -> sessionId cleared by reset
     // Per-session cache of tool metadata from live SSE events.
@@ -131,6 +137,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     // Track recently-sent local user message texts so we can suppress
     // SSE echoes while still displaying messages from other clients.
     private readonly Dictionary<string, Queue<LocalSentText>> _localSentTexts = new();
+    private readonly Dictionary<string, List<ChatQueuedMessage>> _queuedMessages = new();
+    private readonly Dictionary<string, List<QueuedSendRequest>> _queuedSendRequests = new();
+    private readonly Dictionary<string, Dictionary<string, string>> _queuedMessageIdsByRunId = new();
+    private readonly Dictionary<string, List<string>> _terminalRunIdsByThread = new();
+    private readonly HashSet<string> _assistantFallbackPromotedThreads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatMessageInfo> _deferredAssistantMessages = new(StringComparer.Ordinal);
+    private long _queuedMessageSequence;
     private int _keylessEventDiagnosticRaised;
     // Threads where we locally initiated the current turn (via SendMessageAsync).
     // When lifecycle.start arrives for a thread NOT in this set, we know a remote
@@ -140,7 +153,26 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, int> _historyRetryCount = new();
     private const int MaxHistoryRetries = 3;
     private static readonly TimeSpan LocalEchoSuppressionWindow = TimeSpan.FromSeconds(30);
-    private readonly record struct LocalSentText(string Text, DateTimeOffset SentAt);
+    private readonly record struct LocalSentText(string Text, DateTimeOffset SentAt, string QueuedMessageId);
+    private sealed record QueuedSendRequest(
+        string Id,
+        string ThreadId,
+        string Text,
+        string DisplayText,
+        string LocalNonce,
+        IReadOnlyList<ChatAttachment>? Attachments);
+    private sealed record QueuedSendDispatch(
+        QueuedSendRequest Request,
+        string? SessionId,
+        long ResetVersion,
+        long StartedLifecycleSequence,
+        long StartedRunStartSequence);
+    private enum AssistantQueueFrameDisposition
+    {
+        Render,
+        Defer,
+        Drop,
+    }
     private sealed record LocalInlineApproval(
         string ThreadId,
         string RequestId,
@@ -313,74 +345,144 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 : $"{safeUserText}\n{chips}";
         }
 
-        // 1. Optimistically add the user message + flag turn active.
+        // 1. Render immediately when this thread is idle. Follow-up messages
+        // enter the visible queue and stay client-only until the turn ends.
         ChatDataSnapshot snapshot;
-        string? sessionId;
-        long sendResetVersion;
-        long sendStartedLifecycleSequence;
+        string messageId;
+        QueuedSendDispatch? dispatch;
         lock (_gate)
         {
-            sendResetVersion = GetResetVersionLocked(threadId);
-            sendStartedLifecycleSequence = _resetLifecycleStartSequence;
-            var current = GetOrCreateTimelineLocked(threadId);
-            var beforeNextId = current.NextId;
-            _timelines[threadId] = ChatTimelineReducer.AddLocalUser(current, displayText, nonce);
-            _sessionIds.TryGetValue(threadId, out sessionId);
-
-            // Track this text so we can suppress the SSE echo.
-            if (!_localSentTexts.TryGetValue(threadId, out var q))
-            {
-                q = new Queue<LocalSentText>();
-                _localSentTexts[threadId] = q;
-            }
-            q.Enqueue(new LocalSentText(trimmed, DateTimeOffset.UtcNow));
-            // Cap at 20 to avoid unbounded growth.
-            while (q.Count > 20) q.Dequeue();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            messageId = $"q{++_queuedMessageSequence}";
+            if (CanClearAssistantFallbackPromotionLocked(threadId))
+                _assistantFallbackPromotedThreads.Remove(threadId);
 
             // Clear abort suppression — the user is starting a new interaction.
             // Also clear pending abort counts: if the user sends a new message,
             // any queued aborts from before should not fire against the new turn.
             _abortedThreads.Remove(threadId);
             _pendingAbortCounts.Remove(threadId);
-            _locallyInitiatedThreads.Add(threadId);
 
-            // Capture metadata for the just-added user entry.
-            var meta = BuildLiveMetaLocked(threadId);
-            var threadMeta = GetOrCreateThreadMetaLocked(threadId);
-            threadMeta[$"e{beforeNextId}"] = meta;
+            var request = new QueuedSendRequest(
+                messageId,
+                threadId,
+                trimmed,
+                displayText,
+                nonce,
+                attachments?.ToArray());
+
+            if (CanSendDirectlyLocked(threadId))
+            {
+                dispatch = StartDirectSendLocked(request);
+            }
+            else
+            {
+                AddQueuedMessageLocked(threadId, new ChatQueuedMessage(
+                    messageId,
+                    displayText,
+                    DateTimeOffset.UtcNow,
+                    nonce));
+                AddQueuedSendRequestLocked(request);
+                dispatch = TryStartNextQueuedSendLocked(threadId, requireConnected: false);
+            }
 
             snapshot = BuildSnapshotLocked();
         }
         Publish(snapshot);
 
-        // 2. Send to gateway.
+        if (dispatch is not null)
+            await DispatchQueuedSendAsync(dispatch, rethrow: true, cancellationToken);
+    }
+
+    private async Task DispatchQueuedSendAsync(
+        QueuedSendDispatch dispatch,
+        bool rethrow,
+        CancellationToken cancellationToken = default)
+    {
+        var request = dispatch.Request;
+        var threadId = request.ThreadId;
+        var hasAttachments = request.Attachments is { Count: > 0 };
+
         try
         {
             await AwaitPendingModelPatchAsync(threadId, cancellationToken);
-            var sendResult = await _bridge.SendChatMessageForRunAsync(trimmed, threadId, sessionId, attachments);
-            bool sendStillCurrent;
             lock (_gate)
             {
-                sendStillCurrent = GetResetVersionLocked(threadId) == sendResetVersion;
+                if (_disposed)
+                    return;
+            }
+            var sendResult = await _bridge.SendChatMessageForRunAsync(request.Text, threadId, dispatch.SessionId, request.Attachments);
+            if (sendResult.IsTerminalFailure)
+            {
+                var failure = !string.IsNullOrWhiteSpace(sendResult.Error)
+                    ? sendResult.Error!
+                    : string.Format(
+                        CultureInfo.CurrentCulture,
+                        LocalizationHelper.GetString("Chat_Error_SendReturnedStatusFormat"),
+                        sendResult.Status);
+                throw new InvalidOperationException(failure);
+            }
+
+            bool sendStillCurrent;
+            string? staleRunIdToAbort = null;
+            ChatDataSnapshot? acceptedRunAlreadyStartedSnapshot = null;
+            lock (_gate)
+            {
+                sendStillCurrent = GetResetVersionLocked(threadId) == dispatch.ResetVersion;
                 if (!sendStillCurrent)
                 {
                     if (!string.IsNullOrEmpty(sendResult.RunId))
+                    {
                         AddResetIgnoredRunIdLocked(threadId, sendResult.RunId!);
+                        staleRunIdToAbort = sendResult.RunId;
+                    }
                 }
                 else if (!string.IsNullOrEmpty(sendResult.RunId))
                 {
+                    TrackQueuedMessageRunLocked(threadId, sendResult.RunId!, request.Id);
                     AddResetAcceptedRunIdLocked(threadId, sendResult.RunId!);
+                    var runAlreadyStarted = _activeRunIds.TryGetValue(threadId, out var activeRunId)
+                        && _activeRunStartSequences.TryGetValue(threadId, out var activeStartSequence)
+                        && string.Equals(activeRunId, sendResult.RunId, StringComparison.Ordinal)
+                        && activeStartSequence > dispatch.StartedRunStartSequence;
+                    if (runAlreadyStarted && PromoteQueuedMessageLocked(threadId, request.Id))
+                    {
+                        acceptedRunAlreadyStartedSnapshot = BuildSnapshotLocked();
+                    }
+                    else if (runAlreadyStarted)
+                    {
+                        RemoveQueuedRunMappingByMessageIdLocked(threadId, request.Id);
+                    }
                 }
                 else if (_resetAwaitingUserMessage.Contains(threadId))
                 {
-                    _resetLocalSendWithoutRunVersions[threadId] = sendResetVersion;
-                    _resetLocalSendWithoutRunStartSequences[threadId] = sendStartedLifecycleSequence;
+                    _resetLocalSendWithoutRunVersions[threadId] = dispatch.ResetVersion;
+                    _resetLocalSendWithoutRunStartSequences[threadId] = dispatch.StartedLifecycleSequence;
                     TryOpenResetGateFromPendingLifecycleLocked(threadId, acceptedRunId: null);
                 }
             }
 
+            if (acceptedRunAlreadyStartedSnapshot is not null)
+            {
+                Publish(acceptedRunAlreadyStartedSnapshot);
+                ReplayDeferredAssistantMessage(threadId);
+            }
+
+            if (staleRunIdToAbort is not null)
+            {
+                try
+                {
+                    Logger.Info($"[Reset] Aborting late pre-reset send runId='{staleRunIdToAbort}' threadId='{threadId}'");
+                    await _bridge.SendChatAbortAsync(staleRunIdToAbort, threadId);
+                }
+                catch (Exception abortEx)
+                {
+                    Logger.Warn($"[Reset] Failed to abort late pre-reset send runId='{staleRunIdToAbort}': {abortEx.Message}");
+                }
+            }
+
             if (hasAttachments && sendStillCurrent)
-                CacheAttachmentMeta(sessionId, threadId, trimmed, attachments!, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), sendResetVersion);
+                CacheAttachmentMeta(dispatch.SessionId, threadId, request.Text, request.Attachments!, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), dispatch.ResetVersion);
         }
         catch (Exception ex)
         {
@@ -388,14 +490,20 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             ChatDataSnapshot? failureSnapshot = null;
             lock (_gate)
             {
-                sendStillCurrent = GetResetVersionLocked(threadId) == sendResetVersion;
+                sendStillCurrent = GetResetVersionLocked(threadId) == dispatch.ResetVersion;
                 if (sendStillCurrent)
                 {
-                    RemovePendingLocalEchoLocked(threadId, trimmed);
-                    _locallyInitiatedThreads.Remove(threadId);
+                    RemovePendingLocalEchoLocked(threadId, request.Text);
+                    MarkQueuedMessageFailedLocked(threadId, request.Id, ex.Message);
+                    RemoveQueuedSendRequestLocked(threadId, request.Id);
+                    if (!HasSendingQueuedMessagesLocked(threadId))
+                        _locallyInitiatedThreads.Remove(threadId);
                     failureSnapshot = ApplyEventLocked(
                         threadId,
-                        TruncateChatEvent(new ChatErrorEvent($"Send failed: {ex.Message}")),
+                        TruncateChatEvent(new ChatErrorEvent(string.Format(
+                            CultureInfo.CurrentCulture,
+                            LocalizationHelper.GetString("Chat_Error_SendFailedFormat"),
+                            ex.Message))),
                         meta: null);
                     failureSnapshot = ApplyEventLocked(threadId, new ChatTurnEndEvent(), meta: null);
                 }
@@ -404,12 +512,14 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             if (!sendStillCurrent)
                 return;
 
-            // Surface as an error in the timeline + notification — keeps the
-            // user message visible so they can edit/retry.
+            // Surface as an error in the timeline + notification, while the
+            // failed queue card keeps the attempted text visible for retry/edit.
             Publish(failureSnapshot!);
             RaiseNotification(new ChatProviderNotification(
                 ChatProviderNotificationKind.Error, threadId, LocalizationHelper.GetString("Chat_Notification_SendFailed"), ex.Message));
-            throw;
+            TryDispatchNextQueuedSend(threadId);
+            if (rethrow)
+                throw;
         }
     }
 
@@ -453,10 +563,15 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 {
                     _abortedThreads.Remove(threadId);
                     _abortedRunIds.Remove(runId);
+                    _activeRunIds.Remove(threadId);
+                    _activeRunStartSequences.Remove(threadId);
+                    if (!HasSendingQueuedMessagesLocked(threadId))
+                        _locallyInitiatedThreads.Remove(threadId);
                 }
                 Logger.Warn($"[ABORT] chat.abort failed, cleared suppression: {ex.Message}");
                 RaiseNotification(new ChatProviderNotification(
                     ChatProviderNotificationKind.Error, threadId, LocalizationHelper.GetString("Chat_Notification_AbortFailed"), ex.Message));
+                ApplyEventAndPublish(threadId, new ChatTurnEndEvent());
                 return;
             }
         }
@@ -474,6 +589,18 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         if (hadActiveTurn)
         {
             ApplyEventAndPublish(threadId, new ChatStatusEvent("Aborted", ChatTone.Warning));
+        }
+
+        lock (_gate)
+        {
+            if (!string.IsNullOrEmpty(runId))
+            {
+                _activeRunIds.Remove(threadId);
+                _activeRunStartSequences.Remove(threadId);
+            }
+            _abortedThreads.Remove(threadId);
+            if (!HasSendingQueuedMessagesLocked(threadId))
+                _locallyInitiatedThreads.Remove(threadId);
         }
 
         // Always clear local "turn active" state — the gateway will emit a
@@ -524,15 +651,14 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 var prior = GetOrCreateTimelineLocked(threadId);
                 var rebuilt = ChatTimelineState.Initial() with { HistoryLoaded = true };
 
-                // Sort by timestamp ascending as a safety net — the gateway is
-                // expected to return chronological order, but don't trust it.
-                // Stable secondary sort preserves the original index for ties.
-                var ordered = history.Messages
-                    .Select((m, i) => (m, i))
-                    .OrderBy(t => t.m.Ts)
-                    .ThenBy(t => t.i)
-                    .Select(t => t.m)
+                // Prefer the gateway's per-session sequence over timestamps.
+                // Spam/queue bursts can produce persisted rows whose timestamps
+                // don't reflect the actual processing order; __openclaw.seq is
+                // the stable transcript order when present.
+                var orderedItems = history.Messages
+                    .Select((m, i) => (Message: m, Index: i))
                     .ToList();
+                var ordered = OrderHistoryMessages(orderedItems);
 
                 // Build per-entry metadata in lockstep with the reducer.
                 var rebuiltMeta = new Dictionary<string, ChatEntryMetadata>();
@@ -580,7 +706,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                         msg.InputTokens,
                         msg.OutputTokens,
                         msg.ResponseTokens,
-                        msg.ContextPercent);
+                        msg.ContextPercent,
+                        GatewayMessageId: msg.OpenClawId,
+                        OpenClawSeq: msg.OpenClawSeq);
 
                     // Cap per-message text up front so heuristics, logging,
                     // and the reducer all see the same bounded value
@@ -792,13 +920,20 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                         : new Dictionary<string, ChatEntryMetadata>();
 
                     static string ContentKey(ChatTimelineItemKind kind, string text) => $"{kind}|{text}";
+                    static string SequenceKey(ChatTimelineItemKind kind, int sequence) => $"{kind}|{sequence}";
 
                     // (kind|text) → list of unix-second timestamps for rebuilt
                     // entries that have a real timestamp. Only these can match.
                     var rebuiltContentTimestamps = new Dictionary<string, List<long>>(StringComparer.Ordinal);
+                    var rebuiltMessageIds = new HashSet<string>(StringComparer.Ordinal);
+                    var rebuiltSequenceCounts = new Dictionary<string, int>(StringComparer.Ordinal);
                     foreach (var entry in rebuilt.Entries)
                     {
                         rebuiltMeta.TryGetValue(entry.Id, out var em);
+                        if (!string.IsNullOrEmpty(em?.GatewayMessageId))
+                            rebuiltMessageIds.Add(em.GatewayMessageId);
+                        if (em?.OpenClawSeq is { } seq)
+                            IncrementCount(rebuiltSequenceCounts, SequenceKey(entry.Kind, seq));
                         if (em?.Timestamp is { } rts && rts != default)
                         {
                             var key = ContentKey(entry.Kind, entry.Text);
@@ -827,6 +962,21 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     {
                         priorMeta.TryGetValue(entry.Id, out var em);
                         var priorTs = em?.Timestamp;
+                        if (!string.IsNullOrEmpty(em?.GatewayMessageId) &&
+                            rebuiltMessageIds.Contains(em.GatewayMessageId))
+                        {
+                            ConsumeAnyTimestamp(rebuiltContentTimestamps, ContentKey(entry.Kind, entry.Text));
+                            skippedDup++;
+                            continue;
+                        }
+
+                        if (em?.OpenClawSeq is { } seq &&
+                            TryConsumeCount(rebuiltSequenceCounts, SequenceKey(entry.Kind, seq)))
+                        {
+                            ConsumeAnyTimestamp(rebuiltContentTimestamps, ContentKey(entry.Kind, entry.Text));
+                            skippedDup++;
+                            continue;
+                        }
 
                         // Rule 2: content+timestamp dedup only when BOTH sides
                         // have valid timestamps within 2 seconds. Otherwise
@@ -837,10 +987,12 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                         {
                             var priorSec = pts.ToUnixTimeSeconds();
                             var matched = false;
-                            foreach (var rebSec in rebuiltTimes)
+                            for (var rebIndex = 0; rebIndex < rebuiltTimes.Count; rebIndex++)
                             {
+                                var rebSec = rebuiltTimes[rebIndex];
                                 if (Math.Abs(rebSec - priorSec) <= 2)
                                 {
+                                    rebuiltTimes.RemoveAt(rebIndex);
                                     matched = true;
                                     break;
                                 }
@@ -877,6 +1029,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                                 rebuiltContentTimestamps[key] = list = new List<long>();
                             list.Add(addTs.ToUnixTimeSeconds());
                         }
+                        if (!string.IsNullOrEmpty(em?.GatewayMessageId))
+                            rebuiltMessageIds.Add(em.GatewayMessageId);
+                        if (em?.OpenClawSeq is { } addSeq)
+                            IncrementCount(rebuiltSequenceCounts, SequenceKey(entryToAdd.Kind, addSeq));
                         if (em is not null && !rebuiltMeta.ContainsKey(entryToAdd.Id))
                             rebuiltMeta[entryToAdd.Id] = em;
                     }
@@ -1398,6 +1554,14 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             _lastChatStateSaveTimer = null;
             pendingLocalApprovals = _localInlineApprovals.Values.ToList();
             _localInlineApprovals.Clear();
+            _queuedMessages.Clear();
+            _queuedSendRequests.Clear();
+            _queuedMessageIdsByRunId.Clear();
+            _terminalRunIdsByThread.Clear();
+            _deferredAssistantMessages.Clear();
+            _localSentTexts.Clear();
+            _locallyInitiatedThreads.Clear();
+            _resetSubmittedLocalEchoTexts.Clear();
         }
         foreach (var approval in pendingLocalApprovals)
             approval.Response.TrySetResult(ExecApprovalPromptDecision.Deny());
@@ -1492,6 +1656,15 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 _historyInFlight.Clear();
                 _locallyInitiatedThreads.Clear();
                 _localSentTexts.Clear();
+                _queuedMessages.Clear();
+                _queuedSendRequests.Clear();
+                _assistantFallbackPromotedThreads.Clear();
+                _deferredAssistantMessages.Clear();
+                _queuedMessageIdsByRunId.Clear();
+                _terminalRunIdsByThread.Clear();
+                _resetSubmittedLocalEchoTexts.Clear();
+                _activeRunIds.Clear();
+                _activeRunStartSequences.Clear();
                 _historyRetryCount.Clear();
                 // Reset keyless-event diagnostic so a fresh reconnect to a
                 // still-broken gateway surfaces the notification again.
@@ -1510,6 +1683,11 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     if (tl.TurnActive) list.Add(key);
                 }
                 threadsToInterrupt = list.ToArray();
+                foreach (var threadId in threadsToInterrupt)
+                {
+                    _activeRunIds.Remove(threadId);
+                    _activeRunStartSequences.Remove(threadId);
+                }
             }
             else
             {
@@ -1609,6 +1787,32 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
         Publish(snapshot);
         PersistClearedResetState(persistence);
+        AbortSubmittedRunsAfterReset(result.Key, persistence.SubmittedRunIds);
+    }
+
+    private void AbortSubmittedRunsAfterReset(string threadId, IReadOnlyList<string> runIds)
+    {
+        if (runIds.Count == 0)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var runId in runIds)
+            {
+                if (string.IsNullOrWhiteSpace(runId))
+                    continue;
+
+                try
+                {
+                    Logger.Info($"[Reset] Sending chat.abort for pre-reset submitted runId='{runId}' threadId='{threadId}'");
+                    await _bridge.SendChatAbortAsync(runId, threadId).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[Reset] chat.abort failed for pre-reset runId='{runId}' threadId='{threadId}': {ex.Message}");
+                }
+            }
+        });
     }
 
     private void OnModelsListUpdated(object? sender, ModelsListInfo info)
@@ -1694,6 +1898,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         var role = message.Role ?? "";
         var roleLower = role.ToLowerInvariant();
         var rawText = message.Text ?? string.Empty;
+        ChatDataSnapshot? resetLocalEchoSnapshot = null;
+        var dropAfterReset = false;
+        var requestRemoteBackfillAfterReset = false;
         lock (_gate)
         {
             if (ShouldDropChatMessageAfterResetLocked(
@@ -1704,31 +1911,46 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 out var consumeEchoText,
                 out var requestRemoteBackfill))
             {
+                dropAfterReset = true;
+                requestRemoteBackfillAfterReset = requestRemoteBackfill;
                 if (consumeEchoText is not null &&
                     _localSentTexts.TryGetValue(msgThreadId, out var resetEchoQueue) &&
-                    resetEchoQueue.Count > 0)
+                    resetEchoQueue.Count > 0 &&
+                    TryConsumeLocalEchoLocked(msgThreadId, resetEchoQueue, consumeEchoText, out var queuedMessageId))
                 {
-                    TryConsumeLocalEchoLocked(msgThreadId, resetEchoQueue, consumeEchoText);
+                    var confirmedMeta = BuildLiveMetaLocked(
+                        msgThreadId,
+                        message.Ts,
+                        message.OpenClawId,
+                        message.OpenClawSeq);
+                    if (ReconcileQueuedMessageEchoLocked(msgThreadId, queuedMessageId, confirmedMeta))
+                        resetLocalEchoSnapshot = BuildSnapshotLocked();
                 }
-
-                if (requestRemoteBackfill)
-                    _ = FetchRemoteUserMessageAsync(msgThreadId, openResetGateOnSuccess: true);
-
-                Logger.Debug($"[Reset] Dropping stale chat message after reset for threadId='{msgThreadId}' role='{roleLower}'");
-                return;
             }
-
-            if (_abortedThreads.Contains(msgThreadId))
+            else if (_abortedThreads.Contains(msgThreadId))
             {
                 Logger.Debug($"[ABORT] Suppressed ChatMessage for threadId='{msgThreadId}' (role={message.Role})");
                 return;
             }
         }
+        if (dropAfterReset)
+        {
+            if (resetLocalEchoSnapshot is not null)
+            {
+                Publish(resetLocalEchoSnapshot);
+                ReplayDeferredAssistantMessage(msgThreadId);
+            }
+            if (requestRemoteBackfillAfterReset)
+                _ = FetchRemoteUserMessageAsync(msgThreadId, openResetGateOnSuccess: true);
+
+            Logger.Debug($"[Reset] Dropping stale chat message after reset for threadId='{msgThreadId}' role='{roleLower}'");
+            return;
+        }
 
         // User messages from the SSE stream. System control notes are rendered
-        // as dim status entries. Normal user messages: suppress echoes of
-        // locally-sent messages (already displayed), show messages from other
-        // clients (e.g. gateway web UI) so the conversation is coherent.
+        // as dim status entries. Normal user messages: promote echoes of
+        // locally-sent queued messages into the transcript, show messages from
+        // other clients (e.g. gateway web UI) so the conversation is coherent.
         if (roleLower == "user")
         {
             // Approval slash-commands ("/approve <slug> allow-once",
@@ -1747,9 +1969,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 lock (_gate)
                 {
                     if (_localSentTexts.TryGetValue(msgThreadId, out var sq) && sq.Count > 0
-                        && TryConsumeLocalEchoLocked(msgThreadId, sq, slashEcho))
+                        && TryConsumeLocalEchoLocked(msgThreadId, sq, slashEcho, out var slashEntryId))
                     {
                         weSentIt = true;
+                        RemoveQueuedMessageLocked(msgThreadId, slashEntryId);
                     }
                 }
                 if (weSentIt)
@@ -1781,23 +2004,56 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             // Check if this is an echo of a locally-sent message.
             var echoText = (message.Text ?? "").Trim();
             bool isLocalEcho = false;
+            ChatDataSnapshot? echoSnapshot = null;
             lock (_gate)
             {
                 if (_localSentTexts.TryGetValue(msgThreadId, out var q) && q.Count > 0
-                    && TryConsumeLocalEchoLocked(msgThreadId, q, echoText))
+                    && TryConsumeLocalEchoLocked(msgThreadId, q, echoText, out var echoEntryId))
                 {
                     isLocalEcho = true;
+                    var confirmedMeta = BuildLiveMetaLocked(
+                        msgThreadId,
+                        message.Ts,
+                        message.OpenClawId,
+                        message.OpenClawSeq);
+                    if (ReconcileQueuedMessageEchoLocked(msgThreadId, echoEntryId, confirmedMeta))
+                        echoSnapshot = BuildSnapshotLocked();
                 }
             }
-            if (isLocalEcho) return;
+            if (isLocalEcho)
+            {
+                if (echoSnapshot is not null)
+                {
+                    Publish(echoSnapshot);
+                    ReplayDeferredAssistantMessage(msgThreadId);
+                }
+                return;
+            }
 
             // Not a local echo — show it as a user message from another client.
             if (!string.IsNullOrEmpty(message.Text))
             {
+                var userText = TruncateForChatEntry(EscapeUntrustedAttachmentMarkerLines(message.Text));
                 ChatEntryMetadata? userMeta;
-                lock (_gate) { userMeta = BuildLiveMetaLocked(msgThreadId, message.Ts); }
+                ChatDataSnapshot? reconciledLocalQueuedSnapshot = null;
+                lock (_gate)
+                {
+                    userMeta = BuildLiveMetaLocked(
+                        msgThreadId,
+                        message.Ts,
+                        message.OpenClawId,
+                        message.OpenClawSeq);
+                    if (TryReconcileExistingLocalQueuedUserEchoLocked(msgThreadId, userText, userMeta))
+                        reconciledLocalQueuedSnapshot = BuildSnapshotLocked();
+                }
+                if (reconciledLocalQueuedSnapshot is not null)
+                {
+                    Publish(reconciledLocalQueuedSnapshot);
+                    return;
+                }
+
                 ApplyEventAndPublish(msgThreadId,
-                    new ChatUserMessageEvent(TruncateForChatEntry(EscapeUntrustedAttachmentMarkerLines(message.Text))),
+                    new ChatUserMessageEvent(userText),
                     userMeta);
             }
             return;
@@ -1811,7 +2067,14 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             if (string.IsNullOrEmpty(message.Text)) return;
             var trThread = message.SessionKey;
             ChatEntryMetadata? trMeta;
-            lock (_gate) { trMeta = BuildLiveMetaLocked(trThread, message.Ts); }
+            lock (_gate)
+            {
+                trMeta = BuildLiveMetaLocked(
+                    trThread,
+                    message.Ts,
+                    message.OpenClawId,
+                    message.OpenClawSeq);
+            }
             var capped = TruncateForChatEntry(message.Text);
             var kind = ClassifyFlattenedToolOutput(capped);
             var label = ExtractFlattenedToolSummary(capped);
@@ -1828,13 +2091,39 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             return;
 
         var threadId = message.SessionKey;
-        ChatEntryMetadata? meta;
         var cappedAssistantText = RepairContentBlockSeams(TruncateForChatEntry(message.Text));
+        AssistantQueueFrameDisposition assistantDisposition;
+        lock (_gate)
+        {
+            assistantDisposition = ClassifyAssistantQueueFrameLocked(
+                threadId,
+                cappedAssistantText,
+                message.OpenClawId,
+                message.OpenClawSeq);
+            if (assistantDisposition == AssistantQueueFrameDisposition.Defer)
+                _deferredAssistantMessages[threadId] = message;
+            else
+                _deferredAssistantMessages.Remove(threadId);
+        }
+        if (assistantDisposition != AssistantQueueFrameDisposition.Render)
+        {
+            Logger.Debug(assistantDisposition == AssistantQueueFrameDisposition.Defer
+                ? $"[Queue] Deferring identity-less assistant frame until the queued user boundary is confirmed threadId='{threadId}'"
+                : $"[Queue] Dropping retransmitted assistant frame before queued user boundary threadId='{threadId}'");
+            return;
+        }
+
+        PromoteOldestQueuedMessageBeforeAssistantIfNeeded(threadId);
+        ChatEntryMetadata? meta;
         var hasUsage = message.InputTokens is not null || message.OutputTokens is not null
             || message.ResponseTokens is not null || message.ContextPercent is not null;
         lock (_gate)
         {
-            meta = BuildLiveMetaLocked(threadId, message.Ts);
+            meta = BuildLiveMetaLocked(
+                threadId,
+                message.Ts,
+                message.OpenClawId,
+                message.OpenClawSeq);
             // If the gateway included a usage block on this chat event,
             // attach it so the assistant footer pills (↑/↓/R/ctx%) can
             // render. Mostly arrives on state="final" frames.
@@ -1881,10 +2170,23 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
         if (message.IsFinal)
         {
+            lock (_gate)
+            {
+                if (_activeRunIds.Remove(threadId, out var completedRunId))
+                {
+                    RememberTerminalRunIdLocked(threadId, completedRunId);
+                    _abortedRunIds.Remove(completedRunId);
+                }
+                _activeRunStartSequences.Remove(threadId);
+                _abortedThreads.Remove(threadId);
+                if (!HasSendingQueuedMessagesLocked(threadId))
+                    _locallyInitiatedThreads.Remove(threadId);
+            }
             SnapshotLatestAssistantUsage(threadId);
             ApplyEventAndPublish(threadId, new ChatTurnEndEvent());
             RaiseNotification(new ChatProviderNotification(
                 ChatProviderNotificationKind.TurnComplete, threadId, LocalizationHelper.GetString("Chat_Notification_AssistantReplied")));
+            TryDispatchNextQueuedSend(threadId);
         }
     }
 
@@ -1923,18 +2225,35 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             return;
         }
         var threadId = evt.SessionKey;
+        var isTerminalRunEvent = IsTerminalRunEvent(evt);
 
+        var reloadHistoryAfterResetDrop = false;
+        var shouldProcessEvent = false;
         lock (_gate)
         {
-            if (ShouldDropAgentEventAfterResetLocked(evt, threadId))
+            if (ShouldDropAgentEventAfterResetLocked(evt, threadId, out reloadHistoryAfterResetDrop))
             {
                 Logger.Debug($"[Reset] Dropping stale agent event after reset for threadId='{threadId}' stream='{evt.Stream}' runId='{evt.RunId}'");
-                return;
             }
+            else if (ShouldDropTerminalAgentEventLocked(evt, threadId))
+            {
+                Logger.Debug($"[Queue] Dropping stale terminal agent event for threadId='{threadId}' stream='{evt.Stream}' runId='{evt.RunId}'");
+            }
+            else
+            {
+                shouldProcessEvent = true;
+            }
+        }
+        if (!shouldProcessEvent)
+        {
+            if (reloadHistoryAfterResetDrop)
+                _ = LoadHistoryAsync(threadId, force: true);
+            return;
         }
 
         // Always update run tracking first (state maintenance must not be skipped).
         UpdateActiveRunId(evt, threadId);
+        ClearQueuedMessageOnLocalTurnStart(evt, threadId);
 
         // Fire deferred chat.abort and persist if pending aborts were queued.
         var deferredRunId = _deferredAbortRunId;
@@ -1963,12 +2282,19 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
         // Suppress rendering for aborted runs/threads (but lifecycle events
         // already ran above for state cleanup).
+        var suppressRendering = false;
         lock (_gate)
         {
             if (!string.IsNullOrEmpty(evt.RunId) && _abortedRunIds.Contains(evt.RunId))
-                return;
-            if (_abortedThreads.Contains(threadId))
-                return;
+                suppressRendering = true;
+            else if (_abortedThreads.Contains(threadId))
+                suppressRendering = true;
+        }
+        if (suppressRendering)
+        {
+            if (isTerminalRunEvent)
+                TryDispatchNextQueuedSend(threadId);
+            return;
         }
 
         ChatEvent? mapped = MapAgentEvent(evt);
@@ -2043,6 +2369,8 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     }
                 }
             }
+            if (isTerminalRunEvent)
+                TryDispatchNextQueuedSend(threadId);
             return;
         }
 
@@ -2059,6 +2387,8 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         lock (_gate) { meta = BuildLiveMetaLocked(threadId, tsMs); }
 
         ApplyEventAndPublish(threadId, mapped, meta);
+        if (isTerminalRunEvent)
+            TryDispatchNextQueuedSend(threadId);
     }
 
     private void RaiseKeylessEventDiagnosticOnce()
@@ -2107,6 +2437,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 if (phase == "start" && !string.IsNullOrEmpty(evt.RunId))
                 {
                     _activeRunIds[threadId] = evt.RunId;
+                    _activeRunStartSequences[threadId] = ++_lifecycleStartSequence;
 
                     // Detect remote turn: if the turn was NOT locally initiated,
                     // a remote client (e.g. gateway web UI) sent the message.
@@ -2134,12 +2465,18 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     if (!string.IsNullOrEmpty(evt.RunId))
                         _abortedRunIds.Remove(evt.RunId);
                     _activeRunIds.Remove(threadId);
+                    _activeRunStartSequences.Remove(threadId);
 
                     // Clear thread-level abort suppression on terminal lifecycle events.
                     // The turn is over — any remaining abort suppression is no longer needed.
                     _abortedThreads.Remove(threadId);
-                    // Clear locally-initiated flag — this turn is done.
-                    _locallyInitiatedThreads.Remove(threadId);
+                    // Clear locally-initiated flag only when no locally queued
+                    // follow-up prompts remain for this thread. Multiple rapid
+                    // sends can queue runs behind the current one; treating the
+                    // next lifecycle.start as remote would orphan those queued
+                    // cards and let assistant fallback promote the wrong item.
+                    if (!HasSendingQueuedMessagesLocked(threadId))
+                        _locallyInitiatedThreads.Remove(threadId);
 
                     // Edge case: if we have pending aborts but never saw lifecycle.start
                     // (gateway responded so fast start+end were batched), fire the
@@ -2166,13 +2503,85 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 {
                     _abortedRunIds.Remove(evt.RunId);
                     _activeRunIds.Remove(threadId);
+                    _activeRunStartSequences.Remove(threadId);
                 }
             }
         }
     }
 
-    private bool TryConsumeLocalEchoLocked(string threadId, Queue<LocalSentText> queue, string text)
+    private bool ShouldDropTerminalAgentEventLocked(AgentEventInfo evt, string threadId)
     {
+        if (!TryGetTerminalAgentRunId(evt, out var runId) || string.IsNullOrWhiteSpace(runId))
+            return false;
+
+        if (_terminalRunIdsByThread.TryGetValue(threadId, out var terminalRunIds) &&
+            terminalRunIds.Contains(runId, StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        if (_activeRunIds.TryGetValue(threadId, out var activeRunId) &&
+            !string.Equals(activeRunId, runId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!_activeRunIds.ContainsKey(threadId) &&
+            _queuedMessageIdsByRunId.TryGetValue(threadId, out var queuedRunIds) &&
+            queuedRunIds.Count > 0 &&
+            !queuedRunIds.ContainsKey(runId) &&
+            _timelines.TryGetValue(threadId, out var timeline) &&
+            timeline.TurnActive)
+        {
+            return true;
+        }
+
+        RememberTerminalRunIdLocked(threadId, runId);
+        return false;
+    }
+
+    private void RememberTerminalRunIdLocked(string threadId, string runId)
+    {
+        if (!_terminalRunIdsByThread.TryGetValue(threadId, out var terminalRunIds))
+        {
+            terminalRunIds = new List<string>();
+            _terminalRunIdsByThread[threadId] = terminalRunIds;
+        }
+
+        terminalRunIds.RemoveAll(existing => string.Equals(existing, runId, StringComparison.Ordinal));
+        terminalRunIds.Add(runId);
+        if (terminalRunIds.Count > 64)
+            terminalRunIds.RemoveRange(0, terminalRunIds.Count - 64);
+    }
+
+    private static bool TryGetTerminalAgentRunId(AgentEventInfo evt, out string runId)
+    {
+        runId = evt.RunId ?? string.Empty;
+        if (evt.Data.ValueKind != System.Text.Json.JsonValueKind.Object)
+            return false;
+
+        if (string.Equals(evt.Stream, "lifecycle", StringComparison.OrdinalIgnoreCase) &&
+            evt.Data.TryGetProperty("phase", out var phaseProp))
+        {
+            var phase = phaseProp.GetString();
+            return string.Equals(phase, "end", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(phase, "error", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (string.Equals(evt.Stream, "job", StringComparison.OrdinalIgnoreCase) &&
+            evt.Data.TryGetProperty("state", out var stateProp))
+        {
+            var state = stateProp.GetString();
+            return string.Equals(state, "done", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(state, "error", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private bool TryConsumeLocalEchoLocked(string threadId, Queue<LocalSentText> queue, string text, out string queuedMessageId)
+    {
+        queuedMessageId = string.Empty;
         var now = DateTimeOffset.UtcNow;
         while (queue.Count > 0 && now - queue.Peek().SentAt > LocalEchoSuppressionWindow)
             queue.Dequeue();
@@ -2183,13 +2592,417 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             return false;
         }
 
-        if (!string.Equals(queue.Peek().Text, text, StringComparison.Ordinal))
-            return false;
+        var kept = new Queue<LocalSentText>(queue.Count);
+        var matched = false;
+        while (queue.Count > 0)
+        {
+            var pending = queue.Dequeue();
+            if (!matched && string.Equals(pending.Text, text, StringComparison.Ordinal))
+            {
+                queuedMessageId = pending.QueuedMessageId;
+                matched = true;
+                continue;
+            }
 
-        queue.Dequeue();
+            kept.Enqueue(pending);
+        }
+
+        if (!matched)
+        {
+            StoreLocalEchoQueueLocked(threadId, kept);
+            return false;
+        }
+
+        StoreLocalEchoQueueLocked(threadId, kept);
+        return true;
+    }
+
+    private void StoreLocalEchoQueueLocked(string threadId, Queue<LocalSentText> queue)
+    {
         if (queue.Count == 0)
             _localSentTexts.Remove(threadId);
+        else
+            _localSentTexts[threadId] = queue;
+    }
+
+    private bool TryReconcileExistingLocalQueuedUserEchoLocked(
+        string threadId,
+        string text,
+        ChatEntryMetadata confirmedMeta)
+    {
+        if (!HasGatewayIdentity(confirmedMeta))
+            return false;
+        if (!_entryMeta.TryGetValue(threadId, out var threadMeta) ||
+            !_timelines.TryGetValue(threadId, out var timeline))
+            return false;
+
+        foreach (var entry in timeline.Entries)
+        {
+            if (entry.Kind != ChatTimelineItemKind.User)
+                continue;
+            if (!string.Equals(entry.Text, text, StringComparison.Ordinal))
+                continue;
+            if (!threadMeta.TryGetValue(entry.Id, out var existing) || !existing.IsLocalQueuedSend)
+                continue;
+            if (HasGatewayIdentity(existing))
+                continue;
+            if (!IsFreshLocalQueuedPromotion(existing, confirmedMeta))
+                continue;
+
+            threadMeta[entry.Id] = confirmedMeta with
+            {
+                IsLocalQueuedSend = false,
+                LocalQueuedMessageId = existing.LocalQueuedMessageId,
+            };
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasGatewayIdentity(ChatEntryMetadata meta)
+        => !string.IsNullOrEmpty(meta.GatewayMessageId) || meta.OpenClawSeq is not null;
+
+    private static bool IsFreshLocalQueuedPromotion(ChatEntryMetadata existing, ChatEntryMetadata confirmed)
+    {
+        if (existing.Timestamp is not { } existingTimestamp)
+            return false;
+        if (confirmed.Timestamp is { } confirmedTimestamp)
+            return (confirmedTimestamp - existingTimestamp).Duration() <= LocalEchoSuppressionWindow;
+
+        return DateTimeOffset.Now - existingTimestamp <= LocalEchoSuppressionWindow;
+    }
+
+    private void AddQueuedMessageLocked(string threadId, ChatQueuedMessage message)
+    {
+        if (!_queuedMessages.TryGetValue(threadId, out var list))
+        {
+            list = new List<ChatQueuedMessage>();
+            _queuedMessages[threadId] = list;
+        }
+
+        list.RemoveAll(existing => existing.Id == message.Id);
+        list.Add(message);
+    }
+
+    private void AddQueuedSendRequestLocked(QueuedSendRequest request)
+    {
+        if (!_queuedSendRequests.TryGetValue(request.ThreadId, out var list))
+        {
+            list = new List<QueuedSendRequest>();
+            _queuedSendRequests[request.ThreadId] = list;
+        }
+
+        list.RemoveAll(existing => existing.Id == request.Id);
+        list.Add(request);
+    }
+
+    private void RemoveQueuedSendRequestLocked(string threadId, string messageId)
+    {
+        if (!_queuedSendRequests.TryGetValue(threadId, out var list))
+            return;
+
+        list.RemoveAll(request => request.Id == messageId);
+        if (list.Count == 0)
+            _queuedSendRequests.Remove(threadId);
+    }
+
+    private QueuedSendRequest? FindQueuedSendRequestLocked(string threadId, string messageId)
+    {
+        if (!_queuedSendRequests.TryGetValue(threadId, out var list))
+            return null;
+
+        return list.FirstOrDefault(request => string.Equals(request.Id, messageId, StringComparison.Ordinal));
+    }
+
+    private bool CanSendDirectlyLocked(string threadId)
+    {
+        if (_activeRunIds.ContainsKey(threadId))
+            return false;
+        if (_timelines.TryGetValue(threadId, out var timeline) && timeline.TurnActive)
+            return false;
+        return !_queuedMessages.TryGetValue(threadId, out var queuedMessages) || queuedMessages.Count == 0;
+    }
+
+    private bool CanClearAssistantFallbackPromotionLocked(string threadId)
+    {
+        if (HasSendingQueuedMessagesLocked(threadId))
+            return false;
+        if (_activeRunIds.ContainsKey(threadId))
+            return false;
+        return !_timelines.TryGetValue(threadId, out var timeline) || !timeline.TurnActive;
+    }
+
+    private QueuedSendDispatch StartDirectSendLocked(QueuedSendRequest request)
+    {
+        var threadId = request.ThreadId;
+        var resetVersion = GetResetVersionLocked(threadId);
+        var startedLifecycleSequence = _resetLifecycleStartSequence;
+        var startedRunStartSequence = _lifecycleStartSequence;
+        var current = GetOrCreateTimelineLocked(threadId);
+        var entryId = $"e{current.NextId}";
+        _timelines[threadId] = ChatTimelineReducer.AddLocalUser(current, request.DisplayText, request.LocalNonce);
+        GetOrCreateThreadMetaLocked(threadId)[entryId] = BuildLiveMetaLocked(
+            threadId,
+            isLocalQueuedSend: true,
+            localQueuedMessageId: request.Id);
+        _sessionIds.TryGetValue(threadId, out var sessionId);
+
+        EnqueueLocalEchoLocked(threadId, request.Text, request.Id);
+        _locallyInitiatedThreads.Add(threadId);
+        _assistantFallbackPromotedThreads.Add(threadId);
+        return new QueuedSendDispatch(
+            request,
+            sessionId,
+            resetVersion,
+            startedLifecycleSequence,
+            startedRunStartSequence);
+    }
+
+    private QueuedSendDispatch? TryStartNextQueuedSendLocked(string threadId, bool requireConnected)
+    {
+        if (requireConnected && _status != ConnectionStatus.Connected)
+            return null;
+        if (_activeRunIds.ContainsKey(threadId))
+            return null;
+        if (_timelines.TryGetValue(threadId, out var timeline) && timeline.TurnActive)
+            return null;
+        if (!_queuedMessages.TryGetValue(threadId, out var queuedMessages))
+            return null;
+
+        for (var i = 0; i < queuedMessages.Count; i++)
+        {
+            if (queuedMessages[i].SendState != ChatQueuedMessageSendState.Queued)
+                continue;
+
+            var request = FindQueuedSendRequestLocked(threadId, queuedMessages[i].Id);
+            if (request is null)
+                continue;
+
+            // Each dispatched prompt gets one opportunity for assistant-frame
+            // fallback promotion before its lifecycle/user echo arrives.
+            _assistantFallbackPromotedThreads.Remove(threadId);
+            queuedMessages[i] = queuedMessages[i] with { SendState = ChatQueuedMessageSendState.Sending, ErrorText = null };
+            var resetVersion = GetResetVersionLocked(threadId);
+            var startedLifecycleSequence = _resetLifecycleStartSequence;
+            var startedRunStartSequence = _lifecycleStartSequence;
+            _timelines[threadId] = ChatTimelineReducer.BeginLocalUserTurn(GetOrCreateTimelineLocked(threadId));
+            _sessionIds.TryGetValue(threadId, out var sessionId);
+
+            EnqueueLocalEchoLocked(threadId, request.Text, request.Id);
+            _locallyInitiatedThreads.Add(threadId);
+            return new QueuedSendDispatch(
+                request,
+                sessionId,
+                resetVersion,
+                startedLifecycleSequence,
+                startedRunStartSequence);
+        }
+
+        return null;
+    }
+
+    private void EnqueueLocalEchoLocked(string threadId, string text, string messageId)
+    {
+        if (!_localSentTexts.TryGetValue(threadId, out var localEchoQueue))
+        {
+            localEchoQueue = new Queue<LocalSentText>();
+            _localSentTexts[threadId] = localEchoQueue;
+        }
+
+        localEchoQueue.Enqueue(new LocalSentText(text, DateTimeOffset.UtcNow, messageId));
+        while (localEchoQueue.Count > 20)
+            localEchoQueue.Dequeue();
+    }
+
+    private void TryDispatchNextQueuedSend(string threadId)
+    {
+        ChatDataSnapshot? snapshot = null;
+        QueuedSendDispatch? dispatch;
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+            dispatch = TryStartNextQueuedSendLocked(threadId, requireConnected: true);
+            if (dispatch is not null)
+                snapshot = BuildSnapshotLocked();
+        }
+
+        if (snapshot is not null)
+            Publish(snapshot);
+        if (dispatch is not null)
+            _ = DispatchQueuedSendAsync(dispatch, rethrow: false);
+    }
+
+    private void TrackQueuedMessageRunLocked(string threadId, string runId, string messageId)
+    {
+        if (!_queuedMessageIdsByRunId.TryGetValue(threadId, out var byRunId))
+        {
+            byRunId = new Dictionary<string, string>(StringComparer.Ordinal);
+            _queuedMessageIdsByRunId[threadId] = byRunId;
+        }
+
+        byRunId[runId] = messageId;
+    }
+
+    private bool RemoveQueuedMessageLocked(string threadId, string messageId)
+    {
+        if (!_queuedMessages.TryGetValue(threadId, out var list))
+            return false;
+
+        var removed = list.RemoveAll(message => message.Id == messageId) > 0;
+        if (removed)
+        {
+            RemoveQueuedRunMappingByMessageIdLocked(threadId, messageId);
+            RemoveQueuedSendRequestLocked(threadId, messageId);
+        }
+        if (list.Count == 0)
+            _queuedMessages.Remove(threadId);
+        return removed;
+    }
+
+    private bool PromoteQueuedMessageLocked(
+        string threadId,
+        string messageId,
+        ChatEntryMetadata? confirmedMeta = null)
+    {
+        if (!_queuedMessages.TryGetValue(threadId, out var list))
+            return false;
+
+        var index = list.FindIndex(message => message.Id == messageId);
+        if (index < 0)
+            return false;
+
+        var queued = list[index];
+        var current = GetOrCreateTimelineLocked(threadId);
+        var entryId = $"e{current.NextId}";
+        _timelines[threadId] = ChatTimelineReducer.AddLocalUser(current, queued.Text, queued.LocalNonce);
+
+        var hasGatewayIdentity = confirmedMeta is not null && HasGatewayIdentity(confirmedMeta);
+        var meta = hasGatewayIdentity
+            ? confirmedMeta! with { IsLocalQueuedSend = false, LocalQueuedMessageId = messageId }
+            : BuildLiveMetaLocked(
+                threadId,
+                isLocalQueuedSend: true,
+                localQueuedMessageId: messageId);
+        var threadMeta = GetOrCreateThreadMetaLocked(threadId);
+        threadMeta[entryId] = meta;
+
+        list.RemoveAt(index);
+        _assistantFallbackPromotedThreads.Add(threadId);
+        RemoveQueuedRunMappingByMessageIdLocked(threadId, messageId);
+        RemoveQueuedSendRequestLocked(threadId, messageId);
+        if (list.Count == 0)
+            _queuedMessages.Remove(threadId);
         return true;
+    }
+
+    private bool ReconcileQueuedMessageEchoLocked(
+        string threadId,
+        string messageId,
+        ChatEntryMetadata confirmedMeta)
+    {
+        if (PromoteQueuedMessageLocked(threadId, messageId, confirmedMeta))
+            return true;
+        if (!HasGatewayIdentity(confirmedMeta) ||
+            !_entryMeta.TryGetValue(threadId, out var threadMeta))
+        {
+            return false;
+        }
+
+        string? matchedEntryId = null;
+        foreach (var (entryId, existing) in threadMeta)
+        {
+            if (!string.Equals(existing.LocalQueuedMessageId, messageId, StringComparison.Ordinal))
+                continue;
+            matchedEntryId = entryId;
+            break;
+        }
+
+        if (matchedEntryId is null)
+            return false;
+
+        threadMeta[matchedEntryId] = confirmedMeta with
+        {
+            IsLocalQueuedSend = false,
+            LocalQueuedMessageId = messageId,
+        };
+        return true;
+    }
+
+    private void RemoveQueuedRunMappingByMessageIdLocked(string threadId, string messageId)
+    {
+        if (!_queuedMessageIdsByRunId.TryGetValue(threadId, out var byRunId))
+            return;
+
+        foreach (var runId in byRunId.Where(kvp => kvp.Value == messageId).Select(kvp => kvp.Key).ToArray())
+            byRunId.Remove(runId);
+
+        if (byRunId.Count == 0)
+            _queuedMessageIdsByRunId.Remove(threadId);
+    }
+
+    private void MarkQueuedMessageFailedLocked(string threadId, string messageId, string error)
+    {
+        if (!_queuedMessages.TryGetValue(threadId, out var list))
+            return;
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i].Id == messageId)
+            {
+                list[i] = list[i] with
+                {
+                    SendState = ChatQueuedMessageSendState.Failed,
+                    ErrorText = error
+                };
+                return;
+            }
+        }
+    }
+
+    private void ClearQueuedMessageOnLocalTurnStart(AgentEventInfo evt, string threadId)
+    {
+        if (!IsLifecycleStart(evt))
+            return;
+
+        ChatDataSnapshot? snapshot = null;
+        lock (_gate)
+        {
+            if (TryPromoteQueuedMessageOnLocalTurnStartLocked(evt, threadId))
+                snapshot = BuildSnapshotLocked();
+        }
+
+        if (snapshot is not null)
+        {
+            Publish(snapshot);
+            ReplayDeferredAssistantMessage(threadId);
+        }
+    }
+
+    private bool TryPromoteQueuedMessageOnLocalTurnStartLocked(AgentEventInfo evt, string threadId)
+    {
+        if (!_locallyInitiatedThreads.Contains(threadId))
+            return false;
+
+        var runId = evt.RunId;
+        if (!string.IsNullOrEmpty(runId) &&
+            _queuedMessageIdsByRunId.TryGetValue(threadId, out var byRunId) &&
+            byRunId.Remove(runId, out var queuedMessageId))
+        {
+            var removed = PromoteQueuedMessageLocked(threadId, queuedMessageId);
+            if (byRunId.Count == 0)
+                _queuedMessageIdsByRunId.Remove(threadId);
+            return removed;
+        }
+
+        if (string.IsNullOrEmpty(runId) &&
+            TryGetSingleSendingQueuedMessageLocked(threadId, out var queued))
+        {
+            return PromoteQueuedMessageLocked(threadId, queued.Id);
+        }
+
+        return false;
     }
 
     private void RemovePendingLocalEchoLocked(string threadId, string text)
@@ -2283,7 +3096,11 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     TryOpenResetGateFromPendingLifecycleLocked(threadId, acceptedRunId: null);
                 }
 
-                var meta = BuildLiveMetaLocked(threadId, lastUser.Ts);
+                var meta = BuildLiveMetaLocked(
+                    threadId,
+                    lastUser.Ts,
+                    lastUser.OpenClawId,
+                    lastUser.OpenClawSeq);
                 snapshotToPublish = ApplyEventLocked(
                     threadId,
                     new ChatUserMessageEvent(TruncateForChatEntry(lastUser.Text)),
@@ -3511,7 +4328,8 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly record struct ResetClearPersistence(
         bool SaveAbortedIds,
         bool SaveToolMeta,
-        bool SaveAttachmentMeta);
+        bool SaveAttachmentMeta,
+        string[] SubmittedRunIds);
 
     private long GetResetVersionLocked(string threadId) =>
         _resetVersions.TryGetValue(threadId, out var version) ? version : 0;
@@ -3545,8 +4363,19 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             _toolMetaSaveVersion++;
         }
 
+        var submittedRunIds = new HashSet<string>(StringComparer.Ordinal);
         if (_activeRunIds.TryGetValue(threadId, out var activeRunId) && !string.IsNullOrEmpty(activeRunId))
-            AddResetIgnoredRunIdLocked(threadId, activeRunId);
+            submittedRunIds.Add(activeRunId);
+        if (_queuedMessageIdsByRunId.TryGetValue(threadId, out var queuedRunIds))
+        {
+            foreach (var queuedRunId in queuedRunIds.Keys)
+                submittedRunIds.Add(queuedRunId);
+        }
+        if (_localSentTexts.TryGetValue(threadId, out var localEchoes))
+        {
+            foreach (var localEcho in localEchoes)
+                AddResetSubmittedLocalEchoTextLocked(threadId, localEcho.Text, localEcho.SentAt);
+        }
 
         _resetVersions[threadId] = GetResetVersionLocked(threadId) + 1;
         _resetCutoffUtcMs[threadId] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -3557,10 +4386,17 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         _historyLoaded.Add(threadId);
         _historyRetryCount.Remove(threadId);
         _activeRunIds.Remove(threadId);
+        _activeRunStartSequences.Remove(threadId);
         _pendingAbortCounts.Remove(threadId);
         _abortedThreads.Remove(threadId);
         _locallyInitiatedThreads.Remove(threadId);
         _localSentTexts.Remove(threadId);
+        _queuedMessages.Remove(threadId);
+        _queuedSendRequests.Remove(threadId);
+        _queuedMessageIdsByRunId.Remove(threadId);
+        _terminalRunIdsByThread.Remove(threadId);
+        _assistantFallbackPromotedThreads.Remove(threadId);
+        _deferredAssistantMessages.Remove(threadId);
         _resetAcceptedRunIds.Remove(threadId);
         _resetLocalSendWithoutRunVersions.Remove(threadId);
         _resetLocalSendWithoutRunStartSequences.Remove(threadId);
@@ -3568,8 +4404,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         _resetPendingLifecycleStarts.Remove(threadId);
         _resetRemoteBackfillInFlight.Remove(threadId);
         _resetRemoteUserSeen.Remove(threadId);
+        foreach (var submittedRunId in submittedRunIds)
+            AddResetIgnoredRunIdLocked(threadId, submittedRunId);
 
-        return new ResetClearPersistence(saveAbortedIds, saveToolMeta, saveAttachmentMeta);
+        return new ResetClearPersistence(saveAbortedIds, saveToolMeta, saveAttachmentMeta, submittedRunIds.ToArray());
     }
 
     private void PersistClearedResetState(ResetClearPersistence persistence)
@@ -3590,6 +4428,72 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             _resetIgnoredRunIds[threadId] = set;
         }
         set.Add(runId);
+    }
+
+    private void AddResetSubmittedLocalEchoTextLocked(string threadId, string text, DateTimeOffset sentAt)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        if (!_resetSubmittedLocalEchoTexts.TryGetValue(threadId, out var texts))
+        {
+            texts = new Dictionary<string, Queue<DateTimeOffset>>(StringComparer.Ordinal);
+            _resetSubmittedLocalEchoTexts[threadId] = texts;
+        }
+
+        var normalized = text.Trim();
+        if (!texts.TryGetValue(normalized, out var timestamps))
+        {
+            timestamps = new Queue<DateTimeOffset>();
+            texts[normalized] = timestamps;
+        }
+        timestamps.Enqueue(sentAt);
+    }
+
+    private bool TryConsumeResetSubmittedLocalEchoTextLocked(string threadId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) ||
+            !_resetSubmittedLocalEchoTexts.TryGetValue(threadId, out var texts))
+        {
+            return false;
+        }
+
+        var normalized = text.Trim();
+        if (!texts.TryGetValue(normalized, out var timestamps))
+            return false;
+
+        var now = DateTimeOffset.UtcNow;
+        while (timestamps.Count > 0 && now - timestamps.Peek() > LocalEchoSuppressionWindow)
+            timestamps.Dequeue();
+
+        if (timestamps.Count == 0)
+        {
+            texts.Remove(normalized);
+            if (texts.Count == 0)
+                _resetSubmittedLocalEchoTexts.Remove(threadId);
+            return false;
+        }
+
+        timestamps.Dequeue();
+        if (timestamps.Count == 0)
+            texts.Remove(normalized);
+
+        if (texts.Count == 0)
+            _resetSubmittedLocalEchoTexts.Remove(threadId);
+        return true;
+    }
+
+    private bool HasPendingLocalEchoTextLocked(string threadId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) ||
+            !_localSentTexts.TryGetValue(threadId, out var queue) ||
+            queue.Count == 0)
+        {
+            return false;
+        }
+
+        var normalized = text.Trim();
+        return queue.Any(pending => string.Equals(pending.Text, normalized, StringComparison.Ordinal));
     }
 
     private void AddResetAcceptedRunIdLocked(string threadId, string runId)
@@ -3618,20 +4522,29 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     {
         consumeEchoText = null;
         requestRemoteBackfill = false;
+        var isNormalUserText = roleLower == "user" &&
+            !LooksLikeApprovalSlashCommand(rawText) &&
+            !LooksLikeSystemControlNote(rawText);
+
+        if (isNormalUserText &&
+            !HasPendingLocalEchoTextLocked(threadId, rawText) &&
+            TryConsumeResetSubmittedLocalEchoTextLocked(threadId, rawText))
+        {
+            return true;
+        }
+
         if (!_resetAwaitingUserMessage.Contains(threadId))
         {
             return IsPreResetTimestampLocked(threadId, tsMs, GetResetCutoffUtcMsLocked(threadId));
         }
 
-        var isFreshUser = roleLower == "user" &&
-            !LooksLikeApprovalSlashCommand(rawText) &&
-            !LooksLikeSystemControlNote(rawText) &&
+        var isFreshUser = isNormalUserText &&
             !IsPreResetTimestampLocked(threadId, tsMs, GetResetCutoffUtcMsLocked(threadId));
 
         if (isFreshUser &&
             _localSentTexts.TryGetValue(threadId, out var echoQueue) &&
             echoQueue.Count > 0 &&
-            string.Equals(echoQueue.Peek().Text, rawText.Trim(), StringComparison.Ordinal))
+            echoQueue.Any(pending => string.Equals(pending.Text, rawText.Trim(), StringComparison.Ordinal)))
         {
             consumeEchoText = rawText.Trim();
             _resetLocalEchoSequences[threadId] = _resetLifecycleStartSequence;
@@ -3652,9 +4565,173 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         return true;
     }
 
-    private bool ShouldDropAgentEventAfterResetLocked(AgentEventInfo evt, string threadId)
+    private void PromoteOldestQueuedMessageBeforeAssistantIfNeeded(string threadId)
     {
-        if (IsResetIgnoredRunLocked(threadId, evt.RunId, evt))
+        ChatDataSnapshot? snapshot = null;
+        lock (_gate)
+        {
+            // This fallback covers the degenerate case where an assistant frame
+            // arrives before any user echo or lifecycle.start/run mapping. When
+            // a run is active, lifecycle/ACK correlation owns the handoff; when
+            // multiple queued prompts exist, positional assistant fallback is
+            // ambiguous and can create false user boundaries that duplicate the
+            // assistant bubble.
+            if (_locallyInitiatedThreads.Contains(threadId)
+                && TryGetSingleSendingQueuedMessageLocked(threadId, out var queued)
+                && !_activeRunIds.ContainsKey(threadId)
+                && !_assistantFallbackPromotedThreads.Contains(threadId)
+                && PromoteQueuedMessageLocked(threadId, queued.Id))
+            {
+                snapshot = BuildSnapshotLocked();
+            }
+        }
+
+        if (snapshot is not null)
+            Publish(snapshot);
+    }
+
+    private AssistantQueueFrameDisposition ClassifyAssistantQueueFrameLocked(
+        string threadId,
+        string assistantText,
+        string? gatewayMessageId,
+        int? openClawSeq)
+    {
+        if ((!string.IsNullOrEmpty(gatewayMessageId) || openClawSeq is not null) &&
+            IsIdentifiedCompletedAssistantDuplicateLocked(
+                threadId,
+                assistantText,
+                gatewayMessageId,
+                openClawSeq))
+        {
+            return AssistantQueueFrameDisposition.Drop;
+        }
+
+        if (!_locallyInitiatedThreads.Contains(threadId) ||
+            !TryGetSingleSendingQueuedMessageLocked(threadId, out _) ||
+            _activeRunIds.ContainsKey(threadId) ||
+            _assistantFallbackPromotedThreads.Contains(threadId) ||
+            !_timelines.TryGetValue(threadId, out var timeline))
+        {
+            return AssistantQueueFrameDisposition.Render;
+        }
+
+        for (var i = timeline.Entries.Count - 1; i >= 0; i--)
+        {
+            var entry = timeline.Entries[i];
+            if (entry.Kind != ChatTimelineItemKind.Assistant)
+                continue;
+            if (entry.IsStreaming || !string.Equals(entry.Text, assistantText, StringComparison.Ordinal))
+                return AssistantQueueFrameDisposition.Render;
+            if (string.IsNullOrEmpty(gatewayMessageId) && openClawSeq is null)
+                return AssistantQueueFrameDisposition.Defer;
+            if (!_entryMeta.TryGetValue(threadId, out var threadMeta) ||
+                !threadMeta.TryGetValue(entry.Id, out var existing))
+            {
+                return AssistantQueueFrameDisposition.Render;
+            }
+
+            var sameGatewayIdentity =
+                (!string.IsNullOrEmpty(gatewayMessageId) &&
+                 string.Equals(existing.GatewayMessageId, gatewayMessageId, StringComparison.Ordinal)) ||
+                (openClawSeq is not null && existing.OpenClawSeq == openClawSeq);
+            return sameGatewayIdentity
+                ? AssistantQueueFrameDisposition.Drop
+                : AssistantQueueFrameDisposition.Render;
+        }
+
+        return AssistantQueueFrameDisposition.Render;
+    }
+
+    private bool IsIdentifiedCompletedAssistantDuplicateLocked(
+        string threadId,
+        string assistantText,
+        string? gatewayMessageId,
+        int? openClawSeq)
+    {
+        if (!_timelines.TryGetValue(threadId, out var timeline) ||
+            !_entryMeta.TryGetValue(threadId, out var threadMeta))
+        {
+            return false;
+        }
+
+        for (var i = timeline.Entries.Count - 1; i >= 0; i--)
+        {
+            var entry = timeline.Entries[i];
+            if (entry.Kind != ChatTimelineItemKind.Assistant ||
+                entry.IsStreaming ||
+                !threadMeta.TryGetValue(entry.Id, out var existing))
+            {
+                continue;
+            }
+
+            var bothHaveGatewayIds =
+                !string.IsNullOrEmpty(gatewayMessageId) &&
+                !string.IsNullOrEmpty(existing.GatewayMessageId);
+            if (bothHaveGatewayIds &&
+                string.Equals(existing.GatewayMessageId, gatewayMessageId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            if (!bothHaveGatewayIds &&
+                openClawSeq is not null &&
+                existing.OpenClawSeq == openClawSeq &&
+                string.Equals(entry.Text, assistantText, StringComparison.Ordinal))
+            {
+                if (!string.IsNullOrEmpty(gatewayMessageId) &&
+                    string.IsNullOrEmpty(existing.GatewayMessageId))
+                {
+                    threadMeta[entry.Id] = existing with { GatewayMessageId = gatewayMessageId };
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ReplayDeferredAssistantMessage(string threadId)
+    {
+        ChatMessageInfo? deferred;
+        lock (_gate)
+        {
+            if (!_deferredAssistantMessages.Remove(threadId, out deferred))
+                return;
+        }
+
+        OnChatMessageReceived(this, deferred);
+    }
+
+    private bool HasSendingQueuedMessagesLocked(string threadId)
+        => _queuedMessages.TryGetValue(threadId, out var queued) &&
+           queued.Any(message => message.SendState == ChatQueuedMessageSendState.Sending);
+
+    private bool TryGetSingleSendingQueuedMessageLocked(string threadId, out ChatQueuedMessage message)
+    {
+        message = default!;
+        if (!_queuedMessages.TryGetValue(threadId, out var queued))
+            return false;
+
+        ChatQueuedMessage? found = null;
+        foreach (var candidate in queued)
+        {
+            if (candidate.SendState != ChatQueuedMessageSendState.Sending)
+                continue;
+            if (found is not null)
+                return false;
+            found = candidate;
+        }
+
+        if (found is null)
+            return false;
+
+        message = found;
+        return true;
+    }
+
+    private bool ShouldDropAgentEventAfterResetLocked(AgentEventInfo evt, string threadId, out bool reloadHistoryAfterDrop)
+    {
+        reloadHistoryAfterDrop = false;
+        if (IsResetIgnoredRunLocked(threadId, evt.RunId, evt, out reloadHistoryAfterDrop))
             return true;
 
         var eventTsMs = evt.Ts > 0 ? (long)evt.Ts : 0L;
@@ -3843,6 +4920,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         if (!string.IsNullOrEmpty(evt.RunId))
         {
             _activeRunIds[threadId] = evt.RunId;
+            _activeRunStartSequences[threadId] = ++_lifecycleStartSequence;
             if (_resetAcceptedRunIds.TryGetValue(threadId, out var acceptedRunIds))
             {
                 acceptedRunIds.Remove(evt.RunId);
@@ -3852,8 +4930,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         }
     }
 
-    private bool IsResetIgnoredRunLocked(string threadId, string? runId, AgentEventInfo evt)
+    private bool IsResetIgnoredRunLocked(string threadId, string? runId, AgentEventInfo evt, out bool reloadHistoryAfterDrop)
     {
+        reloadHistoryAfterDrop = false;
         if (string.IsNullOrEmpty(runId) ||
             !_resetIgnoredRunIds.TryGetValue(threadId, out var runIds) ||
             !runIds.Contains(runId))
@@ -3865,7 +4944,11 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         {
             runIds.Remove(runId);
             if (runIds.Count == 0)
+            {
                 _resetIgnoredRunIds.Remove(threadId);
+                _resetSubmittedLocalEchoTexts.Remove(threadId);
+            }
+            reloadHistoryAfterDrop = true;
         }
 
         return true;
@@ -4017,13 +5100,79 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private static int? ToIntIfPositive(long value)
         => value > 0 && value <= int.MaxValue ? (int)value : null;
 
-    private ChatEntryMetadata BuildLiveMetaLocked(string threadId, long? tsMs = null)
+    private ChatEntryMetadata BuildLiveMetaLocked(
+        string threadId,
+        long? tsMs = null,
+        string? gatewayMessageId = null,
+        int? openClawSeq = null,
+        bool isLocalQueuedSend = false,
+        string? localQueuedMessageId = null)
     {
         var ts = tsMs is { } v && v > 0
             ? DateTimeOffset.FromUnixTimeMilliseconds(v).ToLocalTime()
             : (DateTimeOffset?)DateTimeOffset.Now;
         var session = Array.Find(_sessions, s => s.Key == threadId);
-        return new ChatEntryMetadata(ts, session?.Model);
+        return new ChatEntryMetadata(
+            ts,
+            session?.Model,
+            GatewayMessageId: gatewayMessageId,
+            OpenClawSeq: openClawSeq,
+            IsLocalQueuedSend: isLocalQueuedSend,
+            LocalQueuedMessageId: localQueuedMessageId);
+    }
+
+    private static List<ChatMessageInfo> OrderHistoryMessages(List<(ChatMessageInfo Message, int Index)> messages)
+    {
+        if (messages.Count == 0)
+            return new List<ChatMessageInfo>();
+
+        var sequencedCount = messages.Count(item => item.Message.OpenClawSeq is not null);
+        if (sequencedCount == messages.Count)
+        {
+            return messages
+                .OrderBy(item => item.Message.OpenClawSeq)
+                .ThenBy(item => item.Index)
+                .Select(item => item.Message)
+                .ToList();
+        }
+
+        if (sequencedCount == 0)
+        {
+            return messages
+                .OrderBy(item => item.Message.Ts)
+                .ThenBy(item => item.Index)
+                .Select(item => item.Message)
+                .ToList();
+        }
+
+        // Mixed old/new rows are already in gateway transcript order. Sorting
+        // timestamped-but-unsequenced rows against sequenced rows can drag a
+        // later queued burst (e.g. "t") ahead of the actual transcript start.
+        return messages
+            .OrderBy(item => item.Index)
+            .Select(item => item.Message)
+            .ToList();
+    }
+
+    private static void IncrementCount(Dictionary<string, int> counts, string key)
+        => counts[key] = counts.TryGetValue(key, out var count) ? count + 1 : 1;
+
+    private static bool TryConsumeCount(Dictionary<string, int> counts, string key)
+    {
+        if (!counts.TryGetValue(key, out var count) || count <= 0)
+            return false;
+
+        if (count == 1)
+            counts.Remove(key);
+        else
+            counts[key] = count - 1;
+        return true;
+    }
+
+    private static void ConsumeAnyTimestamp(Dictionary<string, List<long>> timestamps, string key)
+    {
+        if (timestamps.TryGetValue(key, out var values) && values.Count > 0)
+            values.RemoveAt(0);
     }
 
     private void SeedSessionIdsFromSessionsLocked(IEnumerable<SessionInfo> sessions)
@@ -4092,9 +5241,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             && _sessionsListReceived;
 
         // If the compose target hasn't materialized as a real session yet but
-        // already has an optimistic timeline (because the user sent a message
+        // already has local pending chat state (because the user sent a message
         // before the gateway echoed back sessions.list), surface a synthetic
-        // thread record so the UI can render the optimistic bubble without
+        // thread record so the UI can render the queued card/transcript without
         // falling back into the "no thread selected" zero state. The synthetic
         // thread's Id is the canonical compose key, so when SessionsUpdated
         // eventually arrives with the same key it replaces the synthetic in
@@ -4102,7 +5251,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         if (composeReady
             && composeKey is { } ck
             && _timelines.TryGetValue(ck, out var pendingTl)
-            && pendingTl.Entries.Count > 0
+            && (pendingTl.Entries.Count > 0
+                || pendingTl.TurnActive
+                || (_queuedMessages.TryGetValue(ck, out var pendingQueue) && pendingQueue.Count > 0))
             && !_sessions.Any(s => string.Equals(s.Key, ck, StringComparison.Ordinal)))
         {
             threadList.Add(new ChatThread
@@ -4137,6 +5288,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         // Snapshot a defensive copy of the timeline dict.
         var timelinesCopy = new Dictionary<string, ChatTimelineState>(_timelines);
         var timelineGenerationsCopy = new Dictionary<string, long>(_resetVersions);
+        var queuedMessagesCopy = _queuedMessages.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (IReadOnlyList<ChatQueuedMessage>)kvp.Value.ToArray());
 
         var defaultThreadId = ResolveDefaultThreadIdLocked();
 
@@ -4173,7 +5327,8 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             // surfaces the unsupported state.
             AvailableCommands: _commandCatalog?.Commands,
             CommandsSupported: _commandCatalog?.IsSupported ?? true,
-            TimelineGenerations: timelineGenerationsCopy);
+            TimelineGenerations: timelineGenerationsCopy,
+            QueuedMessagesByThread: queuedMessagesCopy);
     }
 
     private string? ResolveDefaultThreadIdLocked()

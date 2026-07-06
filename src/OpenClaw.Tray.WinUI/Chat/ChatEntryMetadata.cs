@@ -44,6 +44,22 @@ namespace OpenClawTray.Chat;
 /// Raw token contribution reported for this assistant response before it was
 /// converted into the displayed cumulative session snapshot.
 /// </param>
+/// <param name="GatewayMessageId">
+/// Gateway-assigned stable message id from <c>__openclaw.id</c>, when known.
+/// Used to reconcile live entries with later <c>chat.history</c> rows.
+/// </param>
+/// <param name="OpenClawSeq">
+/// Monotonic per-session sequence from <c>__openclaw.seq</c>, when known.
+/// Prefer this over timestamps for transcript ordering and dedupe.
+/// </param>
+/// <param name="IsLocalQueuedSend">
+/// True for a locally queued user prompt promoted into the transcript before
+/// gateway history has provided its stable id/sequence.
+/// </param>
+/// <param name="LocalQueuedMessageId">
+/// Stable client-side id for a local send. Used to attach a later gateway
+/// identity to the exact optimistic transcript row without text matching.
+/// </param>
 public sealed record ChatEntryMetadata(
     DateTimeOffset? Timestamp,
     string? Model,
@@ -52,4 +68,8 @@ public sealed record ChatEntryMetadata(
     int? ResponseTokens = null,
     int? ContextPercent = null,
     long? ContextTokens = null,
-    int? UsageContributionTokens = null);
+    int? UsageContributionTokens = null,
+    string? GatewayMessageId = null,
+    int? OpenClawSeq = null,
+    bool IsLocalQueuedSend = false,
+    string? LocalQueuedMessageId = null);
