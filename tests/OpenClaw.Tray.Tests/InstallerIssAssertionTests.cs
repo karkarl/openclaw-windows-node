@@ -73,7 +73,7 @@ public sealed class InstallerIssAssertionTests
         Assert.Contains("MB_RETRYCANCEL", iss);
         Assert.Contains("DeleteGeneratedAppState", iss);
         Assert.Contains("procedure RemoveAppAutoStart;", iss);
-        Assert.Contains("    RemoveAppAutoStart;\n    EnsureLocalGatewayCleanupChoice;", iss);
+        Assert.Matches(@"    RemoveAppAutoStart;\r?\n    EnsureLocalGatewayCleanupChoice;", iss);
         Assert.Contains("CurUninstallStep = usPostUninstall", iss);
         Assert.Contains("DelTree(ExpandConstant('{app}'), True, True, True)", iss);
         Assert.DoesNotContain("Start-Sleep -Seconds 3", iss);
