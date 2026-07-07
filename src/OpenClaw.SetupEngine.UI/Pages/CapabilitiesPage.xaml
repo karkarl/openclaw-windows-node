@@ -39,7 +39,7 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            Text="OpenClaw runs your agent in a private, self-hosted gateway on this PC. Pick what it's allowed to do — you can change this later in Companion Settings." />
                                 <RadioButtons x:Name="ProfileRadio" SelectionChanged="Profile_Changed" MaxColumns="1">
-                                    <RadioButton>
+                                    <RadioButton AutomationProperties.Name="Read-only">
                                         <StackPanel Spacing="1">
                                             <TextBlock Text="Read-only" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                             <TextBlock Text="See your screen, render on canvas, read device info. No commands."
@@ -47,7 +47,7 @@
                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </StackPanel>
                                     </RadioButton>
-                                    <RadioButton>
+                                    <RadioButton AutomationProperties.Name="Standard (Recommended)">
                                         <StackPanel Spacing="1">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <TextBlock Text="Standard" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
@@ -63,7 +63,7 @@
                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </StackPanel>
                                     </RadioButton>
-                                    <RadioButton>
+                                    <RadioButton AutomationProperties.Name="Full access">
                                         <StackPanel Spacing="1">
                                             <TextBlock Text="Full access" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                             <TextBlock Text="Everything, plus camera, location, and browser control."
@@ -165,10 +165,10 @@
                 <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center" Background="{ThemeResource SetupInactiveDotBrush}" />
             </StackPanel>
             <Button x:Name="BackButton" Grid.Column="0" Content="Back"
-                    Height="44" MinWidth="96" HorizontalAlignment="Left"
+                    MinWidth="100" HorizontalAlignment="Left"
                     Visibility="Collapsed" Click="Back_Click" />
             <Button x:Name="PrimaryButton" Grid.Column="1" Content="Next"
-                    Height="44" MinWidth="140" HorizontalAlignment="Right"
+                    MinWidth="100" HorizontalAlignment="Right"
                     Style="{StaticResource AccentButtonStyle}" Click="Primary_Click" />
         </Grid>
     </Grid>

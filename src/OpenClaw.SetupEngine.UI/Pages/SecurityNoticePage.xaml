@@ -38,7 +38,7 @@
                 <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center" Background="{ThemeResource SetupInactiveDotBrush}" />
             </StackPanel>
             <Button Grid.Column="1" x:Name="ContinueButton" Content="Continue"
-                    Height="44" MinWidth="140" HorizontalAlignment="Right"
+                    MinWidth="100" HorizontalAlignment="Right"
                     Style="{StaticResource AccentButtonStyle}"
                     Click="Continue_Click" />
         </Grid>

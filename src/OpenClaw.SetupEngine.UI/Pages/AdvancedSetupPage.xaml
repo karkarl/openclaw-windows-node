@@ -86,10 +86,10 @@
                 <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center" Background="{ThemeResource SetupInactiveDotBrush}" />
             </StackPanel>
             <Button x:Name="BackButton" Grid.Column="0" Content="Back"
-                    Height="44" MinWidth="96" HorizontalAlignment="Left"
+                    MinWidth="100" HorizontalAlignment="Left"
                     Click="Back_Click" />
             <Button x:Name="OpenConnectionButton" Grid.Column="1" Content="Open Companion Settings"
-                    Height="44" MinWidth="200" HorizontalAlignment="Right"
+                    MinWidth="100" HorizontalAlignment="Right"
                     Style="{StaticResource AccentButtonStyle}"
                     Click="OpenConnection_Click" />
         </Grid>

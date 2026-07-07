@@ -114,7 +114,7 @@
                 <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center" Background="{ThemeResource SetupInactiveDotBrush}" />
             </StackPanel>
             <Button x:Name="OnboardButton" Grid.Column="1" Content="Start OpenClaw onboard"
-                    Visibility="Collapsed" MinHeight="44" MinWidth="180" HorizontalAlignment="Right"
+                    Visibility="Collapsed" MinWidth="100" HorizontalAlignment="Right"
                     Margin="48,0" Style="{StaticResource AccentButtonStyle}"
                     Click="Onboard_Click" />
         </Grid>
