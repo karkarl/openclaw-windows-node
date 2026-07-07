@@ -138,7 +138,7 @@
             </StackPanel>
             <Button x:Name="LaunchButton" Grid.Column="1"
                     Content="Finish"
-                    HorizontalAlignment="Right" MinHeight="44" MinWidth="140"
+                    HorizontalAlignment="Right" MinWidth="100"
                     Style="{StaticResource AccentButtonStyle}"
                     Click="LaunchButton_Click" />
         </Grid>

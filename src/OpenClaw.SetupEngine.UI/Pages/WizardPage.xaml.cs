@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
@@ -34,6 +35,7 @@ public sealed partial class WizardPage : Page
     private int _totalProgressPolls;
     private readonly Dictionary<string, int> _stepVisits = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<WizardOptionValue> _options = [];
+    private readonly Stack<JsonElement> _stepHistory = new();
     // wizard.payload frames do not include plugin console output, so tail the gateway log inline.
     private WizardConsoleTail? _consoleTail;
     // Captured on connect for "Open terminal" / "Restart gateway" recovery actions.
@@ -80,15 +82,13 @@ public sealed partial class WizardPage : Page
         SelectOptions.Visibility = Visibility.Visible;
         foreach (var (val, lbl) in new[] { ("opus", "claude-opus-4.8"), ("sonnet", "claude-sonnet-4.6"), ("haiku", "claude-haiku-4.5") })
         {
-            SelectOptions.Children.Add(new RadioButton
+            SelectOptions.Items.Add(new ListViewItem
             {
                 Content = lbl,
                 Tag = val,
-                GroupName = "preview",
-                Padding = new Thickness(8, 6, 8, 6),
             });
         }
-        ((RadioButton)SelectOptions.Children[0]).IsChecked = true;
+        SelectOptions.SelectedIndex = 0;
         PrimaryButton.Content = "Continue";
         PrimaryButton.IsEnabled = true;
         SecondaryButton.Visibility = Visibility.Collapsed;
@@ -331,6 +331,8 @@ public sealed partial class WizardPage : Page
             }
 
             ResetInputs();
+            // Push current payload so Back can re-render this step
+            _stepHistory.Push(payload);
             TitleText.Text = string.IsNullOrWhiteSpace(title) ? DisplayTitleFor(_stepType) : title;
             RenderMessage(message);
             StepCard.MinHeight = _stepType == "note" && string.IsNullOrWhiteSpace(message) ? 140 : 260;
@@ -338,6 +340,7 @@ public sealed partial class WizardPage : Page
             BusyRing.Visibility = Visibility.Collapsed;
             BusyRing.IsActive = false;
             ShowRecoveryActions();
+            WizardBackButton.Visibility = Visibility.Visible;
             StatusText.Text = "A few quick questions to connect your agent";
             PrimaryButton.IsEnabled = !WizardSelection.RequiresAnswer(_stepType);
             SecondaryButton.IsEnabled = true;
@@ -393,6 +396,7 @@ public sealed partial class WizardPage : Page
         PrimaryButton.Content = "Continue";
         SecondaryButton.IsEnabled = false;
         SecondaryButton.Visibility = Visibility.Collapsed;
+        WizardBackButton.Visibility = Visibility.Collapsed;
         ShowRecoveryActions();
     }
 
@@ -413,27 +417,85 @@ public sealed partial class WizardPage : Page
         if (_stepType == "select")
         {
             SelectOptions.Visibility = Visibility.Visible;
-            foreach (var option in _options)
+
+            // Reorder: skip options first, then non-more options, filter out "more" and "back" options
+            var skipOptions = _options.Where(IsSkipOption).ToList();
+            var moreOptions = _options.Where(IsMoreOption).ToList();
+            var normalOptions = _options.Where(o => !IsSkipOption(o) && !IsMoreOption(o) && !IsBackOption(o)).ToList();
+
+            var orderedOptions = new List<WizardOptionValue>();
+            orderedOptions.AddRange(skipOptions);
+            orderedOptions.AddRange(normalOptions);
+
+            // Show first batch; if there are many options, show a "More" button to expand
+            const int initialVisibleCount = 6;
+            var hasOverflow = orderedOptions.Count > initialVisibleCount;
+            var hasGatewayMore = moreOptions.Count > 0;
+            var showMoreButton = hasOverflow || hasGatewayMore;
+            var visibleOptions = hasOverflow
+                ? orderedOptions.Take(initialVisibleCount).ToList()
+                : orderedOptions;
+
+            foreach (var option in visibleOptions)
             {
-                SelectOptions.Children.Add(new RadioButton
+                SelectOptions.Items.Add(CreateOptionItem(option));
+            }
+
+            // Add "More ▼" button if there are hidden options OR gateway sent a "more" option
+            if (showMoreButton)
+            {
+                var moreButton = new Button
                 {
-                    Content = BuildOptionContent(option),
-                    Tag = option,
-                    GroupName = $"wizard-step-{_stepId}",
-                    Padding = new Thickness(8, 6, 8, 6),
-                    Margin = new Thickness(0, 0, 0, 2),
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch
-                });
+                    Content = "More ▾",
+                    MinWidth = 100,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    Margin = new Thickness(0, 4, 0, 0)
+                };
+                var remainingOptions = hasOverflow ? orderedOptions.Skip(initialVisibleCount).ToList() : new List<WizardOptionValue>();
+                var gatewayMoreValue = moreOptions.Count > 0 ? moreOptions[0].Value : null;
+                var capturedSkipOptions = skipOptions;
+                moreButton.Click += (_, _) =>
+                {
+                    // Remove the More button
+                    if (moreButton.Parent is Panel parent)
+                        parent.Children.Remove(moreButton);
+
+                    if (hasGatewayMore && !string.IsNullOrEmpty(gatewayMoreValue))
+                    {
+                        // Send the "more" option value to gateway to fetch full list, expanding inline
+                        AsyncEventHandlerGuard.Run(
+                            async () => await ExpandMoreOptionsAsync(gatewayMoreValue, capturedSkipOptions),
+                            NullLogger.Instance,
+                            "MoreExpand");
+                    }
+                    else
+                    {
+                        // Just expand remaining local options
+                        foreach (var option in remainingOptions)
+                        {
+                            SelectOptions.Items.Add(CreateOptionItem(option));
+                        }
+                    }
+                };
+                // Insert the button after SelectOptions in the parent StackPanel
+                var parentPanel = SelectOptions.Parent as Panel;
+                if (parentPanel != null)
+                {
+                    var idx = parentPanel.Children.IndexOf(SelectOptions);
+                    parentPanel.Children.Insert(idx + 1, moreButton);
+                }
             }
 
             var initialValue = WizardAnswerBuilder.ValueKeys(initial).FirstOrDefault();
-            var index = WizardSelection.SelectedIndex(initialValue, _options.Select(o => o.Value).ToArray());
-            if (index >= 0 && index < SelectOptions.Children.Count && SelectOptions.Children[index] is RadioButton radio)
-                radio.IsChecked = true;
+            var index = WizardSelection.SelectedIndex(initialValue, visibleOptions.Select(o => o.Value).ToArray());
+            if (index >= 0 && index < SelectOptions.Items.Count)
+                SelectOptions.SelectedIndex = index;
+            else if (SelectOptions.Items.Count > 0)
+                SelectOptions.SelectedIndex = 0;
 
-            foreach (var optionRadio in SelectOptions.Children.OfType<RadioButton>())
-                optionRadio.Checked += (_, _) => UpdateContinueState();
+            SelectOptions.SelectionChanged += (_, _) => UpdateContinueState();
 
             UpdateContinueState();
         }
@@ -455,6 +517,7 @@ public sealed partial class WizardPage : Page
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch
                 };
+                AutomationProperties.SetName(checkBox, OptionAccessibleName(option));
                 checkBox.Checked += (_, _) => UpdateContinueState();
                 checkBox.Unchecked += (_, _) => UpdateContinueState();
                 MultiOptions.Children.Add(checkBox);
@@ -465,6 +528,24 @@ public sealed partial class WizardPage : Page
 
         return true;
     }
+
+    private static ListViewItem CreateOptionItem(WizardOptionValue option)
+    {
+        var item = new ListViewItem
+        {
+            Content = BuildOptionContent(option),
+            Tag = option,
+            Padding = new Thickness(12, 10, 12, 10),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch
+        };
+        AutomationProperties.SetName(item, OptionAccessibleName(option));
+        return item;
+    }
+
+    private static string OptionAccessibleName(WizardOptionValue option) =>
+        string.IsNullOrWhiteSpace(option.Hint)
+            ? option.Label
+            : $"{option.Label}. {option.Hint}";
 
     private static FrameworkElement BuildOptionContent(WizardOptionValue option)
     {
@@ -496,6 +577,20 @@ public sealed partial class WizardPage : Page
 
         return panel;
     }
+
+    private static bool IsSkipOption(WizardOptionValue option) =>
+        string.Equals(option.Value, "__skip__", StringComparison.OrdinalIgnoreCase)
+        || option.Label.Contains("skip", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMoreOption(WizardOptionValue option) =>
+        string.Equals(option.Value, "__more__", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(option.Value, "__more", StringComparison.OrdinalIgnoreCase)
+        || (option.Label.Contains("more", StringComparison.OrdinalIgnoreCase)
+            && option.Label.Length < 20);
+
+    private static bool IsBackOption(WizardOptionValue option) =>
+        string.Equals(option.Value, "__back", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(option.Value, "back", StringComparison.OrdinalIgnoreCase);
 
     private static Brush ResourceBrush(string key)
     {
@@ -541,6 +636,101 @@ public sealed partial class WizardPage : Page
         await SendCurrentAnswerAsync(skip: true);
     }
 
+    private async Task SendOptionValueAsync(string value)
+    {
+        if (_client == null) return;
+
+        var generation = _operationGeneration;
+        try
+        {
+            SetBusy("Loading...");
+            ClearConsoleBanner();
+            var parameters = new { sessionId = _sessionId, answer = new { stepId = _stepId, value } };
+            var payload = await _client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutForCurrentStep());
+            if (generation != _operationGeneration) return;
+            await ApplyPayloadAsync(payload);
+            ScrollActiveIntoView();
+        }
+        catch (Exception ex)
+        {
+            if (generation != _operationGeneration) return;
+            await EnterWizardErrorAsync(ex.Message);
+        }
+    }
+
+    private async Task ExpandMoreOptionsAsync(string moreValue, List<WizardOptionValue> previousSkipOptions)
+    {
+        if (_client == null) return;
+
+        var generation = _operationGeneration;
+        try
+        {
+            var parameters = new { sessionId = _sessionId, answer = new { stepId = _stepId, value = moreValue } };
+            var payload = await _client.SendWizardRequestAsync("wizard.next", parameters, timeoutMs: TimeoutForCurrentStep());
+            if (generation != _operationGeneration) return;
+
+            // Parse the expanded options from the response
+            if (payload.TryGetProperty("step", out var step))
+            {
+                // Update step ID — the gateway may issue a new one for the expanded view
+                if (step.TryGetProperty("id", out var expandedId))
+                    _stepId = expandedId.ToString();
+
+                var expandedOptions = WizardAnswerBuilder.ReadOptions(step).ToList();
+
+                // Filter out __back and __more from expanded list
+                var filtered = expandedOptions
+                    .Where(o => !IsMoreOption(o) && !IsBackOption(o))
+                    .ToList();
+
+                // Rebuild the ListView: skip options first, then all expanded items
+                SelectOptions.Items.Clear();
+                _options.Clear();
+
+                // Re-inject skip options at top
+                foreach (var skip in previousSkipOptions)
+                {
+                    _options.Add(skip);
+                    SelectOptions.Items.Add(CreateOptionItem(skip));
+                }
+
+                // Add all expanded options
+                foreach (var option in filtered)
+                {
+                    _options.Add(option);
+                    SelectOptions.Items.Add(CreateOptionItem(option));
+                }
+
+                // Select first item by default
+                if (SelectOptions.Items.Count > 0)
+                    SelectOptions.SelectedIndex = 0;
+
+                // Push this expanded payload to step history so Back works
+                _stepHistory.Push(payload);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (generation != _operationGeneration) return;
+            await EnterWizardErrorAsync(ex.Message);
+        }
+    }
+
+    private void WizardBack_Click(object sender, RoutedEventArgs e)
+    {
+        // Pop the current step (that's showing now), then re-render the previous one
+        if (_stepHistory.Count > 1)
+        {
+            _stepHistory.Pop(); // discard current
+            var previousPayload = _stepHistory.Pop(); // will be re-pushed by ApplyPayloadAsync
+            _ = ApplyPayloadAsync(previousPayload);
+        }
+        else
+        {
+            SetupWindow.Active?.NavigateToWelcome(back: true);
+        }
+    }
+
     private void StartOver_Click(object sender, RoutedEventArgs e) =>
         AsyncEventHandlerGuard.Run(
             StartOverAsync,
@@ -550,6 +740,7 @@ public sealed partial class WizardPage : Page
     private async Task StartOverAsync()
     {
         AdvanceOperationGeneration();
+        _stepHistory.Clear();
         HideRecoveryActions();
         SetBusy("Starting over...");
         await CancelCurrentSessionAsync();
@@ -728,9 +919,7 @@ public sealed partial class WizardPage : Page
         value = _stepType switch
         {
             "confirm" => true,
-            "select" => SelectOptions.Children.OfType<RadioButton>()
-                .FirstOrDefault(r => r.IsChecked == true)
-                ?.Tag is WizardOptionValue option
+            "select" => SelectOptions.SelectedItem is ListViewItem { Tag: WizardOptionValue option }
                     ? option.RawValue
                     : "",
             "multiselect" => MultiOptions.Children.OfType<CheckBox>()
@@ -756,11 +945,9 @@ public sealed partial class WizardPage : Page
     {
         return _stepType switch
         {
-            "select" => SelectOptions.Children.OfType<RadioButton>()
-                .Where(r => r.IsChecked == true)
-                .Select(r => r.Tag is WizardOptionValue option ? option.Value : "")
-                .Where(v => v.Length > 0)
-                .ToArray(),
+            "select" => SelectOptions.SelectedItem is ListViewItem { Tag: WizardOptionValue selectedOpt }
+                ? [selectedOpt.Value]
+                : [],
             "multiselect" => MultiOptions.Children.OfType<CheckBox>()
                 .Where(c => c.IsChecked == true)
                 .Select(c => c.Tag is WizardOptionValue option ? option.Value : "")
@@ -802,53 +989,77 @@ public sealed partial class WizardPage : Page
 
     private void ResetInputs()
     {
-        SelectOptions.Children.Clear();
+        SelectOptions.Items.Clear();
         SelectOptions.Visibility = Visibility.Collapsed;
         MultiOptions.Children.Clear();
         MultiOptions.Visibility = Visibility.Collapsed;
         TextInput.Visibility = Visibility.Collapsed;
         SecretInput.Visibility = Visibility.Collapsed;
-        MessagePanel.Children.Clear();
+        MessageBlock.Blocks.Clear();
+        MessageBlock.Visibility = Visibility.Collapsed;
+        MessageCodeRows.Children.Clear();
         HideGatewayRecovery();
     }
 
     private void RenderMessage(string message)
     {
-        MessagePanel.Children.Clear();
+        MessageBlock.Blocks.Clear();
+        MessageCodeRows.Children.Clear();
+        MessageBlock.Visibility = Visibility.Collapsed;
+
         if (string.IsNullOrWhiteSpace(message))
             return;
 
+        var paragraph = new Microsoft.UI.Xaml.Documents.Paragraph();
+        var hasContent = false;
+
         foreach (var line in message.Split('\n'))
-            AppendLineTo(MessagePanel, line, fontSize: 14, opacity: 0.82);
-    }
-
-    // Renders a single line into a target panel, decorating URLs as hyperlinks
-    // and "Code: XXX" patterns as monospace rows with a copy button.
-    private void AppendLineTo(Panel target, string line, double fontSize, double opacity)
-    {
-        var segment = WizardMessageFormatting.ClassifyLine(line);
-
-        if (segment.Kind == WizardLineKind.Code)
         {
-            target.Children.Add(BuildCodeRow(segment.Prefix, segment.Highlight));
-            return;
+            // Strip leading bullet characters (•, -, *) that look redundant in the UI
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("• ") || trimmed.StartsWith("- ") || trimmed.StartsWith("* "))
+                trimmed = trimmed[2..];
+
+            var segment = WizardMessageFormatting.ClassifyLine(trimmed);
+
+            if (segment.Kind == WizardLineKind.Code)
+            {
+                // Code rows with copy buttons stay as separate interactive elements
+                MessageCodeRows.Children.Add(BuildCodeRow(segment.Prefix, segment.Highlight));
+                continue;
+            }
+
+            if (hasContent)
+                paragraph.Inlines.Add(new LineBreak());
+
+            if (segment.Kind == WizardLineKind.Url && Uri.TryCreate(segment.Highlight, UriKind.Absolute, out var uri))
+            {
+                var urlIndex = segment.Text.IndexOf(segment.Highlight, StringComparison.Ordinal);
+                var prefix = segment.Text[..urlIndex];
+                if (!string.IsNullOrEmpty(prefix))
+                    paragraph.Inlines.Add(new Run { Text = prefix });
+
+                var link = new Hyperlink { NavigateUri = uri };
+                link.Inlines.Add(new Run { Text = segment.Highlight });
+                paragraph.Inlines.Add(link);
+
+                var suffix = segment.Text[(urlIndex + segment.Highlight.Length)..];
+                if (!string.IsNullOrEmpty(suffix))
+                    paragraph.Inlines.Add(new Run { Text = suffix });
+            }
+            else
+            {
+                paragraph.Inlines.Add(new Run { Text = segment.Text });
+            }
+
+            hasContent = true;
         }
 
-        if (segment.Kind == WizardLineKind.Url && Uri.TryCreate(segment.Highlight, UriKind.Absolute, out var uri))
+        if (hasContent)
         {
-            target.Children.Add(BuildLinkLine(segment.Text, segment.Highlight, uri));
-            return;
+            MessageBlock.Blocks.Add(paragraph);
+            MessageBlock.Visibility = Visibility.Visible;
         }
-
-        target.Children.Add(new TextBlock
-        {
-            Text = segment.Text,
-            FontSize = fontSize,
-            FontFamily = new FontFamily("Consolas"),
-            Opacity = opacity,
-            TextWrapping = TextWrapping.Wrap,
-            IsTextSelectionEnabled = true
-        });
     }
 
     private void StartConsoleTail()
@@ -904,7 +1115,9 @@ public sealed partial class WizardPage : Page
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
-            AppendLineTo(ConsoleBannerLines, line, fontSize: 13, opacity: 0.92);
+            var para = new Microsoft.UI.Xaml.Documents.Paragraph();
+            para.Inlines.Add(new Run { Text = line });
+            ConsoleBannerBlock.Blocks.Add(para);
         }
 
         ConsoleBanner.Visibility = Visibility.Visible;
@@ -943,6 +1156,7 @@ public sealed partial class WizardPage : Page
 
     private void ClearConsoleBanner()
     {
+        ConsoleBannerBlock.Blocks.Clear();
         ConsoleBannerLines.Children.Clear();
         ConsoleBanner.Visibility = Visibility.Collapsed;
     }

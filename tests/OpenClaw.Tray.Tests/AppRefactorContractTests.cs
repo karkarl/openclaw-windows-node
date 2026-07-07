@@ -734,9 +734,9 @@ public sealed class AppRefactorContractTests
     {
         var root = TestRepositoryPaths.GetRepositoryRoot();
         var source = File.ReadAllText(Path.Combine(root, "src", "OpenClaw.SetupEngine.UI", "Pages", "WelcomePage.xaml.cs"));
-        var method = ExtractMethod(source, "StartButtonClickAsync");
+        var method = ExtractMethod(source, "StartInstallAsync");
 
-        Assert.Contains("InstallButton.IsEnabled = false", method);
+        Assert.Contains("NextButton.IsEnabled = false", method);
         Assert.Contains("InstallTitle.Text = CheckingButtonText", method);
         Assert.Contains("CheckingButtonText", method);
         Assert.Contains("var setupWindow = SetupWindow.Active", method);
@@ -744,10 +744,10 @@ public sealed class AppRefactorContractTests
         Assert.Contains("setupWindow is null or { IsClosed: true } || xamlRoot is null", method);
         Assert.Contains("setupWindow is { IsClosed: false }", method);
         Assert.Contains("InstallTitle.Text = InstallButtonText", method);
-        Assert.Contains("InstallButton.IsEnabled = true", method);
+        Assert.Contains("NextButton.IsEnabled = true", method);
         AssertInOrder(
             method,
-            "InstallButton.IsEnabled = false",
+            "NextButton.IsEnabled = false",
             "await Task.Run(() => ExistingConfigDetector.Detect",
             "setupWindow is null or { IsClosed: true } || xamlRoot is null",
             "dialog.ShowAsync()",
