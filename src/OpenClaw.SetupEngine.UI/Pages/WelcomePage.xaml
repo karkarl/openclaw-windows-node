@@ -5,6 +5,35 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     NavigationCacheMode="Disabled">
 
+    <Page.Resources>
+        <!-- Card-styled Button: keeps the card look but stays keyboard focusable and
+             exposes the UIA Invoke pattern so screen-reader/keyboard users can pick a choice. -->
+        <Style x:Key="SetupChoiceCardStyle" TargetType="Button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalContentAlignment="Stretch"
+                                              VerticalContentAlignment="Stretch"
+                                              Content="{TemplateBinding Content}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
     <Grid Padding="48,28,48,24" RowDefinitions="Auto,*,Auto">
 
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Spacing="12">
@@ -25,13 +54,11 @@
         <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="0,24,0,0" Spacing="12"
                     MaxWidth="560" HorizontalAlignment="Stretch">
 
-            <Border x:Name="InstallCard"
-                    HorizontalAlignment="Stretch"
-                    Padding="16" CornerRadius="4"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            <Button x:Name="InstallCard"
+                    Style="{StaticResource SetupChoiceCardStyle}"
                     BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                     BorderThickness="2"
-                    PointerPressed="InstallCard_Pressed"
+                    Click="InstallCard_Click"
                     AutomationProperties.Name="Install a local gateway (WSL), recommended">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
                     <Border Grid.Column="0" Width="44" Height="44" CornerRadius="6"
@@ -58,15 +85,13 @@
                                    Text="A private, self-hosted OpenClaw gateway in an isolated Ubuntu WSL instance. We'll show exactly what gets installed before anything runs." />
                     </StackPanel>
                 </Grid>
-            </Border>
+            </Button>
 
-            <Border x:Name="ConnectCard"
-                    HorizontalAlignment="Stretch"
-                    Padding="16" CornerRadius="4"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            <Button x:Name="ConnectCard"
+                    Style="{StaticResource SetupChoiceCardStyle}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    PointerPressed="ConnectCard_Pressed"
+                    Click="ConnectCard_Click"
                     AutomationProperties.Name="Connect to an existing gateway">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
                     <Border Grid.Column="0" Width="44" Height="44" CornerRadius="6"
@@ -83,7 +108,7 @@
                                    Text="Already run an OpenClaw gateway — here, on another machine, or remote? Pair without installing anything." />
                     </StackPanel>
                 </Grid>
-            </Border>
+            </Button>
 
         </StackPanel>
 

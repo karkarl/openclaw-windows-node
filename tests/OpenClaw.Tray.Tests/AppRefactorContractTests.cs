@@ -783,6 +783,48 @@ public sealed class AppRefactorContractTests
     }
 
     [Fact]
+    public void SetupWelcomeChoices_AreKeyboardInvokableControls()
+    {
+        var root = TestRepositoryPaths.GetRepositoryRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "OpenClaw.SetupEngine.UI", "Pages", "WelcomePage.xaml"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "OpenClaw.SetupEngine.UI", "Pages", "WelcomePage.xaml.cs"));
+
+        // Setup choices must be real focusable controls (Buttons expose the UIA Invoke
+        // pattern and fire on Enter/Space), not pointer-only Borders that keyboard and
+        // screen-reader users cannot activate.
+        Assert.Contains("<Button x:Name=\"InstallCard\"", xaml);
+        Assert.Contains("<Button x:Name=\"ConnectCard\"", xaml);
+        Assert.Contains("Click=\"InstallCard_Click\"", xaml);
+        Assert.Contains("Click=\"ConnectCard_Click\"", xaml);
+        Assert.DoesNotContain("PointerPressed=\"InstallCard_Pressed\"", xaml);
+        Assert.DoesNotContain("PointerPressed=\"ConnectCard_Pressed\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"Install a local gateway (WSL), recommended\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"Connect to an existing gateway\"", xaml);
+        Assert.Contains("void InstallCard_Click(object sender, RoutedEventArgs e)", codeBehind);
+        Assert.Contains("void ConnectCard_Click(object sender, RoutedEventArgs e)", codeBehind);
+    }
+
+    [Fact]
+    public void WizardBack_DoesNotTripForwardProgressGuards()
+    {
+        var root = TestRepositoryPaths.GetRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "OpenClaw.SetupEngine.UI", "Pages", "WizardPage.xaml.cs"));
+        var back = ExtractMethod(source, "WizardBack_Click");
+        var apply = ExtractMethod(source, "ApplyPayloadAsync");
+
+        // Back re-renders an already-seen step; it must flag the re-render so the
+        // forward-only step/visit guards don't falsely abort legitimate back navigation.
+        Assert.Contains("ApplyPayloadAsync(previousPayload, isBackNavigation: true)", back);
+        Assert.Contains("bool isBackNavigation = false", apply);
+        Assert.Contains("if (!isBackNavigation)", apply);
+        AssertInOrder(
+            apply,
+            "if (!isBackNavigation)",
+            "_wizardStepCount++",
+            "_stepVisits[visitKey] = visits + 1");
+    }
+
+    [Fact]
     public void TrayIcon_UpdateDelegatesToCoordinator()
     {
         var source = ReadAppSources();

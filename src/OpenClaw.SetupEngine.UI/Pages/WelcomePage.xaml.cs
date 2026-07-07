@@ -2,7 +2,6 @@ using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using OpenClaw.SetupEngine;
@@ -54,13 +53,13 @@ public sealed partial class WelcomePage : Page
         visual.StartAnimation("Scale", pulse);
     }
 
-    private void InstallCard_Pressed(object sender, PointerRoutedEventArgs e)
+    private void InstallCard_Click(object sender, RoutedEventArgs e)
     {
         _installSelected = true;
         UpdateCardSelection();
     }
 
-    private void ConnectCard_Pressed(object sender, PointerRoutedEventArgs e)
+    private void ConnectCard_Click(object sender, RoutedEventArgs e)
     {
         _installSelected = false;
         UpdateCardSelection();

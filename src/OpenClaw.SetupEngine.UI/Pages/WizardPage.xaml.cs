@@ -218,7 +218,7 @@ public sealed partial class WizardPage : Page
         });
     }
 
-    private async Task ApplyPayloadAsync(JsonElement payload)
+    private async Task ApplyPayloadAsync(JsonElement payload, bool isBackNavigation = false)
     {
         var generation = _operationGeneration;
 
@@ -316,20 +316,26 @@ public sealed partial class WizardPage : Page
                 continue;
             }
 
-            _wizardStepCount++;
-            if (_wizardStepCount > MaxWizardSteps)
+            // Back re-renders a step the user already saw. Skip the forward-progress
+            // guards so returning to an earlier step doesn't inflate the step count or
+            // falsely trip the "repeated step" limit on legitimate back navigation.
+            if (!isBackNavigation)
             {
-                ShowError($"Gateway wizard exceeded {MaxWizardSteps} steps.");
-                return;
-            }
+                _wizardStepCount++;
+                if (_wizardStepCount > MaxWizardSteps)
+                {
+                    ShowError($"Gateway wizard exceeded {MaxWizardSteps} steps.");
+                    return;
+                }
 
-            var visitKey = $"{_stepId}:{stepIndex}";
-            _stepVisits.TryGetValue(visitKey, out var visits);
-            _stepVisits[visitKey] = visits + 1;
-            if (_stepVisits[visitKey] > MaxSameStepVisits)
-            {
-                ShowError($"Gateway wizard repeated step '{_stepId}' too many times.");
-                return;
+                var visitKey = $"{_stepId}:{stepIndex}";
+                _stepVisits.TryGetValue(visitKey, out var visits);
+                _stepVisits[visitKey] = visits + 1;
+                if (_stepVisits[visitKey] > MaxSameStepVisits)
+                {
+                    ShowError($"Gateway wizard repeated step '{_stepId}' too many times.");
+                    return;
+                }
             }
 
             ResetInputs();
@@ -728,7 +734,7 @@ public sealed partial class WizardPage : Page
         {
             _stepHistory.Pop(); // discard current
             var previousPayload = _stepHistory.Pop(); // will be re-pushed by ApplyPayloadAsync
-            _ = ApplyPayloadAsync(previousPayload);
+            _ = ApplyPayloadAsync(previousPayload, isBackNavigation: true);
         }
         else
         {
