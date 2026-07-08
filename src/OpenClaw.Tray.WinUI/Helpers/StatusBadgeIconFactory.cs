@@ -11,10 +11,16 @@ using System.Runtime.Versioning;
 namespace OpenClawTray.Helpers;
 
 /// <summary>
-/// Builds application icons that mirror the companion-app connection status dot:
-/// the lobster mascot with a coloured status dot rendered in the bottom-right
-/// corner. Composed icons are cached per <see cref="ConnectionStatusAccent"/> and
-/// written to a temp folder as multi-resolution .ico files so both the tray icon
+/// Builds application icons that surface the connection status on the lobster
+/// mascot as a small badge in the bottom-right corner. To avoid a distracting
+/// always-on indicator, only attention states are badged:
+/// <list type="bullet">
+///   <item>disconnected / neutral → a grey dot,</item>
+///   <item>error → a red dot with a white "-" (minus) glyph.</item>
+/// </list>
+/// Healthy states (connected, connecting) render the plain lobster with no badge.
+/// Composed icons are cached per <see cref="ConnectionStatusAccent"/> and written
+/// to a temp folder as multi-resolution .ico files so both the tray icon
 /// (<see cref="WinUIEx.TrayIcon.SetIcon(string)"/>) and the desktop/taskbar window
 /// icon (<c>Window.SetIcon(string)</c>) can consume them.
 /// </summary>
@@ -64,6 +70,18 @@ internal static class StatusBadgeIconFactory
         _ => Color.FromArgb(158, 158, 158),                              // Gray   – disconnected / neutral
     };
 
+    /// <summary>
+    /// Whether <paramref name="accent"/> gets a status badge. Only attention states
+    /// are badged so the icon is quiet when everything is healthy: disconnected
+    /// (neutral) and error (critical). Connected/connecting render the plain lobster.
+    /// </summary>
+    public static bool ShouldBadge(ConnectionStatusAccent accent) =>
+        accent is ConnectionStatusAccent.Neutral or ConnectionStatusAccent.Critical;
+
+    /// <summary>Whether the badge carries the "-" (minus) glyph. Only the error state does.</summary>
+    public static bool HasDash(ConnectionStatusAccent accent) =>
+        accent is ConnectionStatusAccent.Critical;
+
     private static (string Path, bool IsFallback) Build(ConnectionStatusAccent accent)
     {
         var fallback = Path.Combine(AssetsPath, "openclaw.ico");
@@ -72,8 +90,12 @@ internal static class StatusBadgeIconFactory
             Directory.CreateDirectory(OutputDir);
             var outputPath = Path.Combine(OutputDir, $"openclaw-{accent}".ToLowerInvariant() + ".ico");
 
+            // Only attention states (neutral/critical) get a dot; healthy states
+            // render the plain lobster (null dot colour).
+            Color? dotColor = ShouldBadge(accent) ? DotColor(accent) : null;
+
             using var baseImage = LoadBaseImage();
-            File.WriteAllBytes(outputPath, CreateIcoBytes(baseImage, DotColor(accent), Sizes));
+            File.WriteAllBytes(outputPath, CreateIcoBytes(baseImage, dotColor, HasDash(accent), Sizes));
             return (outputPath, false);
         }
         catch (Exception ex)
@@ -84,15 +106,16 @@ internal static class StatusBadgeIconFactory
     }
 
     /// <summary>
-    /// Composes the badged lobster at every requested size and packs the frames
-    /// into a single multi-resolution .ico byte array. Exposed for testing.
+    /// Composes the (optionally badged) lobster at every requested size and packs
+    /// the frames into a single multi-resolution .ico byte array. A null
+    /// <paramref name="dotColor"/> renders the plain lobster. Exposed for testing.
     /// </summary>
-    internal static byte[] CreateIcoBytes(Bitmap baseImage, Color dotColor, IReadOnlyList<int> sizes)
+    internal static byte[] CreateIcoBytes(Bitmap baseImage, Color? dotColor, bool withDash, IReadOnlyList<int> sizes)
     {
         var frames = new List<byte[]>(sizes.Count);
         foreach (var size in sizes)
         {
-            using var composed = Compose(baseImage, size, dotColor);
+            using var composed = Compose(baseImage, size, dotColor, withDash);
             using var ms = new MemoryStream();
             composed.Save(ms, ImageFormat.Png);
             frames.Add(ms.ToArray());
@@ -139,7 +162,7 @@ internal static class StatusBadgeIconFactory
         return maxFraction + (t * (minFraction - maxFraction));
     }
 
-    internal static Bitmap Compose(Bitmap baseImage, int size, Color dotColor)
+    internal static Bitmap Compose(Bitmap baseImage, int size, Color? dotColor, bool withDash = false)
     {
         var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         bmp.SetResolution(96, 96);
@@ -152,6 +175,10 @@ internal static class StatusBadgeIconFactory
         g.Clear(Color.Transparent);
 
         g.DrawImage(baseImage, new Rectangle(0, 0, size, size));
+
+        // No badge for healthy states: render the plain lobster.
+        if (dotColor is not Color color)
+            return bmp;
 
         // Dot geometry: bottom-right corner with a white ring for contrast against
         // both the red mascot and arbitrary taskbar backgrounds. The dot scales by
@@ -167,8 +194,19 @@ internal static class StatusBadgeIconFactory
         using (var ringBrush = new SolidBrush(Color.White))
             g.FillEllipse(ringBrush, outerX, outerY, outer, outer);
 
-        using (var dotBrush = new SolidBrush(dotColor))
+        using (var dotBrush = new SolidBrush(color))
             g.FillEllipse(dotBrush, outerX + ring, outerY + ring, dot, dot);
+
+        // Error badge carries a white "-" (minus) glyph centred on the dot.
+        if (withDash)
+        {
+            float cx = outerX + ring + (dot / 2f);
+            float cy = outerY + ring + (dot / 2f);
+            float dashW = dot * 0.52f;
+            float dashH = Math.Max(2f, dot * 0.18f);
+            using var dashBrush = new SolidBrush(Color.White);
+            g.FillRectangle(dashBrush, cx - (dashW / 2f), cy - (dashH / 2f), dashW, dashH);
+        }
 
         return bmp;
     }

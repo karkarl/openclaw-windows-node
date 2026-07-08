@@ -1,5 +1,6 @@
 using OpenClawTray.Helpers;
 using OpenClawTray.Services;
+using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -9,8 +10,9 @@ using Xunit;
 namespace OpenClaw.Tray.Tests;
 
 /// <summary>
-/// Verifies the lobster tray/desktop icon is composed with a status dot in the
-/// bottom-right corner, mirroring the companion-app connection status.
+/// Verifies the lobster tray/desktop icon badge policy: only attention states are
+/// badged (grey dot for disconnected, red dot with a "-" for error); healthy
+/// states (connected/connecting) render the plain lobster with no badge.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class StatusBadgeIconFactoryTests
@@ -26,6 +28,26 @@ public sealed class StatusBadgeIconFactoryTests
         Assert.Equal(Color.FromArgb(r, g, b), color);
     }
 
+    [Theory]
+    [InlineData((int)ConnectionStatusAccent.Neutral, true)]
+    [InlineData((int)ConnectionStatusAccent.Critical, true)]
+    [InlineData((int)ConnectionStatusAccent.Success, false)]
+    [InlineData((int)ConnectionStatusAccent.Caution, false)]
+    public void ShouldBadge_OnlyNeutralAndCritical(int accent, bool expected)
+    {
+        Assert.Equal(expected, StatusBadgeIconFactory.ShouldBadge((ConnectionStatusAccent)accent));
+    }
+
+    [Theory]
+    [InlineData((int)ConnectionStatusAccent.Critical, true)]
+    [InlineData((int)ConnectionStatusAccent.Neutral, false)]
+    [InlineData((int)ConnectionStatusAccent.Success, false)]
+    [InlineData((int)ConnectionStatusAccent.Caution, false)]
+    public void HasDash_OnlyCritical(int accent, bool expected)
+    {
+        Assert.Equal(expected, StatusBadgeIconFactory.HasDash((ConnectionStatusAccent)accent));
+    }
+
     [Fact]
     public void Compose_DrawsDotInBottomRightCorner()
     {
@@ -34,16 +56,65 @@ public sealed class StatusBadgeIconFactoryTests
         // Fully transparent base so the only opaque pixels come from the dot.
 
         using var composed = StatusBadgeIconFactory.Compose(
-            baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Success));
+            baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Neutral));
 
-        // Bottom-right region carries the coloured dot.
+        // Bottom-right region carries the dot.
         var dotPixel = composed.GetPixel((int)(size * 0.80), (int)(size * 0.80));
         Assert.True(dotPixel.A > 200, "Dot should be opaque in the bottom-right corner");
-        Assert.True(dotPixel.G > dotPixel.R && dotPixel.G > dotPixel.B, "Success dot should read green");
 
         // Top-left stays transparent (no badge, base was empty).
         var cornerPixel = composed.GetPixel(2, 2);
         Assert.True(cornerPixel.A < 40, "Top-left corner should remain transparent");
+    }
+
+    [Fact]
+    public void Compose_NullColor_RendersPlainLobsterWithNoBadge()
+    {
+        const int size = 64;
+        using var baseImage = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+        // Transparent base + null dot colour => the whole icon stays transparent.
+
+        using var composed = StatusBadgeIconFactory.Compose(baseImage, size, dotColor: null);
+
+        var dotPixel = composed.GetPixel((int)(size * 0.80), (int)(size * 0.80));
+        Assert.True(dotPixel.A < 40, "Healthy state should render no dot in the bottom-right corner");
+    }
+
+    [Fact]
+    public void Compose_ErrorState_DrawsRedDotWithWhiteDash()
+    {
+        const int size = 64;
+        using var baseImage = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+
+        using var composed = StatusBadgeIconFactory.Compose(
+            baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Critical), withDash: true);
+
+        var (cx, cy, dot) = DotCenter(size);
+
+        // Centre of the dot is covered by the white minus glyph.
+        var centre = composed.GetPixel((int)cx, (int)cy);
+        Assert.True(centre.R > 230 && centre.G > 230 && centre.B > 230, "Dash centre should be white");
+
+        // Below the dash (still inside the dot) reads red.
+        var belowDash = composed.GetPixel((int)cx, (int)(cy + dot * 0.30f));
+        Assert.True(belowDash.A > 200 && belowDash.R > belowDash.G && belowDash.R > belowDash.B,
+            "Dot around the dash should read red");
+    }
+
+    [Fact]
+    public void Compose_UsesDistinctColorPerAccent()
+    {
+        const int size = 64;
+        using var baseImage = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+        var px = (int)(size * 0.80);
+
+        using var neutral = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Neutral));
+        using var critical = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Critical));
+
+        var gray = neutral.GetPixel(px, px);
+        var red = critical.GetPixel(px, px);
+        Assert.True(Math.Abs(gray.R - gray.G) < 20 && Math.Abs(gray.G - gray.B) < 20, "Neutral dot is grey");
+        Assert.True(red.R > red.G && red.R > red.B, "Critical dot is red-dominant");
     }
 
     [Fact]
@@ -64,29 +135,13 @@ public sealed class StatusBadgeIconFactoryTests
     }
 
     [Fact]
-    public void Compose_UsesDistinctColorPerAccent()
-    {
-        const int size = 64;
-        using var baseImage = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-        var px = (int)(size * 0.80);
-
-        using var success = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Success));
-        using var critical = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Critical));
-
-        var green = success.GetPixel(px, px);
-        var red = critical.GetPixel(px, px);
-        Assert.True(green.G > green.R, "Success dot is green-dominant");
-        Assert.True(red.R > red.G, "Critical dot is red-dominant");
-    }
-
-    [Fact]
     public void CreateIcoBytes_ProducesValidMultiSizeIcon()
     {
         var sizes = new[] { 16, 32, 48 };
         using var baseImage = new Bitmap(256, 256, PixelFormat.Format32bppArgb);
 
         var bytes = StatusBadgeIconFactory.CreateIcoBytes(
-            baseImage, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Caution), sizes);
+            baseImage, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Critical), withDash: true, sizes);
 
         // ICONDIR header: reserved=0, type=1 (icon), count=frames.
         Assert.Equal(0, bytes[0] | bytes[1]);
@@ -101,10 +156,36 @@ public sealed class StatusBadgeIconFactoryTests
     }
 
     [Fact]
+    public void CreateIcoBytes_NullColor_ProducesValidPlainIcon()
+    {
+        var sizes = new[] { 16, 32 };
+        using var baseImage = new Bitmap(256, 256, PixelFormat.Format32bppArgb);
+
+        var bytes = StatusBadgeIconFactory.CreateIcoBytes(baseImage, dotColor: null, withDash: false, sizes);
+
+        using var stream = new MemoryStream(bytes);
+        using var icon = new Icon(stream);
+        Assert.NotNull(icon);
+    }
+
+    [Fact]
     public void IconSizes_CoverTrayAndTaskbarResolutions()
     {
         Assert.Contains(16, StatusBadgeIconFactory.IconSizes);   // tray at 100% DPI
         Assert.Contains(32, StatusBadgeIconFactory.IconSizes);   // tray at 200% DPI / taskbar
         Assert.Contains(256, StatusBadgeIconFactory.IconSizes);  // high-DPI taskbar
+    }
+
+    // Mirrors the dot geometry in StatusBadgeIconFactory.Compose so tests can sample
+    // the dot centre precisely.
+    private static (float Cx, float Cy, float Dot) DotCenter(int size)
+    {
+        float dot = size * (float)StatusBadgeIconFactory.DotFraction(size);
+        float ring = Math.Max(1f, dot * 0.14f);
+        float pad = size * 0.02f;
+        float outer = dot + (ring * 2f);
+        float outerX = size - outer - pad;
+        float outerY = size - outer - pad;
+        return (outerX + ring + (dot / 2f), outerY + ring + (dot / 2f), dot);
     }
 }
