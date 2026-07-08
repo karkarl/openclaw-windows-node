@@ -64,6 +64,26 @@ internal static class ConnectionStatusPresenter
         },
     };
 
+    /// <summary>
+    /// Resolves the status accent (Success/Caution/Critical/Neutral) used for the
+    /// companion-app status dot, so the tray and desktop icons can mirror it.
+    /// Prefers the richer <see cref="OverallConnectionState"/> when available and
+    /// falls back to the legacy <see cref="ConnectionStatus"/>.
+    /// </summary>
+    public static ConnectionStatusAccent Accent(OverallConnectionState? overall, ConnectionStatus fallback)
+    {
+        if (overall is OverallConnectionState state)
+            return Pill(state).Accent;
+
+        return fallback switch
+        {
+            ConnectionStatus.Connected => ConnectionStatusAccent.Success,
+            ConnectionStatus.Connecting => ConnectionStatusAccent.Caution,
+            ConnectionStatus.Error => ConnectionStatusAccent.Critical,
+            _ => ConnectionStatusAccent.Neutral,
+        };
+    }
+
     public static (string LabelKey, ConnectionStatusAccent Accent) Pill(OverallConnectionState overall) => overall switch
     {
         OverallConnectionState.Connected or OverallConnectionState.Ready =>

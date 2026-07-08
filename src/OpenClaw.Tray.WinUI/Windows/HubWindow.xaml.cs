@@ -114,7 +114,7 @@ public sealed partial class HubWindow : WindowEx
 
         this.SetWindowSize(1000, 650);
         this.CenterOnScreen();
-        this.SetIcon(IconHelper.GetStatusIconPath(ConnectionStatus.Connected));
+        ApplyWindowStatusIcon(ConnectionStatusAccent.Neutral);
 
         RootGrid.SizeChanged += OnRootGridSizeChanged;
 
@@ -771,6 +771,7 @@ public sealed partial class HubWindow : WindowEx
         var (text, accent) = ComputePillState(status, snapshot);
         StatusPillText.Text = text;
         StatusPillDot.Fill = AccentBrush(accent);
+        ApplyWindowStatusIcon(accent);
     }
 
     internal void UpdateTitleBarStatus(GatewayConnectionSnapshot snapshot, ConnectionStatus status)
@@ -778,6 +779,21 @@ public sealed partial class HubWindow : WindowEx
         var (text, accent) = ComputePillState(status, snapshot);
         StatusPillText.Text = text;
         StatusPillDot.Fill = AccentBrush(accent);
+        ApplyWindowStatusIcon(accent);
+    }
+
+    // Mirrors the companion-app status dot onto the desktop/taskbar window icon:
+    // the lobster with a coloured dot in the bottom-right corner.
+    private void ApplyWindowStatusIcon(ConnectionStatusAccent accent)
+    {
+        try
+        {
+            this.SetIcon(StatusBadgeIconFactory.GetBadgedIconPath(accent));
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to update window status icon: {ex.Message}");
+        }
     }
 
     private static (string Text, ConnectionStatusAccent Accent) ComputePillState(

@@ -796,6 +796,34 @@ public sealed class AppRefactorContractTests
     }
 
     [Fact]
+    public void TrayCoordinator_UsesStatusBadgedLobsterIcon()
+    {
+        var method = ExtractMethod(ReadCoordinatorSource(), "UpdateTrayIcon");
+
+        // The tray lobster mirrors the companion-app status dot instead of the
+        // static openclaw.ico, so it must resolve the accent and the badged icon.
+        Assert.Contains("ConnectionStatusPresenter.Accent(", method);
+        Assert.Contains("StatusBadgeIconFactory.GetBadgedIconPath(", method);
+        Assert.DoesNotContain("\"openclaw.ico\"", method);
+    }
+
+    [Fact]
+    public void HubWindow_DesktopIconMirrorsStatusAccent()
+    {
+        var root = TestRepositoryPaths.GetRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(
+            root, "src", "OpenClaw.Tray.WinUI", "Windows", "HubWindow.xaml.cs"));
+
+        // The desktop/taskbar icon is refreshed from the same accent as the pill.
+        var apply = ExtractMethod(source, "ApplyWindowStatusIcon");
+        Assert.Contains("StatusBadgeIconFactory.GetBadgedIconPath(accent)", apply);
+
+        // Both status-update paths must repaint the window icon.
+        var update = ExtractMethod(source, "UpdateTitleBarStatus");
+        Assert.Contains("ApplyWindowStatusIcon(accent)", update);
+    }
+
+    [Fact]
     public void AppNotifications_ConnectionIssueUsesStableDedupeKey()
     {
         var source = ReadAppSources();

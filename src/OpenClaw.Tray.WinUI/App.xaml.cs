@@ -760,7 +760,10 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // Pre-create tray menu window at startup to avoid creation crashes later
         InitializeTrayMenuWindow();
         
-        var iconPath = IconHelper.GetStatusIconPath(ConnectionStatus.Disconnected);
+        // Start with the status-badged lobster (neutral/gray dot) so the tray icon
+        // mirrors the companion-app status from first paint, even before the first
+        // connection-state update arrives.
+        var iconPath = StatusBadgeIconFactory.GetBadgedIconPath(ConnectionStatusAccent.Neutral);
         _trayIcon = new TrayIcon(1, iconPath, BuildTrayTooltip());
         _trayIconCoordinator = new TrayIconCoordinator(
             _trayIcon,

@@ -32,6 +32,35 @@ public sealed class ConnectionStatusPresenterTests
     }
 
     [Theory]
+    [InlineData(OverallConnectionState.Connected, (int)ConnectionStatusAccent.Success)]
+    [InlineData(OverallConnectionState.Ready, (int)ConnectionStatusAccent.Success)]
+    [InlineData(OverallConnectionState.Connecting, (int)ConnectionStatusAccent.Caution)]
+    [InlineData(OverallConnectionState.Degraded, (int)ConnectionStatusAccent.Caution)]
+    [InlineData(OverallConnectionState.PairingRequired, (int)ConnectionStatusAccent.Caution)]
+    [InlineData(OverallConnectionState.Error, (int)ConnectionStatusAccent.Critical)]
+    [InlineData(OverallConnectionState.Idle, (int)ConnectionStatusAccent.Neutral)]
+    [InlineData(OverallConnectionState.Disconnecting, (int)ConnectionStatusAccent.Neutral)]
+    public void Accent_PrefersOverallState_MatchingPill(OverallConnectionState overall, int expectedAccent)
+    {
+        // The tray/desktop status dot must mirror the companion-app pill accent.
+        Assert.Equal((ConnectionStatusAccent)expectedAccent,
+            ConnectionStatusPresenter.Accent(overall, ConnectionStatus.Disconnected));
+        Assert.Equal(ConnectionStatusPresenter.Pill(overall).Accent,
+            ConnectionStatusPresenter.Accent(overall, ConnectionStatus.Disconnected));
+    }
+
+    [Theory]
+    [InlineData(ConnectionStatus.Connected, (int)ConnectionStatusAccent.Success)]
+    [InlineData(ConnectionStatus.Connecting, (int)ConnectionStatusAccent.Caution)]
+    [InlineData(ConnectionStatus.Error, (int)ConnectionStatusAccent.Critical)]
+    [InlineData(ConnectionStatus.Disconnected, (int)ConnectionStatusAccent.Neutral)]
+    public void Accent_FallsBackToLegacyStatus_WhenOverallNull(ConnectionStatus status, int expectedAccent)
+    {
+        Assert.Equal((ConnectionStatusAccent)expectedAccent,
+            ConnectionStatusPresenter.Accent(null, status));
+    }
+
+    [Theory]
     [InlineData(OverallConnectionState.Connected, ConnectionStatus.Connected)]
     [InlineData(OverallConnectionState.Ready, ConnectionStatus.Connected)]
     [InlineData(OverallConnectionState.Connecting, ConnectionStatus.Connecting)]

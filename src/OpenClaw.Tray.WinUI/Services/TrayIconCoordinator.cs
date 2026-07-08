@@ -1,4 +1,5 @@
 using Microsoft.UI.Dispatching;
+using OpenClawTray.Helpers;
 using System;
 using WinUIEx;
 
@@ -39,8 +40,10 @@ internal sealed class TrayIconCoordinator
         if (!_isAlive())
             return;
 
-        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "openclaw.ico");
-        var tooltip = BuildTrayTooltip();
+        var snapshot = _captureSnapshot();
+        var accent = ConnectionStatusPresenter.Accent(snapshot.OverallState, snapshot.Status);
+        var iconPath = StatusBadgeIconFactory.GetBadgedIconPath(accent);
+        var tooltip = new TrayTooltipBuilder(snapshot).Build();
 
         try
         {
@@ -60,7 +63,4 @@ internal sealed class TrayIconCoordinator
 
         _trayIcon.Tooltip = tooltip;
     }
-
-    private string BuildTrayTooltip() =>
-        new TrayTooltipBuilder(_captureSnapshot()).Build();
 }
