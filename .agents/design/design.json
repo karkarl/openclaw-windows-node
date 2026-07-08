@@ -74,6 +74,7 @@
     { "name": "sm",   "value": "4px",   "usage": "Buttons, inputs, small controls. Fluent ControlCornerRadius." },
     { "name": "md",   "value": "8px",   "usage": "Cards, dialogs, flyouts. Fluent OverlayCornerRadius." },
     { "name": "lg",   "value": "12px",  "usage": "Large panels and grouped surfaces." },
+    { "name": "bubble", "value": "16px", "usage": "Chat message bubbles — intentionally friendlier than control radii. Mirrors OpenClawChatTimeline CornerRadius 16." },
     { "name": "pill", "value": "999px", "usage": "Status pills, badges, toggles." }
   ],
   "shadows": [
