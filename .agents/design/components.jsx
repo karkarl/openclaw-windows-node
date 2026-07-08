@@ -63,10 +63,62 @@ export function Badge({ children = "Connected", tone = "positive" }) {
 // CornerRadius 16, Thickness 16,12; user = AccentFillColorSecondary + TextOnAccent,
 // assistant = SubtleFillColorSecondary + ControlStroke). One accent, and it still
 // means "you" — the user's own words ride the system accent.
-export function ChatBubble({ role = "assistant", children = "Paired to the gateway — 6 Windows node capabilities are live." }) {
-  const isUser = role === "user";
+//
+// Every bubble carries a muted timestamp footer. Assistant bubbles add two things the
+// app already shows, inline in that footer: the context-usage readout — the same
+// `used/context (pct%)` string ChatUsageFormatter produces (e.g. "12.5K/200K (6%)") —
+// followed by a subtle Copy affordance (low-emphasis until hover). This mirrors the
+// native timeline, where the footer reads timestamp · usage · actions. State/metadata
+// stay muted so the message itself, not its chrome, holds the hierarchy.
+function CopyGlyph() {
+  // Minimal clipboard mark — font-independent stand-in for Fluent glyph \uE8C8.
   return (
-    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+// Assistant avatar. Native chat shows a 36×36 circle carrying the OpenClaw app icon on
+// a subtle fill with a 1px hairline border (OpenClawChatTimeline: AssistantAvatar, bg
+// SubtleFillColorTertiary, border ControlStrokeColorDefault, top-aligned, shown on the
+// first entry of an agent turn). Here we stand in a font-independent sparkle mark in the
+// muted foreground — swap for the real logo asset in-app.
+function AssistantAvatar() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        flex: "0 0 auto",
+        width: "36px",
+        height: "36px",
+        borderRadius: "var(--radius-pill)",
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-line)",
+        color: "var(--color-muted)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2.5l1.7 5.1a4 4 0 0 0 2.7 2.7l5.1 1.7-5.1 1.7a4 4 0 0 0-2.7 2.7L12 21.5l-1.7-5.1a4 4 0 0 0-2.7-2.7L2.5 12l5.1-1.7a4 4 0 0 0 2.7-2.7L12 2.5z" />
+      </svg>
+    </div>
+  );
+}
+
+export function ChatBubble({
+  role = "assistant",
+  time = "2:14 PM",
+  usage = "12.5K/200K (6%)",
+  children = "Paired to the gateway — 6 Windows node capabilities are live.",
+}) {
+  const isUser = role === "user";
+  const content = (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", gap: "var(--space-1)" }}>
       <div
         style={{
           maxWidth: "min(80%, 520px)",   // caps at 720px in the app; tighter here to read as a bubble
@@ -82,6 +134,61 @@ export function ChatBubble({ role = "assistant", children = "Paired to the gatew
       >
         {children}
       </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          padding: "0 var(--space-2)",
+          fontFamily: "var(--font-body)",
+          fontSize: "12px",
+          lineHeight: "16px",
+          color: "var(--color-muted)",
+        }}
+      >
+        <span>{time}</span>
+        {!isUser && usage && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{usage}</span>
+            <button
+              type="button"
+              title="Copy"
+              aria-label="Copy message"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "20px",
+                height: "20px",
+                padding: 0,
+                border: "none",
+                borderRadius: "var(--radius-sm)",
+                background: "transparent",
+                color: "var(--color-muted)",
+                opacity: 0.65,   // subtle at rest; the app raises it on hover
+                cursor: "pointer",
+                transform: "translateY(2px)",   // nudge down to sit on the caption baseline
+              }}
+            >
+              <CopyGlyph />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  if (isUser) {
+    return <div style={{ display: "flex", justifyContent: "flex-end" }}>{content}</div>;
+  }
+
+  // Assistant: avatar sits to the LEFT of the bubble, top-aligned (matches native's
+  // 8px bubbleSideMargin gap).
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
+      <AssistantAvatar />
+      {content}
     </div>
   );
 }
@@ -127,12 +234,15 @@ export function ChatComposer({ placeholder = "Message OpenClaw…" }) {
   );
 }
 
-// A short thread: the "does chat hang together" check — two bubbles and the composer.
+// A short thread: the "does chat hang together" check — a user turn and an assistant
+// turn (with its Copy affordance + context-usage readout), then the composer.
 export function ChatThread() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", maxWidth: "560px" }}>
-      <ChatBubble role="user">Can you list the Windows node capabilities?</ChatBubble>
-      <ChatBubble role="assistant">Paired to the gateway — 6 capabilities are live, including system.run and clipboard access.</ChatBubble>
+      <ChatBubble role="user" time="2:14 PM">Can you list the Windows node capabilities?</ChatBubble>
+      <ChatBubble role="assistant" time="2:14 PM" usage="12.5K/200K (6%)">
+        Paired to the gateway — 6 capabilities are live, including system.run and clipboard access.
+      </ChatBubble>
       <ChatComposer />
     </div>
   );
