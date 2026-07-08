@@ -58,11 +58,22 @@ public sealed class ChatTimelineRenderIdentityContractTests
         Assert.Contains("QueuedMessagesByThread: queuedMessagesCopy", provider);
         Assert.Contains("snapshot.QueuedMessagesByThread", root);
         Assert.Contains("QueuedMessages: queuedMessages", root);
+        Assert.Contains("OnQueuedMessageCancel:", root);
         Assert.Contains("IReadOnlyList<ChatQueuedMessage>? QueuedMessages = null", composer);
+        Assert.Contains("Action<string>? OnQueuedMessageCancel = null", composer);
         Assert.Contains("AvailableHeight: chatSurfaceHeight.Value", root);
         Assert.Contains("queuedPanel", composer);
         Assert.Contains("composerInput", composer);
         Assert.Contains("RenderQueuedMessages", composer);
+        Assert.Contains("Chat_Composer_QueuedMessageCancel", composer);
+        Assert.Contains("RenderQueueCancelButton", composer);
+        Assert.Contains("ChatQueuedMessageSendState.Sending", composer);
+        Assert.Contains("Chat_Composer_QueuedMessageCancelAutomationFormat", composer);
+        Assert.Contains("Chat_Composer_QueuedMessageRemoveFailed", composer);
+        Assert.Contains("Chat_Composer_QueuedMessageRemoveFailedAutomationFormat", composer);
+        Assert.Contains("ChatQueuedMessageRemoveFailed", composer);
+        Assert.Contains("ChatQueuedMessageCancel", composer);
+        Assert.Contains("}_{message.Id}", composer);
         Assert.Contains("Chat_Composer_QueuedCountFormat", composer);
         Assert.Contains("Chat_Composer_QueuedMessageAutomationFormat", composer);
         Assert.Contains("Chat_Composer_QueuedMessageFailedAutomationFormat", composer);
@@ -75,6 +86,21 @@ public sealed class ChatTimelineRenderIdentityContractTests
         Assert.DoesNotContain("QueuedMessages", timeline);
         Assert.DoesNotContain("queued-section:", timeline);
         Assert.DoesNotContain("Steer", composer);
+    }
+
+    [Fact]
+    public void Composer_DisablesMessageOptionDropdownsWhileTurnOrPendingQueueSendIsActive()
+    {
+        var composer = Read("src", "OpenClaw.Tray.WinUI", "Chat", "OpenClawComposer.cs");
+        var root = Read("src", "OpenClaw.Tray.WinUI", "Chat", "OpenClawChatRoot.cs");
+
+        Assert.Contains("var messageOptionControlsEnabled = !Props.MessageOptionsDisabled;", composer);
+        Assert.Contains("MessageOptionsDisabled: turnActiveOverride || hasPendingQueuedSend", root);
+        Assert.Contains("message.SendState is ChatQueuedMessageSendState.Queued or ChatQueuedMessageSendState.Sending", root);
+        Assert.Equal(2, Regex.Matches(composer, "IsEnabled = messageOptionControlsEnabled").Count);
+        Assert.DoesNotMatch(
+            new Regex(@"var\s+channelCombo[\s\S]*?IsEnabled\s*=\s*messageOptionControlsEnabled[\s\S]*?//\s+── Model picker", RegexOptions.Multiline),
+            composer);
     }
 
     [Fact]

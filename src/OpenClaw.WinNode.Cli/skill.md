@@ -371,11 +371,12 @@ Returns `{ url, credentialSource, usesSharedGatewayToken, hasTokenQuery }`.
 
 ### app.chat.snapshot
 Read the current native chat snapshot for local automation and diagnostics.
-**READ-ALL:** returns recent chat text from the selected timeline.
+**READ-ALL:** returns recent chat text from the selected timeline and outgoing
+queue text.
 ```
 {"threadId": "string"}       // optional; "sessionKey" alias also accepted
 ```
-Returns `{ connectionStatus, defaultThreadId, composeTarget, threads, selectedTimeline }`.
+Returns `{ connectionStatus, defaultThreadId, composeTarget, threads, queue, selectedTimeline }`.
 
 ### app.chat.send
 Send a message through the same native chat provider used by the Chat UI.
@@ -395,6 +396,31 @@ Reset the target chat session through the gateway `sessions.reset` path.
 When `threadId`/`sessionKey` is omitted this resets the current compose/default
 thread, which usually means the active chat session. Returns `{ reset, threadId,
 error? }`.
+
+### app.chat.queue.list
+List native chat outgoing queue entries.
+**READ-ALL:** returns queued message text.
+```
+{"threadId": "string"}       // optional; "sessionKey" alias also accepted
+```
+When `threadId`/`sessionKey` is omitted this returns all queued threads. Returns:
+`{ defaultThreadId, requestedThreadId, totalCount, selectedThread, threads }`
+where each thread has `{ threadId, count, messages }`, and each message has
+`{ id, text, createdAt, sendState, errorText, canCancel }`. Queue message IDs
+are ephemeral UI/provider IDs; read them from the current `app.chat.queue.list`
+or `app.chat.snapshot` response and do not cache them across app lifetimes.
+
+### app.chat.queue.cancel
+Cancel/remove one native chat outgoing queue entry before it is sent.
+```
+{
+  "queuedMessageId": "string", // required; from the current app.chat.queue.list or app.chat.snapshot queue
+  "threadId": "string"         // required; "sessionKey" alias also accepted
+}
+```
+Only `Queued` and `Failed` entries can be removed. `Sending` entries may already
+have reached the gateway and are not canceled. Returns
+`{ canceled, threadId, queuedMessageId, remainingCount, error? }`.
 
 ## Location (location.*)
 

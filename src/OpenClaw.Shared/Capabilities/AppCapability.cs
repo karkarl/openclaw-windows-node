@@ -29,6 +29,8 @@ public class AppCapability : NodeCapabilityBase
         "app.chat.snapshot",
         "app.chat.send",
         "app.chat.reset",
+        "app.chat.queue.list",
+        "app.chat.queue.cancel",
     };
 
     public override IReadOnlyList<string> Commands => _commands;
@@ -48,6 +50,8 @@ public class AppCapability : NodeCapabilityBase
     public Func<string?, Task<object?>>? ChatSnapshotHandler;
     public Func<string?, string, Task<object?>>? ChatSendHandler;
     public Func<string?, Task<object?>>? ChatResetHandler;
+    public Func<string?, Task<object?>>? ChatQueueListHandler;
+    public Func<string?, string, Task<object?>>? ChatQueueCancelHandler;
 
     public AppCapability(IOpenClawLogger logger) : base(logger) { }
 
@@ -69,6 +73,8 @@ public class AppCapability : NodeCapabilityBase
             "app.chat.snapshot" => await HandleChatSnapshot(request),
             "app.chat.send" => await HandleChatSend(request),
             "app.chat.reset" => await HandleChatReset(request),
+            "app.chat.queue.list" => await HandleChatQueueList(request),
+            "app.chat.queue.cancel" => await HandleChatQueueCancel(request),
             _ => Error($"Unknown command: {request.Command}")
         };
     }
@@ -203,7 +209,7 @@ public class AppCapability : NodeCapabilityBase
         if (ChatSnapshotHandler == null)
             return Error("Chat snapshot handler not registered");
 
-        var result = await ChatSnapshotHandler(GetOptionalThreadId(request));
+        var result = await ChatSnapshotHandler(GetThreadIdOrSessionKeyArg(request));
         return Success(result);
     }
 
@@ -216,7 +222,7 @@ public class AppCapability : NodeCapabilityBase
         if (string.IsNullOrWhiteSpace(message))
             return Error("Missing required arg: message");
 
-        var result = await ChatSendHandler(GetOptionalThreadId(request), message);
+        var result = await ChatSendHandler(GetThreadIdOrSessionKeyArg(request), message);
         return Success(result);
     }
 
@@ -225,11 +231,37 @@ public class AppCapability : NodeCapabilityBase
         if (ChatResetHandler == null)
             return Error("Chat reset handler not registered");
 
-        var result = await ChatResetHandler(GetOptionalThreadId(request));
+        var result = await ChatResetHandler(GetThreadIdOrSessionKeyArg(request));
         return Success(result);
     }
 
-    private string? GetOptionalThreadId(NodeInvokeRequest request) =>
+    private async Task<NodeInvokeResponse> HandleChatQueueList(NodeInvokeRequest request)
+    {
+        if (ChatQueueListHandler == null)
+            return Error("Chat queue list handler not registered");
+
+        var result = await ChatQueueListHandler(GetThreadIdOrSessionKeyArg(request));
+        return Success(result);
+    }
+
+    private async Task<NodeInvokeResponse> HandleChatQueueCancel(NodeInvokeRequest request)
+    {
+        if (ChatQueueCancelHandler == null)
+            return Error("Chat queue cancel handler not registered");
+
+        var queuedMessageId = GetStringArg(request.Args, "queuedMessageId");
+        if (string.IsNullOrWhiteSpace(queuedMessageId))
+            return Error("Missing required arg: queuedMessageId");
+
+        var threadId = GetThreadIdOrSessionKeyArg(request);
+        if (string.IsNullOrWhiteSpace(threadId))
+            return Error("Missing required arg: threadId");
+
+        var result = await ChatQueueCancelHandler(threadId, queuedMessageId);
+        return Success(result);
+    }
+
+    private string? GetThreadIdOrSessionKeyArg(NodeInvokeRequest request) =>
         GetStringArg(request.Args, "threadId")
         ?? GetStringArg(request.Args, "sessionKey");
 }

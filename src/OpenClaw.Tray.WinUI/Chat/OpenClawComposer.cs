@@ -50,6 +50,7 @@ public record OpenClawComposerProps(
     string? CurrentModel,
     string? CurrentModelProvider,
     string? CurrentThinkingLevel,
+    bool MessageOptionsDisabled,
     Action<string, IReadOnlyList<ChatAttachment>> OnSend,
     Action OnStop,
     Action<string> OnChannelChanged,
@@ -60,6 +61,7 @@ public record OpenClawComposerProps(
     Action? OnAttachClick = null,
     IReadOnlyList<ChatAttachment>? PendingAttachments = null,
     IReadOnlyList<ChatQueuedMessage>? QueuedMessages = null,
+    Action<string>? OnQueuedMessageCancel = null,
     Action<ChatAttachment>? OnAttachmentRemoved = null,
     bool IsSpeakerMuted = false,
     Action? OnSpeakerToggle = null,
@@ -233,8 +235,8 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         };
         var sendActionRef = UseRef<Action>(sendAction);
         sendActionRef.Current = sendAction;
-
         var isConnected = Props.ConnectionState == "connected";
+        var messageOptionControlsEnabled = !Props.MessageOptionsDisabled;
         var placeholder = Props.ConnectionState switch
         {
             "connected" => LocalizationHelper.GetString("Chat_Composer_Placeholder_Connected"),
@@ -371,6 +373,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                     CornerRadius = composerCornerRadius,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Center,
+                    IsEnabled = messageOptionControlsEnabled,
                 };
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                     cb,
@@ -430,6 +433,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 cb.Padding = new Thickness(8, 0, 4, 0);
                 cb.CornerRadius = composerCornerRadius;
                 cb.HorizontalAlignment = HorizontalAlignment.Stretch;
+                cb.IsEnabled = messageOptionControlsEnabled;
             }).VAlign(VerticalAlignment.Center);
 
         Element dropdownsRow = Grid([GridSize.Star(1.2), GridSize.Star(), GridSize.Star(0.62)], [GridSize.Auto],
@@ -926,8 +930,58 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 CultureInfo.CurrentCulture,
                 LocalizationHelper.GetString("Chat_Composer_QueuedCountFormat"),
                 queuedMessages.Count);
+            Element RenderQueueCancelButton(ChatQueuedMessage message, int index)
+            {
+                if (message.SendState == ChatQueuedMessageSendState.Sending || Props.OnQueuedMessageCancel is null)
+                    return Empty();
 
-            Element RenderQueuedCard(ChatQueuedMessage message)
+                var failed = message.SendState == ChatQueuedMessageSendState.Failed;
+                var cancelTooltip = LocalizationHelper.GetString(failed
+                    ? "Chat_Composer_QueuedMessageRemoveFailed"
+                    : "Chat_Composer_QueuedMessageCancel");
+                var buttonName = string.Format(
+                    CultureInfo.CurrentCulture,
+                    LocalizationHelper.GetString(failed
+                        ? "Chat_Composer_QueuedMessageRemoveFailedAutomationFormat"
+                        : "Chat_Composer_QueuedMessageCancelAutomationFormat"),
+                    index + 1,
+                    FormatQueuedMessageAutomationSnippet(message.Text));
+                return Button(
+                        TextBlock("\uE711")
+                            .Set(t =>
+                            {
+                                t.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
+                                t.FontSize = 11;
+                                t.HorizontalAlignment = HorizontalAlignment.Center;
+                                t.VerticalAlignment = VerticalAlignment.Center;
+                            }),
+                        () => Props.OnQueuedMessageCancel?.Invoke(message.Id))
+                    .Set(b =>
+                    {
+                        b.Width = 28;
+                        b.Height = 28;
+                        b.MinWidth = 0;
+                        b.MinHeight = 0;
+                        b.Padding = new Thickness(0);
+                        b.CornerRadius = new CornerRadius(4);
+                        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
+                            b,
+                            $"{(failed ? "ChatQueuedMessageRemoveFailed" : "ChatQueuedMessageCancel")}_{message.Id}");
+                    })
+                    .Resources(r =>
+                    {
+                        r.Set("ButtonBackground", new SolidColorBrush(Colors.Transparent));
+                        r.Set("ButtonBackgroundPointerOver", Ref("SubtleFillColorSecondaryBrush"));
+                        r.Set("ButtonBackgroundPressed", Ref("SubtleFillColorTertiaryBrush"));
+                        r.Set("ButtonBorderBrush", new SolidColorBrush(Colors.Transparent));
+                        r.Set("ButtonBorderBrushPointerOver", new SolidColorBrush(Colors.Transparent));
+                        r.Set("ButtonBorderBrushPressed", new SolidColorBrush(Colors.Transparent));
+                    })
+                    .AutomationName(buttonName)
+                    .SetToolTip(cancelTooltip);
+            }
+
+            Element RenderQueuedCard(ChatQueuedMessage message, int index)
             {
                 var failed = message.SendState == ChatQueuedMessageSendState.Failed;
                 var automationName = string.Format(
@@ -961,17 +1015,24 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                     }
                 }
 
+                var messageBody = VStack(6,
+                    stateLabel,
+                    TextBlock(message.Text)
+                        .Set(t =>
+                        {
+                            t.TextWrapping = TextWrapping.Wrap;
+                            t.IsTextSelectionEnabled = true;
+                            t.Foreground = textFg;
+                        }),
+                    details
+                );
+
                 return Border(
-                    VStack(6,
-                        stateLabel,
-                        TextBlock(message.Text)
-                            .Set(t =>
-                            {
-                                t.TextWrapping = TextWrapping.Wrap;
-                                t.IsTextSelectionEnabled = true;
-                                t.Foreground = textFg;
-                            }),
-                        details
+                    Grid([GridSize.Star(), GridSize.Auto], [GridSize.Auto],
+                        messageBody.Grid(row: 0, column: 0),
+                        RenderQueueCancelButton(message, index)
+                            .Grid(row: 0, column: 1)
+                            .VAlign(VerticalAlignment.Top)
                     )
                 )
                 .Background(cardBg)
@@ -1376,6 +1437,15 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             Math.Round(height * ExpandedQueuedMessagesHeightRatio),
             ExpandedQueuedMessagesMinHeight,
             ExpandedQueuedMessagesMaxHeight);
+    }
+
+    private static string FormatQueuedMessageAutomationSnippet(string text)
+    {
+        var normalized = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        const int maxLength = 80;
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength] + "…";
     }
 
     private const int SlashMenuMaxItems = 8;

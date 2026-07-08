@@ -301,6 +301,8 @@ public sealed class OpenClawChatRoot : Component
         {
             queuedMessages = queuedForThread.ToArray();
         }
+        var hasPendingQueuedSend = queuedMessages.Any(message =>
+            message.SendState is ChatQueuedMessageSendState.Queued or ChatQueuedMessageSendState.Sending);
 
         var entries = (IReadOnlyList<ChatTimelineItem>)timeline.Entries;
         var connectedRaw = snapshot.ConnectionStatus;
@@ -567,6 +569,7 @@ public sealed class OpenClawChatRoot : Component
                 CurrentModel: composerThread.Model,
                 CurrentModelProvider: composerThread.ModelProvider,
                 CurrentThinkingLevel: composerThread.ThinkingLevel,
+                MessageOptionsDisabled: turnActiveOverride || hasPendingQueuedSend,
                 ModelChoices: snapshot.ModelChoices,
                 OnSend: (msg, attachments) =>
                 {
@@ -587,6 +590,7 @@ public sealed class OpenClawChatRoot : Component
                 OnAttachClick: _onAttachClick,
                 PendingAttachments: pendingAttachments.Value,
                 QueuedMessages: queuedMessages,
+                OnQueuedMessageCancel: queuedMessageId => RunFireAndForget(ct => _provider.CancelQueuedMessageAsync(composerThread.Id!, queuedMessageId, ct)),
                 OnAttachmentRemoved: attachment => SetPendingAttachments(RemoveAttachment(pendingAttachmentsRef.Current, attachment)),
                 IsSpeakerMuted: speakerMuted.Value,
                 OnSpeakerToggle: () =>
