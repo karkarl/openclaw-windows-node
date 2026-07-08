@@ -117,6 +117,28 @@ internal static class StatusBadgeIconFactory
         return icon.ToBitmap();
     }
 
+    /// <summary>
+    /// The dot diameter as a fraction of the icon size. Tiny tray icons need a
+    /// proportionally larger dot to stay legible at 16-32px, while large taskbar
+    /// / alt-tab icons look cleaner with a subtler corner dot. Interpolates
+    /// between the two extremes. Exposed for testing.
+    /// </summary>
+    internal static double DotFraction(int size)
+    {
+        const double maxFraction = 0.44; // <= 32px  (tray legibility)
+        const double minFraction = 0.26; // >= 256px (subtle corner dot)
+        const int minSize = 32;
+        const int maxSize = 256;
+
+        if (size <= minSize)
+            return maxFraction;
+        if (size >= maxSize)
+            return minFraction;
+
+        var t = (double)(size - minSize) / (maxSize - minSize);
+        return maxFraction + (t * (minFraction - maxFraction));
+    }
+
     internal static Bitmap Compose(Bitmap baseImage, int size, Color dotColor)
     {
         var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
@@ -132,10 +154,12 @@ internal static class StatusBadgeIconFactory
         g.DrawImage(baseImage, new Rectangle(0, 0, size, size));
 
         // Dot geometry: bottom-right corner with a white ring for contrast against
-        // both the red mascot and arbitrary taskbar backgrounds.
-        float ring = Math.Max(1f, size * 0.06f);
+        // both the red mascot and arbitrary taskbar backgrounds. The dot scales by
+        // size so it is legible on tiny tray icons yet subtle on large icons; the
+        // ring is tied to the dot so it shrinks proportionally too.
+        float dot = size * (float)DotFraction(size);
+        float ring = Math.Max(1f, dot * 0.14f);
         float pad = size * 0.02f;
-        float dot = size * 0.44f;
         float outer = dot + (ring * 2f);
         float outerX = size - outer - pad;
         float outerY = size - outer - pad;

@@ -37,7 +37,7 @@ public sealed class StatusBadgeIconFactoryTests
             baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Success));
 
         // Bottom-right region carries the coloured dot.
-        var dotPixel = composed.GetPixel((int)(size * 0.85), (int)(size * 0.85));
+        var dotPixel = composed.GetPixel((int)(size * 0.80), (int)(size * 0.80));
         Assert.True(dotPixel.A > 200, "Dot should be opaque in the bottom-right corner");
         Assert.True(dotPixel.G > dotPixel.R && dotPixel.G > dotPixel.B, "Success dot should read green");
 
@@ -47,11 +47,28 @@ public sealed class StatusBadgeIconFactoryTests
     }
 
     [Fact]
+    public void DotFraction_ScalesLargerOnTinyIconsAndSubtlerOnLargeIcons()
+    {
+        // Tiny tray icons get the largest dot for legibility.
+        Assert.Equal(0.44, StatusBadgeIconFactory.DotFraction(16), 3);
+        Assert.Equal(0.44, StatusBadgeIconFactory.DotFraction(32), 3);
+
+        // Large taskbar / alt-tab icons get the subtlest dot.
+        Assert.Equal(0.26, StatusBadgeIconFactory.DotFraction(256), 3);
+
+        // Monotonically shrinks as the icon grows between the two extremes.
+        var f48 = StatusBadgeIconFactory.DotFraction(48);
+        var f128 = StatusBadgeIconFactory.DotFraction(128);
+        Assert.True(f48 < 0.44 && f48 > f128, "48px dot fraction sits between the extremes");
+        Assert.True(f128 > 0.26 && f128 < f48, "128px dot fraction is subtler than 48px but above the floor");
+    }
+
+    [Fact]
     public void Compose_UsesDistinctColorPerAccent()
     {
         const int size = 64;
         using var baseImage = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-        var px = (int)(size * 0.85);
+        var px = (int)(size * 0.80);
 
         using var success = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Success));
         using var critical = StatusBadgeIconFactory.Compose(baseImage, size, StatusBadgeIconFactory.DotColor(ConnectionStatusAccent.Critical));
