@@ -2,8 +2,8 @@
   "$schema": "https://agents.design/schema/v1",
   "meta": {
     "version": 1,
-    "updatedBy": "scan+xaml",
-    "note": "Derived from the repo's WinUI 3 / XAML surfaces. This app themes off Windows Fluent system resources (SystemAccentColor, Mica, Segoe UI Variable), so tokens below map to Fluent theme resources rather than a bespoke hex palette. Edit in the Design System canvas or directly."
+    "updatedBy": "xaml+manual",
+    "note": "Tokens derived by manual inspection of the repo's WinUI 3 / XAML and C# surfaces (the CSS/JSX scanner finds no files in a XAML repo). This app themes off Windows Fluent system resources (SystemAccentColor, Mica, Segoe UI Variable), so tokens below map to Fluent theme resources rather than a bespoke hex palette. Edit in the Design System canvas or directly."
   },
   "brand": {
     "name": "Windows Fluent UI for OpenClaw",
