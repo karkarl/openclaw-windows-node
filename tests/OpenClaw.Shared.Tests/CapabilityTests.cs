@@ -110,6 +110,29 @@ public class SystemCapabilityTests
         Assert.True(res.Ok);
         Assert.Equal("echo", runner.LastRequest!.Command);
         Assert.Equal(new[] { "hello", "world" }, runner.LastRequest.Args);
+        var payload = JsonSerializer.SerializeToElement(res.Payload);
+        Assert.True(payload.GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Run_ReportsUnsuccessfulExit()
+    {
+        var cap = new SystemCapability(NullLogger.Instance);
+        cap.SetCommandRunner(new FakeCommandRunner
+        {
+            Result = new CommandResult { ExitCode = 1, TimedOut = false }
+        });
+
+        var res = await cap.ExecuteAsync(new NodeInvokeRequest
+        {
+            Id = "r1-failed",
+            Command = "system.run",
+            Args = Parse("""{"command":["cmd.exe","/d","/s","/c","exit 1"]}""")
+        });
+
+        Assert.True(res.Ok);
+        var payload = JsonSerializer.SerializeToElement(res.Payload);
+        Assert.False(payload.GetProperty("success").GetBoolean());
     }
 
     [Fact]
@@ -131,6 +154,144 @@ public class SystemCapabilityTests
         Assert.True(res.Ok);
         Assert.Equal("cmd", runner.LastRequest!.ApprovedEffectiveShell);
         Assert.Null(runner.LastRequest.Shell);
+    }
+
+    [Fact]
+    public async Task Run_GatewayCmdWrapper_UsesAllowedInnerCommand()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var runner = new FakeCommandRunner();
+            cap.SetCommandRunner(runner);
+            cap.SetApprovalPolicy(new ExecApprovalPolicy(tempDir, NullLogger.Instance));
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "gateway-cmd-wrapper",
+                Command = "system.run",
+                Args = Parse("""{"command":["cmd.exe","/d","/s","/c","hostname"],"rawCommand":"hostname"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.True(res.Ok);
+            Assert.Equal("cmd.exe", runner.LastRequest!.Command);
+            Assert.Equal(new[] { "/d", "/s", "/c", "hostname" }, runner.LastRequest.Args);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task Run_GatewayCmdWrapper_ExplicitOuterDenyStillWins()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var runner = new FakeCommandRunner();
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            policy.InsertRule(0, new ExecApprovalRule
+            {
+                Pattern = "cmd.exe /d /s /c hostname",
+                Action = ExecApprovalAction.Deny,
+                Description = "Explicit wrapper deny"
+            });
+            cap.SetCommandRunner(runner);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "gateway-cmd-wrapper-deny",
+                Command = "system.run",
+                Args = Parse("""{"command":["cmd.exe","/d","/s","/c","hostname"],"rawCommand":"hostname"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("Explicit wrapper deny", res.Error);
+            Assert.Null(runner.LastRequest);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task Run_GatewayCmdWrapper_ExplicitInnerDenyStillWins()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var runner = new FakeCommandRunner();
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            policy.InsertRule(0, new ExecApprovalRule
+            {
+                Pattern = "hostname",
+                Action = ExecApprovalAction.Deny,
+                Description = "Explicit inner deny"
+            });
+            cap.SetCommandRunner(runner);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "gateway-cmd-inner-deny",
+                Command = "system.run",
+                Args = Parse("""{"command":["cmd.exe","/d","/s","/c","hostname"],"rawCommand":"hostname"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("Explicit inner deny", res.Error);
+            Assert.Null(runner.LastRequest);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task Run_GatewayCmdWrapper_BroadInnerAllowCannotHidePipeTarget()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var runner = new FakeCommandRunner();
+            cap.SetCommandRunner(runner);
+            cap.SetApprovalPolicy(new ExecApprovalPolicy(tempDir, NullLogger.Instance));
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "gateway-cmd-pipe-deny",
+                Command = "system.run",
+                Args = Parse("""{"command":["cmd.exe","/d","/s","/c","echo ok | del C:\\victim"],"rawCommand":"echo ok | del C:\\victim"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("exact allow rule", res.Error);
+            Assert.Null(runner.LastRequest);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
     }
 
     [Fact]
@@ -789,6 +950,14 @@ public class SystemCapabilityTests
         public CommandRequest? LastRequest { get; private set; }
         public string? LastResolvedShell { get; private set; }
         public string? ForcedEffectiveShell { get; set; }
+        public CommandResult Result { get; set; } = new()
+        {
+            Stdout = "ok",
+            Stderr = "",
+            ExitCode = 0,
+            TimedOut = false,
+            DurationMs = 1
+        };
 
         public string ResolveEffectiveShell(string? requestedShell)
         {
@@ -811,14 +980,7 @@ public class SystemCapabilityTests
         public Task<CommandResult> RunAsync(CommandRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
-            return Task.FromResult(new CommandResult
-            {
-                Stdout = "ok",
-                Stderr = "",
-                ExitCode = 0,
-                TimedOut = false,
-                DurationMs = 1
-            });
+            return Task.FromResult(Result);
         }
     }
 

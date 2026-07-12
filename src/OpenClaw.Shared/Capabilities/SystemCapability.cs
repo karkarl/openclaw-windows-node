@@ -472,6 +472,7 @@ public class SystemCapability : NodeCapabilityBase
                 stderr = result.Stderr,
                 exitCode = result.ExitCode,
                 timedOut = result.TimedOut,
+                success = result.ExitCode == 0 && !result.TimedOut,
                 durationMs = result.DurationMs
             });
         }
@@ -547,18 +548,6 @@ public class SystemCapability : NodeCapabilityBase
         if (_approvalPolicy == null)
             return null;
 
-        var approval = _approvalPolicy.Evaluate(fullCommand, shell);
-        var approvalCheck = await EnsureApprovedAsync(fullCommand, shell, approval, sessionKey, correlationId);
-        if (!approvalCheck.Allowed)
-        {
-            Logger.Warn($"system.run DENIED: {fullCommand} ({approval.Reason})");
-            return Error($"Command denied by exec policy: {approval.Reason}");
-        }
-
-        var outerApprovalCoversNestedTargets =
-            approvalCheck.PromptDecisionKind != null ||
-            IsExactAllowRuleForCommand(approval, fullCommand);
-
         var parseResult = ExecShellWrapperParser.Expand(fullCommand, shell);
         if (!string.IsNullOrWhiteSpace(parseResult.Error))
         {
@@ -566,6 +555,32 @@ public class SystemCapability : NodeCapabilityBase
             return Error($"Command denied by exec policy: {parseResult.Error}");
         }
 
+        var approval = _approvalPolicy.Evaluate(fullCommand, shell);
+        var hasNestedTargets = parseResult.Targets.Count > 0;
+        var hasExplicitOuterRule = !string.IsNullOrWhiteSpace(approval.MatchedPattern);
+        var evaluateOuter =
+            !hasNestedTargets ||
+            hasExplicitOuterRule ||
+            approval.Allowed ||
+            approval.Action == ExecApprovalAction.Prompt;
+        var approvalCheck = new ExecApprovalCheckResult(false, null);
+        if (evaluateOuter)
+        {
+            approvalCheck = await EnsureApprovedAsync(fullCommand, shell, approval, sessionKey, correlationId);
+            if (!approvalCheck.Allowed)
+            {
+                Logger.Warn($"system.run DENIED: {fullCommand} ({approval.Reason})");
+                return Error($"Command denied by exec policy: {approval.Reason}");
+            }
+        }
+
+        var outerApprovalCoversNestedTargets =
+            approvalCheck.PromptDecisionKind != null ||
+            IsExactAllowRuleForCommand(approval, fullCommand);
+
+        // Gateway execution wraps Windows commands in cmd.exe. Only an
+        // unmatched default deny may defer to exact parsed-payload rules;
+        // explicit/default prompts still show and persist the full wrapper.
         foreach (var target in parseResult.Targets)
         {
             var innerApproval = _approvalPolicy.Evaluate(target.Command, target.Shell);
@@ -589,6 +604,15 @@ public class SystemCapability : NodeCapabilityBase
             {
                 Logger.Warn($"system.run DENIED: {target.Command} ({innerApproval.Reason})");
                 return Error($"Command denied by exec policy: {innerApproval.Reason}");
+            }
+
+            if (!evaluateOuter &&
+                innerApprovalCheck.PromptDecisionKind == null &&
+                !IsExactAllowRuleForCommand(innerApproval, target.Command))
+            {
+                const string reason = "Wrapped commands require an exact allow rule";
+                Logger.Warn($"system.run DENIED: {target.Command} ({reason})");
+                return Error($"Command denied by exec policy: {reason}");
             }
         }
 
