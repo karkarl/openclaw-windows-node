@@ -200,6 +200,11 @@ public sealed record SliderElement(double Value, double Minimum, double Maximum,
 public sealed record ColorPickerElement(Color Value, Action<Color>? OnChanged) : Element;
 public sealed record ComboBoxElement(string[] Items, int SelectedIndex, Action<int>? OnSelectionChanged) : Element;
 public sealed record ImageElement(string Source) : Element;
+/// <summary>
+/// Wraps a caller-owned native control. The factory must return a stable instance
+/// across renders when preserving focus, popup, or selection state matters.
+/// </summary>
+public sealed record NativeElement(Func<UIElement> GetControl) : Element;
 public sealed record BorderElement(Element? Child) : Element;
 public sealed record StackElement(Orientation Orientation, double Spacing, IReadOnlyList<Element?> Children) : Element;
 public sealed record VirtualStackElement(Orientation Orientation, double Spacing, IReadOnlyList<Element?> Children) : Element;
@@ -592,6 +597,7 @@ public static class Factories
     public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
         new(items, selectedIndex, onSelectionChanged);
     public static ImageElement Image(string source) => new(source);
+    public static NativeElement Native(Func<UIElement> getControl) => new(getControl);
     public static BorderElement Border(Element? child = null) => new(child);
     public static FlexRowElement FlexRow(params Element?[] children) => new(children);
     public static StackElement VStack(params Element?[] children) => new(Orientation.Vertical, 0, children);
@@ -918,6 +924,9 @@ internal sealed class UiRenderer(Action requestRender)
     private readonly Dictionary<string, Flyout> _contentFlyouts = new();
     private readonly HashSet<string> _mountedPaths = new();
     private readonly HashSet<string> _visitedControlPaths = new();
+    private readonly HashSet<string> _visitedNativePaths = new();
+    private readonly Dictionary<string, UIElement> _nativeControls = new();
+    private readonly Dictionary<FrameworkElement, Element> _nativeEventElements = new();
     private readonly HashSet<string> _visitedComponentKeys = new();
     private readonly HashSet<string> _visitedContentFlyoutPaths = new();
     private readonly HashSet<string> _visitedVirtualStackPaths = new();
@@ -929,6 +938,7 @@ internal sealed class UiRenderer(Action requestRender)
     public UIElement Render(Element element, string path, List<Action> effects)
     {
         _visitedControlPaths.Clear();
+        _visitedNativePaths.Clear();
         _visitedComponentKeys.Clear();
         _visitedContentFlyoutPaths.Clear();
         _visitedVirtualStackPaths.Clear();
@@ -945,11 +955,16 @@ internal sealed class UiRenderer(Action requestRender)
 
         foreach (var control in _controls.Values)
             DetachChildren(control);
+        foreach (var control in _nativeControls.Values.OfType<FrameworkElement>())
+            DetachNativeEventHandlers(control);
 
         _components.Clear();
         _controls.Clear();
+        _nativeControls.Clear();
+        _nativeEventElements.Clear();
         _contentFlyouts.Clear();
         _mountedPaths.Clear();
+        _visitedNativePaths.Clear();
         _visitedVirtualStackPaths.Clear();
         _virtualStackOwnedPathPrefixes.Clear();
     }
@@ -976,6 +991,7 @@ internal sealed class UiRenderer(Action requestRender)
             ColorPickerElement e => ConfigureColorPicker(GetOrCreate<ColorPicker>(path), e),
             ComboBoxElement e => ConfigureComboBox(GetOrCreate<ComboBox>(path), e),
             ImageElement e => ConfigureImage(GetOrCreate<Image>(path), e),
+            NativeElement e => ConfigureNativeElement(e, path),
             BorderElement e => ConfigureBorder(GetOrCreate<Border>(path), e, path, effects),
             StackElement e => ConfigureStack(GetOrCreate<Border>(path), e, path, effects),
             VirtualStackElement e => ConfigureVirtualStack(GetOrCreate<Border>(path), e, path, effects),
@@ -989,6 +1005,25 @@ internal sealed class UiRenderer(Action requestRender)
         };
 
         QueueMount(control, element, path, effects);
+        return control;
+    }
+
+    private UIElement ConfigureNativeElement(NativeElement element, string path)
+    {
+        _visitedNativePaths.Add(path);
+        RemoveRendererControlPath(path);
+
+        var control = element.GetControl();
+        if (_nativeControls.TryGetValue(path, out var previous) && !ReferenceEquals(previous, control))
+            RemoveNativeControlPath(path);
+        _nativeControls[path] = control;
+
+        if (control is FrameworkElement frameworkElement)
+        {
+            ApplyNativeModifiers(frameworkElement, element);
+            ApplySetters(frameworkElement, element);
+        }
+
         return control;
     }
 
@@ -1021,20 +1056,40 @@ internal sealed class UiRenderer(Action requestRender)
     private T GetOrCreate<T>(string path) where T : UIElement, new()
     {
         _visitedControlPaths.Add(path);
+        RemoveNativeControlPath(path);
 
         if (_controls.TryGetValue(path, out var existing) && existing is T typed)
             return typed;
 
         if (existing is not null)
-        {
-            _mountedPaths.Remove(path);
-            DetachChildren(existing);
-            RemoveFromParent(existing);
-        }
+            RemoveRendererControlPath(path);
 
         var control = new T();
         _controls[path] = control;
         return control;
+    }
+
+    private void RemoveRendererControlPath(string path)
+    {
+        if (!_controls.TryGetValue(path, out var control))
+            return;
+
+        _mountedPaths.Remove(path);
+        DetachChildren(control);
+        RemoveFromParent(control);
+        _controls.Remove(path);
+    }
+
+    private void RemoveNativeControlPath(string path)
+    {
+        if (!_nativeControls.TryGetValue(path, out var control))
+            return;
+
+        _mountedPaths.Remove(path);
+        if (control is FrameworkElement frameworkElement)
+            DetachNativeEventHandlers(frameworkElement);
+        RemoveFromParent(control);
+        _nativeControls.Remove(path);
     }
 
     private void QueueMount(UIElement control, Element element, string path, List<Action> effects)
@@ -1649,15 +1704,20 @@ internal sealed class UiRenderer(Action requestRender)
             _contentFlyouts.Remove(path);
         }
 
+        foreach (var (path, _) in _nativeControls.ToArray())
+        {
+            if (_visitedNativePaths.Contains(path) || IsOwnedByVirtualStack(path))
+                continue;
+
+            RemoveNativeControlPath(path);
+        }
+
         foreach (var (path, control) in _controls.ToArray())
         {
             if (_visitedControlPaths.Contains(path) || IsOwnedByVirtualStack(path))
                 continue;
 
-            _mountedPaths.Remove(path);
-            DetachChildren(control);
-            RemoveFromParent(control);
-            _controls.Remove(path);
+            RemoveRendererControlPath(path);
         }
     }
 
@@ -1995,6 +2055,134 @@ internal sealed class UiRenderer(Action requestRender)
                 else b.ClearValue(Border.CornerRadiusProperty);
                 break;
         }
+    }
+
+    private void ApplyNativeModifiers(FrameworkElement control, NativeElement element)
+    {
+        // Native controls are caller-owned, so only apply explicit values and
+        // never clear unset properties that may have been configured directly.
+        var m = element.Modifiers;
+
+        if (m.Margin is { } margin) control.Margin = margin;
+        if (m.Width is { } width) control.Width = width;
+        if (m.Height is { } height) control.Height = height;
+        if (m.MinWidth is { } minWidth) control.MinWidth = minWidth;
+        if (m.MaxWidth is { } maxWidth) control.MaxWidth = maxWidth;
+        if (m.MinHeight is { } minHeight) control.MinHeight = minHeight;
+        if (m.MaxHeight is { } maxHeight) control.MaxHeight = maxHeight;
+        if (m.HorizontalAlignment is { } hAlign) control.HorizontalAlignment = hAlign;
+        if (m.VerticalAlignment is { } vAlign) control.VerticalAlignment = vAlign;
+        if (m.Opacity is { } opacity) control.Opacity = opacity;
+        if (m.AutomationName is { } automationName) AutomationProperties.SetName(control, automationName);
+        if (m.LiveRegion is { } liveRegion) AutomationProperties.SetLiveSetting(control, liveRegion);
+        ApplyResourceOverrides(control, m.ResourceOverrides);
+
+        if (control is Control disabledControl && m.Disabled is { } disabled)
+            disabledControl.IsEnabled = !disabled;
+        if (control is TextBox textBox && m.ReadOnly is { } readOnly)
+            textBox.IsReadOnly = readOnly;
+        if (control is ScrollViewer scrollViewer && m.HorizontalScrollMode is { } horizontalScrollMode)
+            scrollViewer.HorizontalScrollMode = horizontalScrollMode;
+
+        ApplyNativeEventModifiers(control, element);
+
+        switch (control)
+        {
+            case TextBlock tb:
+                if (m.FontSize is { } textSize) tb.FontSize = textSize;
+                if (m.FontWeight is { } textWeight) tb.FontWeight = textWeight;
+                if (m.FontFamily is { } textFamily) tb.FontFamily = textFamily;
+                if (m.TextWrapping is { } wrapping) tb.TextWrapping = wrapping;
+                if (m.Padding is { } textPadding) tb.Padding = textPadding;
+                if (m.ForegroundResourceKey is { } textFgResource) tb.Foreground = ThemeResources.ResolveBrush(textFgResource);
+                else if (m.Foreground is { } textFg) tb.Foreground = textFg;
+                break;
+            case Control c:
+                if (m.Padding is { } controlPadding) c.Padding = controlPadding;
+                if (m.FontSize is { } controlSize) c.FontSize = controlSize;
+                if (m.FontWeight is { } controlWeight) c.FontWeight = controlWeight;
+                if (m.FontFamily is { } controlFamily) c.FontFamily = controlFamily;
+                if (m.ForegroundResourceKey is { } controlFgResource) c.Foreground = ThemeResources.ResolveBrush(controlFgResource);
+                else if (m.Foreground is { } controlFg) c.Foreground = controlFg;
+                if (m.BorderBrushResourceKey is { } controlBorderResource) c.BorderBrush = ThemeResources.ResolveBrush(controlBorderResource);
+                else if (m.BorderBrush is { } controlBorder) c.BorderBrush = controlBorder;
+                if (m.BorderThickness is { } controlThickness) c.BorderThickness = controlThickness;
+                break;
+            case Border b:
+                if (m.Padding is { } borderPadding) b.Padding = borderPadding;
+                if (m.BackgroundResourceKey is { } backgroundResourceKey)
+                    b.Background = ThemeResources.ResolveBrush(backgroundResourceKey);
+                else if (m.Background is { } bg)
+                    b.Background = bg;
+                if (m.BorderBrushResourceKey is { } borderResourceKey)
+                    b.BorderBrush = ThemeResources.ResolveBrush(borderResourceKey);
+                else if (m.BorderBrush is { } borderBrush)
+                    b.BorderBrush = borderBrush;
+                if (m.BorderThickness is { } borderThickness)
+                    b.BorderThickness = borderThickness;
+                if (m.CornerRadius is { } radius)
+                    b.CornerRadius = radius;
+                break;
+        }
+    }
+
+    private void ApplyNativeEventModifiers(FrameworkElement control, NativeElement element)
+    {
+        var m = element.Modifiers;
+        var hasEvents = m.GotFocus is not null
+            || m.KeyDown is not null
+            || m.PointerEntered is not null
+            || m.PointerExited is not null;
+
+        if (!hasEvents && !_nativeEventElements.ContainsKey(control))
+            return;
+
+        DetachNativeEventHandlers(control);
+        if (!hasEvents)
+            return;
+
+        _nativeEventElements[control] = element;
+        if (m.GotFocus is not null) control.GotFocus += NativeElementGotFocus;
+        if (m.KeyDown is not null) control.KeyDown += NativeElementKeyDown;
+        if (m.PointerEntered is not null) control.PointerEntered += NativeElementPointerEntered;
+        if (m.PointerExited is not null) control.PointerExited += NativeElementPointerExited;
+    }
+
+    private void DetachNativeEventHandlers(FrameworkElement control)
+    {
+        control.GotFocus -= NativeElementGotFocus;
+        control.KeyDown -= NativeElementKeyDown;
+        control.PointerEntered -= NativeElementPointerEntered;
+        control.PointerExited -= NativeElementPointerExited;
+        _nativeEventElements.Remove(control);
+    }
+
+    private void NativeElementGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement frameworkElement &&
+            _nativeEventElements.TryGetValue(frameworkElement, out var element))
+            element.Modifiers.GotFocus?.Invoke(sender, e);
+    }
+
+    private void NativeElementKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement frameworkElement &&
+            _nativeEventElements.TryGetValue(frameworkElement, out var element))
+            element.Modifiers.KeyDown?.Invoke(sender, e);
+    }
+
+    private void NativeElementPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement frameworkElement &&
+            _nativeEventElements.TryGetValue(frameworkElement, out var element))
+            element.Modifiers.PointerEntered?.Invoke(sender, e);
+    }
+
+    private void NativeElementPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement frameworkElement &&
+            _nativeEventElements.TryGetValue(frameworkElement, out var element))
+            element.Modifiers.PointerExited?.Invoke(sender, e);
     }
 
     private static void ApplyResourceOverrides(FrameworkElement control, ResourceOverrides? overrides)

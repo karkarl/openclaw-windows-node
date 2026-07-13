@@ -252,34 +252,40 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         var channelChangedRef = UseRef(Props.OnChannelChanged);
         var channelComboUpdatingRef = UseRef(false);
         channelChangedRef.Current = Props.OnChannelChanged;
-        var channelCombo = Border()
-            .Set(border =>
+        var channelCombo = Border(Native(() =>
+        {
+            var cb = channelComboRef.Current;
+            if (cb is null)
+            {
+                cb = new ComboBox
+                {
+                    MinWidth = 0,
+                    Width = double.NaN,
+                    Height = 28,
+                    FontSize = 11,
+                    Padding = new Thickness(8, 0, 4, 0),
+                    CornerRadius = composerCornerRadius,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    cb,
+                    LocalizationHelper.GetString("Chat_Composer_Accessibility_Session"));
+                cb.SelectionChanged += (_, _) =>
+                {
+                    if (!channelComboUpdatingRef.Current &&
+                        cb.SelectedItem is ComboBoxItem { Tag: string id })
+                        channelChangedRef.Current(id);
+                };
+                channelComboRef.Current = cb;
+            }
+
+            return cb;
+        }))
+            .Set(_ =>
             {
                 var cb = channelComboRef.Current;
-                if (cb is null)
-                {
-                    cb = new ComboBox
-                    {
-                        MinWidth = 0,
-                        Width = double.NaN,
-                        Height = 28,
-                        FontSize = 11,
-                        Padding = new Thickness(8, 0, 4, 0),
-                        CornerRadius = composerCornerRadius,
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    };
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
-                        cb,
-                        LocalizationHelper.GetString("Chat_Composer_Accessibility_Session"));
-                    cb.SelectionChanged += (_, _) =>
-                    {
-                        if (!channelComboUpdatingRef.Current &&
-                            cb.SelectedItem is ComboBoxItem { Tag: string id })
-                            channelChangedRef.Current(id);
-                    };
-                    channelComboRef.Current = cb;
-                }
+                if (cb is null) return;
 
                 var groupsChanged = channelGroupsRef.Current?.Matches(groups) != true;
                 channelComboUpdatingRef.Current = true;
@@ -328,8 +334,6 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 {
                     channelComboUpdatingRef.Current = false;
                 }
-
-                border.Child = cb;
             });
 
         // ── Model picker (provider-rich) ─────────────────────────────────
