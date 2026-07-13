@@ -1014,6 +1014,13 @@ internal sealed class UiRenderer(Action requestRender)
         RemoveRendererControlPath(path);
 
         var control = element.GetControl();
+        foreach (var (existingPath, existingControl) in _nativeControls
+                     .Where(pair => !string.Equals(pair.Key, path, StringComparison.Ordinal)
+                                    && ReferenceEquals(pair.Value, control))
+                     .ToArray())
+        {
+            RemoveNativeControlPath(existingPath);
+        }
         if (_nativeControls.TryGetValue(path, out var previous) && !ReferenceEquals(previous, control))
             RemoveNativeControlPath(path);
         _nativeControls[path] = control;
@@ -1496,6 +1503,14 @@ internal sealed class UiRenderer(Action requestRender)
             _contentFlyouts.Remove(path);
         }
 
+        foreach (var (path, _) in _nativeControls
+                     .Where(pair => IsPathAtOrBelow(pair.Key, prefix) && !_visitedNativePaths.Contains(pair.Key))
+                     .OrderByDescending(pair => pair.Key.Length)
+                     .ToArray())
+        {
+            RemoveNativeControlPath(path);
+        }
+
         foreach (var (path, cachedControl) in _controls
                      .Where(pair => IsPathAtOrBelow(pair.Key, prefix) && !_visitedControlPaths.Contains(pair.Key))
                      .OrderByDescending(pair => pair.Key.Length)
@@ -1524,6 +1539,14 @@ internal sealed class UiRenderer(Action requestRender)
         {
             flyout.Hide();
             _contentFlyouts.Remove(path);
+        }
+
+        foreach (var (path, _) in _nativeControls
+                     .Where(pair => IsPathAtOrBelow(pair.Key, prefix))
+                     .OrderByDescending(pair => pair.Key.Length)
+                     .ToArray())
+        {
+            RemoveNativeControlPath(path);
         }
 
         foreach (var (path, cachedControl) in _controls

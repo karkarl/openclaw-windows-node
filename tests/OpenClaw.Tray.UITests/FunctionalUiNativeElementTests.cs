@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using OpenClawTray.FunctionalUI;
 using OpenClawTray.FunctionalUI.Hosting;
 using static OpenClawTray.FunctionalUI.Factories;
@@ -133,6 +134,86 @@ public sealed class FunctionalUiNativeElementTests
     }
 
     [Fact]
+    public async Task NativeElement_RemainsAttachedWhenItsRenderPathChanges()
+    {
+        await _ui.ResetContainerAsync();
+
+        FunctionalHostControl? host = null;
+        TextBlock? nativeText = null;
+        var showPrefix = false;
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            nativeText = new TextBlock { Text = "native" };
+            host = new FunctionalHostControl { SuppressAutoDispose = true };
+            _ui.Container.Children.Add(host);
+            host.Mount(_ => showPrefix
+                ? VStack(0, TextBlock("prefix"), Native(() => nativeText!))
+                : VStack(0, Native(() => nativeText!)));
+        });
+
+        await DrainRenderQueueAsync();
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            showPrefix = true;
+            host!.Mount(_ => VStack(0, TextBlock("prefix"), Native(() => nativeText!)));
+        });
+
+        await DrainRenderQueueAsync();
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            var wrapper = Assert.IsType<Border>(host!.Content);
+            var panel = Assert.IsType<StackPanel>(wrapper.Child);
+            Assert.Equal(2, panel.Children.Count);
+            Assert.Same(nativeText, panel.Children[1]);
+            host.Dispose();
+        });
+    }
+
+    [Fact]
+    public async Task VirtualStack_RecycleDetachesNativeElement()
+    {
+        await _ui.ResetContainerAsync();
+
+        FunctionalHostControl? host = null;
+        TextBlock? nativeText = null;
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            nativeText = new TextBlock { Text = "native" };
+            host = new FunctionalHostControl
+            {
+                Width = 400,
+                Height = 300,
+                SuppressAutoDispose = true,
+            };
+            _ui.Container.Children.Add(host);
+            host.Mount(_ => VirtualVStack(0, Native(() => nativeText!)));
+        });
+
+        await DrainRenderQueueAsync();
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            var wrapper = Assert.IsType<Border>(host!.Content);
+            var repeater = Assert.IsType<ItemsRepeater>(wrapper.Child);
+            var container = Assert.IsType<Border>(repeater.TryGetElement(0));
+            Assert.Same(nativeText, container.Child);
+            host.Mount(_ => VirtualVStack(0));
+        });
+
+        await DrainRenderQueueAsync();
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            Assert.Null(VisualTreeHelper.GetParent(nativeText));
+            host!.Dispose();
+        });
+    }
+
+    [Fact]
     public async Task NativeElement_OnMountRunsAcrossSamePathOwnershipChanges()
     {
         await _ui.ResetContainerAsync();
@@ -203,20 +284,23 @@ public sealed class FunctionalUiNativeElementTests
         await _ui.ResetContainerAsync();
 
         FunctionalHostControl? host = null;
-        var firstNative = new TextBlock { Text = "first" };
-        var secondNative = new TextBlock { Text = "second" };
-        var currentNative = firstNative;
+        TextBlock? firstNative = null;
+        TextBlock? secondNative = null;
+        TextBlock? currentNative = null;
         var mountCount = 0;
 
         await _ui.RunOnUIAsync(() =>
         {
             TestApp.EnsureFluentBrushFallbacks(Application.Current.Resources);
+            firstNative = new TextBlock { Text = "first" };
+            secondNative = new TextBlock { Text = "second" };
+            currentNative = firstNative;
             host = new FunctionalHostControl
             {
                 SuppressAutoDispose = true,
             };
             _ui.Container.Children.Add(host);
-            host.Mount(_ => Border(Native(() => currentNative).OnMount(_ => mountCount++)));
+            host.Mount(_ => Border(Native(() => currentNative!).OnMount(_ => mountCount++)));
         });
 
         await DrainRenderQueueAsync();
@@ -225,7 +309,7 @@ public sealed class FunctionalUiNativeElementTests
         {
             Assert.Equal(1, mountCount);
             currentNative = secondNative;
-            host!.Mount(_ => Border(Native(() => currentNative).OnMount(_ => mountCount++)));
+            host!.Mount(_ => Border(Native(() => currentNative!).OnMount(_ => mountCount++)));
         });
 
         await DrainRenderQueueAsync();
