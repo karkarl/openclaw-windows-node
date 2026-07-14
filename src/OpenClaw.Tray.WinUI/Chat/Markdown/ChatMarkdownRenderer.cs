@@ -51,17 +51,49 @@ public static class ChatMarkdownRenderer
         if (document.Blocks.Count == 0)
             return null;
 
-        if (document.Blocks.Count == 1)
-            return RenderBlock(document.Blocks[0]);
-
-        var children = new List<Element?>(document.Blocks.Count);
-        foreach (var block in document.Blocks)
+        // Coalesce maximal runs of consecutive text blocks (paragraphs +
+        // headings) into a single RichTextBlock so the whole prose run is one
+        // continuous text-selection scope. Non-text blocks (lists, tables, code,
+        // block quotes, rules) stay as their own selectable sibling controls —
+        // they are natural selection islands and keep their existing layout.
+        var blocks = document.Blocks;
+        var segments = new List<Element?>(blocks.Count);
+        int i = 0;
+        while (i < blocks.Count)
         {
-            var rendered = RenderBlock(block);
-            if (rendered is not null) children.Add(rendered);
+            if (IsMergeableText(blocks[i]))
+            {
+                int start = i;
+                while (i < blocks.Count && IsMergeableText(blocks[i])) i++;
+                int count = i - start;
+                if (count == 1)
+                {
+                    // A lone text block keeps the lightweight single-TextBlock
+                    // shape (already internally selectable) — no behavior change.
+                    var single = RenderBlock(blocks[start]);
+                    if (single is not null) segments.Add(single);
+                }
+                else
+                {
+                    var run = new List<MdBlock>(count);
+                    for (int j = start; j < i; j++) run.Add(blocks[j]);
+                    segments.Add(TextRunRichBlock(run));
+                }
+            }
+            else
+            {
+                var rendered = RenderBlock(blocks[i]);
+                if (rendered is not null) segments.Add(rendered);
+                i++;
+            }
         }
-        return VStack(8.0, children.ToArray());
+
+        if (segments.Count == 0) return null;
+        if (segments.Count == 1) return segments[0];
+        return VStack(8.0, segments.ToArray());
     }
+
+    private static bool IsMergeableText(MdBlock block) => block is MdParagraph or MdHeading;
 
     public static Element? Render(string? markdown)
     {
@@ -244,6 +276,100 @@ public static class ChatMarkdownRenderer
 
     private static Element RenderParagraph(MdParagraph paragraph) =>
         InlinesTextBlock(paragraph.Inlines).FontSize(BodyFontSize);
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Coalesced text run → single selectable RichTextBlock
+    // ────────────────────────────────────────────────────────────────────
+
+    private const double ParagraphSpacing = 8.0;
+
+    // Cache the block run applied to each RichTextBlock so re-renders with
+    // identical content skip the Blocks.Clear()+rebuild round trip. Clearing
+    // Blocks while the user has an active selection wipes it (same failure mode
+    // the TextBlock inline cache guards against). Equality is structural
+    // (see BlockRunsEqual) so it holds even after the bounded AST cache evicts
+    // and re-parses an unchanged message into fresh block instances.
+    private static readonly ConditionalWeakTable<RichTextBlock, IReadOnlyList<MdBlock>>
+        s_blocksCache = new();
+
+    private static RichTextBlockElement TextRunRichBlock(IReadOnlyList<MdBlock> blocks) =>
+        RichTextBlock().Set(rtb =>
+        {
+            rtb.TextWrapping = TextWrapping.Wrap;
+            rtb.IsTextSelectionEnabled = true;
+            ApplyBlocks(rtb, blocks);
+        });
+
+    private static void ApplyBlocks(RichTextBlock rtb, IReadOnlyList<MdBlock> blocks)
+    {
+        if (rtb.Blocks.Count > 0
+            && s_blocksCache.TryGetValue(rtb, out var cached)
+            && BlockRunsEqual(cached, blocks))
+        {
+            return;
+        }
+        s_blocksCache.AddOrUpdate(rtb, blocks);
+        rtb.Blocks.Clear();
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            var paragraph = BuildParagraph(blocks[i]);
+            if (i > 0) paragraph.Margin = new Thickness(0, ParagraphSpacing, 0, 0);
+            rtb.Blocks.Add(paragraph);
+        }
+    }
+
+    // Compare coalesced text runs structurally rather than via record equality.
+    // MdParagraph / MdHeading records compare their MdInline lists by reference,
+    // so two equivalent-but-distinct block instances (produced when the bounded
+    // GetOrParse AST cache evicts and re-parses an unchanged message) would
+    // compare unequal and needlessly rebuild Blocks — wiping the active
+    // selection. MdInline subtypes are value-comparable, so comparing the inline
+    // sequences by value keeps the selection-preservation guarantee independent
+    // of parser-cache residency.
+    private static bool BlockRunsEqual(IReadOnlyList<MdBlock> a, IReadOnlyList<MdBlock> b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (!BlockEqual(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    private static bool BlockEqual(MdBlock a, MdBlock b) => (a, b) switch
+    {
+        (MdHeading ha, MdHeading hb) => ha.Level == hb.Level && ha.Inlines.SequenceEqual(hb.Inlines),
+        (MdParagraph pa, MdParagraph pb) => pa.Inlines.SequenceEqual(pb.Inlines),
+        _ => a.Equals(b),
+    };
+
+    private static Paragraph BuildParagraph(MdBlock block)
+    {
+        switch (block)
+        {
+            case MdHeading heading:
+            {
+                int idx = Math.Clamp(heading.Level - 1, 0, HeadingFontSizes.Length - 1);
+                var p = new Paragraph
+                {
+                    FontSize = HeadingFontSizes[idx],
+                    FontWeight = MUIText.FontWeights.SemiBold,
+                };
+                AppendInlines(p.Inlines, heading.Inlines);
+                return p;
+            }
+            case MdParagraph paragraph:
+            {
+                var p = new Paragraph { FontSize = BodyFontSize };
+                AppendInlines(p.Inlines, paragraph.Inlines);
+                return p;
+            }
+            default:
+                // Only text blocks (see IsMergeableText) reach this method.
+                return new Paragraph { FontSize = BodyFontSize };
+        }
+    }
 
     private static Element RenderBlockQuote(MdBlockQuote quote)
     {
