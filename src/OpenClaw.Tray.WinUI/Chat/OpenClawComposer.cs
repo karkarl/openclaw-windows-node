@@ -91,6 +91,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
     // model id string. Selecting it routes to OnModelCleared (tri-state clear)
     // rather than OnModelChanged.
     private static readonly object ClearModelTag = new();
+    // Reserved id used to represent the "default / clear" model row in the rich ComboBox
+    // primitive (which keys selection by string id). Cannot collide with a real SelectionId.
+    private const string ClearModelId = "\u0000__default__";
 
     // Thinking levels matching the gateway's sessions.patch thinkingLevel values.
     // "medium" is the default when the session has no explicit thinkingLevel set.
@@ -244,96 +247,35 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         };
 
         // ── Row 1: three compact dropdowns ─────────────────────────────
-        // Build grouped session ComboBox directly (bypassing the FunctionalUI
-        // ComboBox helper which only supports flat string[] items).
+        // Grouped session picker via the reconciled rich ComboBox primitive. The primitive is
+        // preserved by render path and only rebuilds its rows when the item set changes, so an
+        // open dropdown survives unrelated status/thinking re-renders (the #970 regression).
         var groups = Props.AvailableChannels;
-        var channelComboRef = UseRef<ComboBox?>(null);
-        var channelGroupsRef = UseRef<SessionPickerSnapshot?>(null);
-        var channelChangedRef = UseRef(Props.OnChannelChanged);
-        var channelComboUpdatingRef = UseRef(false);
-        channelChangedRef.Current = Props.OnChannelChanged;
-        var channelCombo = Border(Native(() =>
+        var multipleGroups = groups.Length > 1;
+        var sessionItems = new List<ComboItem>();
+        foreach (var group in groups)
         {
-            var cb = channelComboRef.Current;
-            if (cb is null)
+            if (multipleGroups)
+                sessionItems.Add(new ComboItem("", group.AgentLabel, Enabled: false, IsHeader: true));
+            foreach (var session in group.Sessions)
+                sessionItems.Add(new ComboItem(session.Id, session.Title, Indent: multipleGroups ? 8 : 0));
+        }
+
+        var onChannelChanged = Props.OnChannelChanged;
+        var channelCombo = ComboBox(sessionItems, Props.ChannelId ?? "", id => onChannelChanged(id))
+            .Set(cb =>
             {
-                cb = new ComboBox
-                {
-                    MinWidth = 0,
-                    Width = double.NaN,
-                    Height = 28,
-                    FontSize = 11,
-                    Padding = new Thickness(8, 0, 4, 0),
-                    CornerRadius = composerCornerRadius,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center,
-                };
+                cb.MinWidth = 0;
+                cb.Width = double.NaN;
+                cb.Height = 28;
+                cb.FontSize = 11;
+                cb.Padding = new Thickness(8, 0, 4, 0);
+                cb.CornerRadius = composerCornerRadius;
+                cb.HorizontalAlignment = HorizontalAlignment.Stretch;
+                cb.VerticalAlignment = VerticalAlignment.Center;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                     cb,
                     LocalizationHelper.GetString("Chat_Composer_Accessibility_Session"));
-                cb.SelectionChanged += (_, _) =>
-                {
-                    if (!channelComboUpdatingRef.Current &&
-                        cb.SelectedItem is ComboBoxItem { Tag: string id })
-                        channelChangedRef.Current(id);
-                };
-                channelComboRef.Current = cb;
-            }
-
-            return cb;
-        }))
-            .Set(_ =>
-            {
-                var cb = channelComboRef.Current;
-                if (cb is null) return;
-
-                var groupsChanged = channelGroupsRef.Current?.Matches(groups) != true;
-                channelComboUpdatingRef.Current = true;
-                try
-                {
-                    if (groupsChanged)
-                    {
-                        cb.Items.Clear();
-                        foreach (var group in groups)
-                        {
-                            if (groups.Length > 1)
-                            {
-                                cb.Items.Add(new ComboBoxItem
-                                {
-                                    Content = group.AgentLabel,
-                                    IsEnabled = false,
-                                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                                    FontSize = 10,
-                                    Padding = new Thickness(4, 2, 4, 2),
-                                    IsHitTestVisible = false,
-                                });
-                            }
-                            foreach (var session in group.Sessions)
-                            {
-                                cb.Items.Add(new ComboBoxItem
-                                {
-                                    Content = session.Title,
-                                    Tag = session.Id,
-                                    Padding = groups.Length > 1
-                                        ? new Thickness(16, 4, 4, 4)
-                                        : new Thickness(8, 4, 4, 4),
-                                });
-                            }
-                        }
-                        channelGroupsRef.Current = SessionPickerSnapshot.Capture(groups);
-                    }
-
-                    var selectedId = Props.ChannelId ?? "";
-                    var selectedItem = cb.Items
-                        .OfType<ComboBoxItem>()
-                        .FirstOrDefault(item => item.Tag is string id && id == selectedId);
-                    if (!ReferenceEquals(cb.SelectedItem, selectedItem))
-                        cb.SelectedItem = selectedItem;
-                }
-                finally
-                {
-                    channelComboUpdatingRef.Current = false;
-                }
             });
 
         // ── Model picker (provider-rich) ─────────────────────────────────
@@ -382,58 +324,42 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             modelEntries.Add((Props.CurrentModel ?? "model", Props.CurrentModel ?? "", false, true));
         }
 
-        var modelSelectedIndex = modelEntries.FindIndex(e => e.IsCurrent);
+        // Provider-rich model picker via the same reconciled primitive. Unavailable rows stay
+        // visible but disabled; the default/clear row maps to a reserved id.
+        var modelItems = new List<ComboItem>(modelEntries.Count);
+        string? modelSelectedId = null;
+        foreach (var entry in modelEntries)
+        {
+            var id = ReferenceEquals(entry.Tag, ClearModelTag)
+                ? ClearModelId
+                : entry.Tag as string ?? "";
+            modelItems.Add(new ComboItem(id, entry.Label, Enabled: entry.Selectable));
+            if (entry.IsCurrent) modelSelectedId ??= id;
+        }
 
-        // Build directly so unavailable rows can be displayed but not selected.
-        var modelCombo = Border()
-            .Set(border =>
+        var onModelChanged = Props.OnModelChanged;
+        var onModelCleared = Props.OnModelCleared;
+        var modelCombo = ComboBox(modelItems, modelSelectedId, id =>
             {
-                var cb = new ComboBox
-                {
-                    MinWidth = 0,
-                    Width = double.NaN,
-                    Height = 28,
-                    FontSize = 11,
-                    Padding = new Thickness(8, 0, 4, 0),
-                    CornerRadius = composerCornerRadius,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    IsEnabled = messageOptionControlsEnabled,
-                };
+                if (id == ClearModelId)
+                    onModelCleared?.Invoke();
+                else if (!string.IsNullOrEmpty(id))
+                    onModelChanged(id);
+            })
+            .Set(cb =>
+            {
+                cb.MinWidth = 0;
+                cb.Width = double.NaN;
+                cb.Height = 28;
+                cb.FontSize = 11;
+                cb.Padding = new Thickness(8, 0, 4, 0);
+                cb.CornerRadius = composerCornerRadius;
+                cb.HorizontalAlignment = HorizontalAlignment.Stretch;
+                cb.VerticalAlignment = VerticalAlignment.Center;
+                cb.IsEnabled = messageOptionControlsEnabled;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                     cb,
                     LocalizationHelper.GetString("Chat_Composer_Accessibility_Model"));
-
-                ComboBoxItem? selectedItem = null;
-                for (int i = 0; i < modelEntries.Count; i++)
-                {
-                    var entry = modelEntries[i];
-                    var item = new ComboBoxItem
-                    {
-                        Content = entry.Label,
-                        Tag = entry.Tag,
-                        IsEnabled = entry.Selectable,
-                        Padding = new Thickness(8, 4, 4, 4),
-                    };
-                    cb.Items.Add(item);
-                    if (i == modelSelectedIndex) selectedItem = item;
-                }
-
-                if (selectedItem != null)
-                    cb.SelectedItem = selectedItem;
-
-                var onModelChanged = Props.OnModelChanged;
-                var onModelCleared = Props.OnModelCleared;
-                cb.SelectionChanged += (_, _) =>
-                {
-                    if (cb.SelectedItem is not ComboBoxItem { IsEnabled: true } sel) return;
-                    if (ReferenceEquals(sel.Tag, ClearModelTag))
-                        onModelCleared?.Invoke();
-                    else if (sel.Tag is string id && !string.IsNullOrEmpty(id))
-                        onModelChanged(id);
-                };
-
-                border.Child = cb;
             })
             .VAlign(VerticalAlignment.Center);
 
