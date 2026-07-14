@@ -1707,6 +1707,12 @@ public sealed partial class ChannelsPage : Page
         buttonsRow.Children.Add(showQrBtn);
         buttonsRow.Children.Add(relinkBtn);
 
+        // Collapsed recovery affordance — populated by StartLinkingAsync only when
+        // the gateway reports it has no web-login provider loaded for this channel
+        // (issue #957). Distinct from the raw diagnostic: this is the actionable,
+        // plain-language "here's how to fix it on your gateway host" panel.
+        var recoveryPanel = new StackPanel { Spacing = 10, Visibility = Visibility.Collapsed };
+
         // Re-entrancy lock: disable both buttons while a linking flow is in flight
         // so rapid Show QR / Relink clicks can't spawn parallel web.login.start calls.
         async Task RunLinking(bool force)
@@ -1715,7 +1721,7 @@ public sealed partial class ChannelsPage : Page
             relinkBtn.IsEnabled = false;
             try
             {
-                await StartLinkingAsync(qrImage, messageBlock, diagnostic, diagnosticBody, record.Id, force);
+                await StartLinkingAsync(qrImage, messageBlock, diagnostic, diagnosticBody, recoveryPanel, record.Id, force);
             }
             finally
             {
@@ -1728,6 +1734,7 @@ public sealed partial class ChannelsPage : Page
 
         stack.Children.Add(qrImage);
         stack.Children.Add(messageBlock);
+        stack.Children.Add(recoveryPanel);
         stack.Children.Add(diagnostic);
         stack.Children.Add(buttonsRow);
         return stack;
@@ -1738,6 +1745,7 @@ public sealed partial class ChannelsPage : Page
         TextBlock messageBlock,
         Expander diagnostic,
         TextBlock diagnosticBody,
+        Panel recoveryPanel,
         string channelId,
         bool force)
     {
@@ -1769,12 +1777,103 @@ public sealed partial class ChannelsPage : Page
             diagnosticBody.Text = "";
         }
 
+        // Local helper: render the actionable "your gateway has no web-login
+        // provider loaded" recovery panel (issue #957). This is a gateway-host
+        // provider/plugin state we can't fix from the tray, so we show the exact
+        // CLI command to run on the gateway host plus a Copy button — mirroring
+        // BuildInstallPluginPanel's affordance.
+        void ShowProviderRecovery()
+        {
+            recoveryPanel.Children.Clear();
+
+            recoveryPanel.Children.Add(new TextBlock
+            {
+                Text = $"Your gateway can't start {channelId} QR linking yet — it doesn't have the {channelId} web-login provider loaded. Web/QR linking runs on the machine that hosts your gateway, so this is fixed there, not in the tray.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            });
+
+            var cmd = $"openclaw plugins install @openclaw/{channelId}";
+            var cmdRow = new Grid();
+            cmdRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            cmdRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var cmdBox = new TextBox
+            {
+                Text = cmd,
+                IsReadOnly = true,
+                FontFamily = new FontFamily("Consolas, Cascadia Mono, monospace"),
+                Margin = new Thickness(0, 0, 8, 0),
+            };
+            Grid.SetColumn(cmdBox, 0);
+            cmdRow.Children.Add(cmdBox);
+
+            var copyBtn = new Button { Content = "Copy" };
+            Grid.SetColumn(copyBtn, 1);
+            copyBtn.Click += (_, _) =>
+            {
+                try
+                {
+                    var pkgData = new DataPackage();
+                    pkgData.SetText(cmd);
+                    Clipboard.SetContent(pkgData);
+                    copyBtn.Content = "Copied";
+                    _ = Task.Delay(1200).ContinueWith(_ =>
+                    {
+                        if (DispatcherQueue == null) return;
+                        DispatcherQueue.TryEnqueue(() => copyBtn.Content = "Copy");
+                    }, TaskScheduler.Default);
+                }
+                catch
+                {
+                    copyBtn.Content = "Copy failed";
+                }
+            };
+            cmdRow.Children.Add(copyBtn);
+            recoveryPanel.Children.Add(cmdRow);
+
+            recoveryPanel.Children.Add(new TextBlock
+            {
+                Text = "After installing the provider on your gateway host, come back and click Show QR again.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            });
+
+            recoveryPanel.Visibility = Visibility.Visible;
+        }
+        // Local helper: the gateway doesn't implement web.login at all (older
+        // gateway). Installing a channel plugin won't add the missing RPC, so we
+        // guide the user to update the gateway instead of showing an install
+        // command they'd run to no effect.
+        void ShowUnsupportedRecovery()
+        {
+            recoveryPanel.Children.Clear();
+
+            recoveryPanel.Children.Add(new TextBlock
+            {
+                Text = $"This gateway version doesn't support QR linking for {channelId} yet. QR/web linking runs on the machine that hosts your gateway — update your gateway to a version that supports web login, then come back and click Show QR again.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            });
+
+            recoveryPanel.Visibility = Visibility.Visible;
+        }
+        void HideRecovery()
+        {
+            recoveryPanel.Visibility = Visibility.Collapsed;
+            recoveryPanel.Children.Clear();
+        }
+
         var client = CurrentApp.GatewayClient;
         if (client == null)
         {
             qrImage.Visibility = Visibility.Collapsed;
             messageBlock.Text = "Not connected to a gateway. Open Connection settings to connect first.";
             HideDiagnostic();
+            HideRecovery();
             return;
         }
 
@@ -1790,6 +1889,7 @@ public sealed partial class ChannelsPage : Page
 
         messageBlock.Text = "Requesting QR code from the gateway…";
         HideDiagnostic();
+        HideRecovery();
 
         var startParams = new { force, timeoutMs = 30000 };
         var start = await client.WebLoginStartAsync(force);
@@ -1807,6 +1907,34 @@ public sealed partial class ChannelsPage : Page
         if (!string.IsNullOrEmpty(start.Error))
         {
             qrImage.Visibility = Visibility.Collapsed;
+
+            var displayName = string.IsNullOrEmpty(channelId)
+                ? "This channel"
+                : $"{char.ToUpper(channelId[0])}{channelId[1..]}";
+
+            if (start.LooksLikeMissingWebLoginProvider)
+            {
+                // Known, recoverable state: the gateway has no web-login provider
+                // loaded for this channel. Show actionable recovery instead of the
+                // relayed internal error as the headline (issue #957). Keep the raw
+                // gateway detail available in the collapsed diagnostic.
+                messageBlock.Text = $"{displayName} linking isn't available on this gateway yet — see how to enable it below.";
+                ShowProviderRecovery();
+                ShowDiagnostic("web.login.start", startParams, start.Error, start.RawResponse);
+                return;
+            }
+
+            if (start.LooksLikeWebLoginUnsupported)
+            {
+                // Gateway is too old to implement web.login at all. Installing a
+                // plugin wouldn't add the method — guide the user to update the
+                // gateway instead.
+                messageBlock.Text = $"{displayName} linking isn't available on this gateway yet — see how to enable it below.";
+                ShowUnsupportedRecovery();
+                ShowDiagnostic("web.login.start", startParams, start.Error, start.RawResponse);
+                return;
+            }
+
             messageBlock.Text = $"Couldn't link {channelId}. The gateway returned an error — see details below.";
             ShowDiagnostic("web.login.start", startParams, start.Error, start.RawResponse);
             return;
