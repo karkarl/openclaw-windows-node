@@ -42,6 +42,7 @@ public sealed partial class DebugPage : Page
 
     private AppState? _appState;
     private bool _suppressOverrideChange;
+    private bool _suppressOpenTelemetryEndpointChange;
 
     private IGatewayTerminalLauncher? _terminalLauncher;
     private GatewayHostAccessPlan _doctorAccessPlan = GatewayHostAccessPlan.None();
@@ -115,6 +116,7 @@ public sealed partial class DebugPage : Page
         UpdateStatusInfoBar();
         UpdateGatewayDoctorCard();
         LoadDeviceIdentity();
+        LoadOpenTelemetryEndpoint();
         LoadChatSurfaceOverrides();
     }
 
@@ -134,6 +136,7 @@ public sealed partial class DebugPage : Page
     {
         UpdateStatusInfoBar();
         UpdateGatewayDoctorCard();
+        LoadOpenTelemetryEndpoint();
     }
 
     /// <summary>
@@ -665,6 +668,187 @@ public sealed partial class DebugPage : Page
     }
 
     // ── Section 3: Developer tools ───────────────────────────────────
+
+    private void LoadOpenTelemetryEndpoint()
+    {
+        _suppressOpenTelemetryEndpointChange = true;
+        try
+        {
+            OpenTelemetryEndpointBox.Text = CurrentApp.Settings?.OpenTelemetryEndpoint ?? string.Empty;
+            SelectOpenTelemetryProtocol(CurrentApp.Settings?.OpenTelemetryProtocol);
+            UpdateOpenTelemetryEndpointStatus();
+        }
+        finally
+        {
+            _suppressOpenTelemetryEndpointChange = false;
+        }
+    }
+
+    private void OnOpenTelemetryEndpointTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressOpenTelemetryEndpointChange)
+            return;
+
+        UpdateOpenTelemetryEndpointStatus();
+    }
+
+    private void OnOpenTelemetryProtocolChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressOpenTelemetryEndpointChange)
+            return;
+
+        UpdateOpenTelemetryEndpointStatus();
+    }
+
+    private void OnSaveOpenTelemetryEndpoint(object sender, RoutedEventArgs e)
+    {
+        if (CurrentApp.Settings == null)
+            return;
+
+        if (!TryNormalizeOpenTelemetryEndpoint(OpenTelemetryEndpointBox.Text, out var endpoint, out _))
+        {
+            UpdateOpenTelemetryEndpointStatus();
+            return;
+        }
+
+        CurrentApp.Settings.OpenTelemetryEndpoint = endpoint ?? string.Empty;
+        CurrentApp.Settings.OpenTelemetryProtocol = GetSelectedOpenTelemetryProtocol();
+        CurrentApp.Settings.Save();
+        ((IAppCommands)CurrentApp).NotifySettingsSaved();
+        UpdateOpenTelemetryEndpointStatus(saved: true);
+    }
+
+    private void OnClearOpenTelemetryEndpoint(object sender, RoutedEventArgs e)
+    {
+        if (CurrentApp.Settings == null)
+            return;
+
+        _suppressOpenTelemetryEndpointChange = true;
+        try
+        {
+            OpenTelemetryEndpointBox.Text = string.Empty;
+            SelectOpenTelemetryProtocol(OpenTelemetryEndpointProtocol.Grpc);
+        }
+        finally
+        {
+            _suppressOpenTelemetryEndpointChange = false;
+        }
+
+        CurrentApp.Settings.OpenTelemetryEndpoint = string.Empty;
+        CurrentApp.Settings.OpenTelemetryProtocol = OpenTelemetryEndpointProtocol.Grpc;
+        CurrentApp.Settings.Save();
+        ((IAppCommands)CurrentApp).NotifySettingsSaved();
+        UpdateOpenTelemetryEndpointStatus(cleared: true);
+    }
+
+    private void OnResendOpenTelemetryProbe(object sender, RoutedEventArgs e) =>
+        AsyncEventHandlerGuard.Run(
+            ResendOpenTelemetryProbeAsync,
+            new OpenClawTray.AppLogger(),
+            nameof(OnResendOpenTelemetryProbe));
+
+    private async Task ResendOpenTelemetryProbeAsync()
+    {
+        ResendOpenTelemetryProbeButton.IsEnabled = false;
+        bool? probeFlushed = null;
+        try
+        {
+            probeFlushed = await ((IAppCommands)CurrentApp).ResendOpenTelemetryProbeAsync();
+        }
+        finally
+        {
+            UpdateOpenTelemetryEndpointStatus(probeFlushed: probeFlushed);
+        }
+    }
+
+    private void UpdateOpenTelemetryEndpointStatus(
+        bool saved = false,
+        bool cleared = false,
+        bool? probeFlushed = null)
+    {
+        var current = CurrentApp.Settings?.OpenTelemetryEndpoint ?? string.Empty;
+        var currentProtocol = OpenTelemetryEndpointProtocol.Normalize(CurrentApp.Settings?.OpenTelemetryProtocol);
+        var selectedProtocol = GetSelectedOpenTelemetryProtocol();
+        var raw = OpenTelemetryEndpointBox.Text;
+        var valid = TryNormalizeOpenTelemetryEndpoint(raw, out var endpoint, out var error);
+        var endpointText = endpoint ?? string.Empty;
+        var hasEndpoint = !string.IsNullOrWhiteSpace(endpointText);
+        var dirty =
+            !string.Equals(current, endpointText, StringComparison.Ordinal) ||
+            !string.Equals(currentProtocol, selectedProtocol, StringComparison.Ordinal);
+
+        SaveOpenTelemetryEndpointButton.IsEnabled = valid && dirty;
+        ResendOpenTelemetryProbeButton.IsEnabled = valid && hasEndpoint && !dirty;
+        ClearOpenTelemetryEndpointButton.IsEnabled = hasEndpoint || !string.IsNullOrWhiteSpace(current);
+        OpenTelemetryEndpointSummary.Text = string.IsNullOrWhiteSpace(current)
+            ? LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetrySummary_NotConfigured")
+            : LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetrySummary_Configured");
+
+        if (!valid)
+        {
+            OpenTelemetryEndpointStatusText.Foreground = WarnTextBrush;
+            OpenTelemetryEndpointStatusText.Text = error ?? LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetryEndpointStatus_InvalidMessage");
+            return;
+        }
+
+        OpenTelemetryEndpointStatusText.Foreground = DimTextBrush;
+
+        if (cleared)
+        {
+            OpenTelemetryEndpointStatusText.Text = LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetryEndpointStatus_ClearedTitle");
+            return;
+        }
+
+        if (saved && hasEndpoint)
+        {
+            OpenTelemetryEndpointStatusText.Text = LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetryEndpointStatus_SavedTitle");
+            return;
+        }
+
+        if (probeFlushed.HasValue)
+        {
+            OpenTelemetryEndpointStatusText.Foreground =
+                probeFlushed.Value ? DimTextBrush : WarnTextBrush;
+            OpenTelemetryEndpointStatusText.Text = LocalizationHelper.GetString(
+                probeFlushed.Value
+                    ? "DiagnosticsPage_OpenTelemetryEndpointStatus_ProbeFlushedMessage"
+                    : "DiagnosticsPage_OpenTelemetryEndpointStatus_ProbeFailedMessage");
+            return;
+        }
+
+        OpenTelemetryEndpointStatusText.Text = dirty
+            ? LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetryEndpointStatus_UnsavedMessage")
+            : string.Empty;
+    }
+
+    private void SelectOpenTelemetryProtocol(string? protocol)
+    {
+        var normalized = OpenTelemetryEndpointProtocol.Normalize(protocol);
+        OpenTelemetryProtocolGrpcButton.IsChecked = normalized == OpenTelemetryEndpointProtocol.Grpc;
+        OpenTelemetryProtocolHttpButton.IsChecked = normalized == OpenTelemetryEndpointProtocol.HttpProtobuf;
+    }
+
+    private string GetSelectedOpenTelemetryProtocol() =>
+        OpenTelemetryProtocolHttpButton.IsChecked == true
+            ? OpenTelemetryEndpointProtocol.HttpProtobuf
+            : OpenTelemetryEndpointProtocol.Grpc;
+
+    private static bool TryNormalizeOpenTelemetryEndpoint(string? raw, out string? endpoint, out string? error)
+    {
+        endpoint = string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+        error = null;
+
+        if (endpoint == null)
+            return true;
+
+        if (!OpenTelemetryEndpointOptions.TryCreateEndpointUri(endpoint, out _))
+        {
+            error = LocalizationHelper.GetString("DiagnosticsPage_OpenTelemetryEndpointStatus_InvalidMessage");
+            return false;
+        }
+
+        return true;
+    }
 
     private void LoadChatSurfaceOverrides()
     {

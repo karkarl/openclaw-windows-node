@@ -69,10 +69,22 @@ Every new Windows node call must be exposed, documented, and tested through MCP 
 4. Add/update capability, MCP bridge, `winnode`, and UI/gateway tests as appropriate.
 5. Run required validation plus `dotnet test .\tests\OpenClaw.WinNode.Cli.Tests\OpenClaw.WinNode.Cli.Tests.csproj --no-restore` when `winnode`, MCP output, or command docs change.
 
+## Telemetry Guardrails
+
+Read `docs/TELEMETRY.md` before adding or changing OpenTelemetry configuration, exporters, instrumentation helpers, span attributes, metric tags, or exported log fields.
+
+- Do not add OpenTelemetry SDK/exporter package references to `OpenClaw.Shared`; shared helpers may use `System.Diagnostics.ActivitySource`, `Activity`, and `System.Diagnostics.Metrics` only.
+- Do not export user content, prompts, screenshots, file contents, raw command input/output, credentials, API keys, gateway tokens, device tokens, or arbitrary existing local logs.
+- Keep telemetry opt-in: an empty endpoint must mean no OpenTelemetry export, and export must go only to the user-configured endpoint.
+- Prefer low-cardinality operational diagnostics: operation names, outcomes, durations, counts, protocol choices, and coarse error categories.
+- Add focused tests for new span names, metric names, tag keys, log categories, filtering behavior, and endpoint/protocol behavior.
+- For exporter or protocol changes, provide current-head collector proof for every affected signal and protocol, or document the blocker.
+
 ## Architecture Context for New Agents
 
 Start with these docs before changing connection, pairing, node, MCP, or tray UX behavior:
 
+- `docs/ARCHITECTURE.md` - **the living architecture ledger**. Required reading before touching any god object it lists. Records which responsibilities have been extracted (`authoritative`) and which must not be re-added to a god object (`closed`). Do not reintroduce a `closed` responsibility.
 - `docs/CONNECTION_ARCHITECTURE.md` - current gateway registry, connection manager, credential precedence, migration, MCP-only, and tray action behavior.
 - `docs/MCP_MODE.md` - local MCP server mode and the `EnableNodeMode` / `EnableMcpServer` matrix.
 - `docs/WINDOWS_NODE_TESTING.md` - Windows node capabilities, manual smokes, and gateway-dependent behavior.
@@ -84,6 +96,7 @@ Start with these docs before changing connection, pairing, node, MCP, or tray UX
 
 `src\OpenClaw.Tray.WinUI\App.xaml.cs` and `src\OpenClaw.Tray.WinUI\Pages\ConnectionPage.xaml.cs` are active god-file reduction targets. When touching either file:
 
+- **Read `docs/ARCHITECTURE.md` first.** It is the living ownership ledger. Before editing any file it lists, check its row(s); do not re-add anything marked `closed`. When you extract a responsibility, update the ledger in the same PR (flip/add the new owner to `authoritative`, mark the vacated responsibility `closed`) and add a guard test for high-regression closures. A PR that re-adds a `closed` responsibility must be rejected in review.
 - Prefer completing a real ownership transfer over moving code to partial classes. A new partial file is not progress unless it introduces a narrower owner, pure projection, policy, service, or tested seam.
 - Keep `App` as the composition root. Shrink it by delegating cohesive behavior to focused services, but do not relocate startup ordering into another god object.
 - Keep `ConnectionPage.xaml.cs` as the WinUI applicator until a pure row/plan/workflow seam exists. Do not move named-control setters into a presenter that just wraps the page.

@@ -199,6 +199,30 @@ public sealed record ProgressRingElement(double? Value) : Element;
 public sealed record SliderElement(double Value, double Minimum, double Maximum, Action<double>? OnChanged) : Element;
 public sealed record ColorPickerElement(Color Value, Action<Color>? OnChanged) : Element;
 public sealed record ComboBoxElement(string[] Items, int SelectedIndex, Action<int>? OnSelectionChanged) : Element;
+/// <summary>
+/// A single row for the rich <see cref="ItemComboBoxElement"/> primitive. Pure data (no WinUI
+/// types) so it can be constructed and diffed off the UI thread and unit-tested directly.
+/// Headers render as non-selectable group labels; normal rows carry a stable <paramref name="Id"/>.
+/// </summary>
+public sealed record ComboItem(string Id, string Label, bool Enabled = true, bool IsHeader = false, double Indent = 0);
+/// <summary>
+/// A reconciled ComboBox that supports grouped/headered, indented, individually-enabled rows and
+/// selection by stable id. Unlike hand-rolling a native <c>ComboBox</c> inside a setter, this
+/// element is preserved by render path and only rebuilds its rows when the item set actually
+/// changes, so an open dropdown survives unrelated re-renders (the #970 regression).
+/// </summary>
+public sealed record ItemComboBoxElement(IReadOnlyList<ComboItem> Items, string? SelectedId, Action<string>? OnSelectionChanged) : Element
+{
+    /// <summary>Pure, order-sensitive value comparison of two item lists. Testable off the UI thread.</summary>
+    public static bool ItemsEqual(IReadOnlyList<ComboItem> left, IReadOnlyList<ComboItem> right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null || left.Count != right.Count) return false;
+        for (var i = 0; i < left.Count; i++)
+            if (left[i] != right[i]) return false;
+        return true;
+    }
+}
 public sealed record ImageElement(string Source) : Element;
 public sealed record BorderElement(Element? Child) : Element;
 public sealed record StackElement(Orientation Orientation, double Spacing, IReadOnlyList<Element?> Children) : Element;
@@ -221,6 +245,7 @@ public sealed record MenuFlyoutItemData(string Text, Action? OnClick = null, str
     public FontWeight? FontWeight { get; init; }
 }
 public sealed record RadioMenuFlyoutItemData(string Text, string GroupName, bool IsChecked = false, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase;
+public sealed record ToggleMenuFlyoutItemData(string Text, bool IsChecked = false, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase;
 public sealed record MenuFlyoutSeparatorData : MenuFlyoutItemBase;
 public sealed record MenuFlyoutContentElement(MenuFlyoutItemBase[] Items, FlyoutPlacementMode Placement) : FlyoutElement(Placement);
 internal interface INavigationHostElement
@@ -591,6 +616,8 @@ public static class Factories
         new(value, onChanged);
     public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectionChanged = null) =>
         new(items, selectedIndex, onSelectionChanged);
+    public static ItemComboBoxElement ComboBox(IReadOnlyList<ComboItem> items, string? selectedId = null, Action<string>? onSelectionChanged = null) =>
+        new(items, selectedId, onSelectionChanged);
     public static ImageElement Image(string source) => new(source);
     public static BorderElement Border(Element? child = null) => new(child);
     public static FlexRowElement FlexRow(params Element?[] children) => new(children);
@@ -615,6 +642,8 @@ public static class Factories
         new(text, onClick, icon);
     public static RadioMenuFlyoutItemData RadioMenuItem(string text, string groupName, bool isChecked = false, Action? onClick = null, string? icon = null) =>
         new(text, groupName, isChecked, onClick, icon);
+    public static ToggleMenuFlyoutItemData ToggleMenuItem(string text, bool isChecked = false, Action? onClick = null, string? icon = null) =>
+        new(text, isChecked, onClick, icon);
     public static MenuFlyoutSeparatorData MenuSeparator() => new();
     public static ComponentElement Component<TComponent>() where TComponent : Component, new() =>
         new(typeof(TComponent), null);
@@ -754,6 +783,7 @@ public static class ElementExtensions
     public static SliderElement Set(this SliderElement element, Action<Slider> setter) => element.AddSetter(setter);
     public static ColorPickerElement Set(this ColorPickerElement element, Action<ColorPicker> setter) => element.AddSetter(setter);
     public static ComboBoxElement Set(this ComboBoxElement element, Action<ComboBox> setter) => element.AddSetter(setter);
+    public static ItemComboBoxElement Set(this ItemComboBoxElement element, Action<ComboBox> setter) => element.AddSetter(setter);
     public static ImageElement Set(this ImageElement element, Action<Image> setter) => element.AddSetter(setter);
     public static BorderElement Set(this BorderElement element, Action<Border> setter) => element.AddSetter(setter);
     public static ProgressRingElement Set(this ProgressRingElement element, Action<ProgressRing> setter) => element.AddSetter(setter);
@@ -916,10 +946,12 @@ internal sealed class UiRenderer(Action requestRender)
     private readonly Dictionary<string, UIElement> _controls = new();
     private readonly Dictionary<string, Component> _components = new();
     private readonly Dictionary<string, Flyout> _contentFlyouts = new();
+    private readonly Dictionary<string, MenuFlyout> _menuFlyouts = new();
     private readonly HashSet<string> _mountedPaths = new();
     private readonly HashSet<string> _visitedControlPaths = new();
     private readonly HashSet<string> _visitedComponentKeys = new();
     private readonly HashSet<string> _visitedContentFlyoutPaths = new();
+    private readonly HashSet<string> _visitedMenuFlyoutPaths = new();
     private readonly HashSet<string> _visitedVirtualStackPaths = new();
     private readonly Dictionary<string, string[]> _virtualStackOwnedPathPrefixes = new();
 
@@ -931,6 +963,7 @@ internal sealed class UiRenderer(Action requestRender)
         _visitedControlPaths.Clear();
         _visitedComponentKeys.Clear();
         _visitedContentFlyoutPaths.Clear();
+        _visitedMenuFlyoutPaths.Clear();
         _visitedVirtualStackPaths.Clear();
 
         var rendered = RenderElement(element, path, effects);
@@ -949,6 +982,7 @@ internal sealed class UiRenderer(Action requestRender)
         _components.Clear();
         _controls.Clear();
         _contentFlyouts.Clear();
+        _menuFlyouts.Clear();
         _mountedPaths.Clear();
         _visitedVirtualStackPaths.Clear();
         _virtualStackOwnedPathPrefixes.Clear();
@@ -975,6 +1009,7 @@ internal sealed class UiRenderer(Action requestRender)
             SliderElement e => ConfigureSlider(GetOrCreate<Slider>(path), e),
             ColorPickerElement e => ConfigureColorPicker(GetOrCreate<ColorPicker>(path), e),
             ComboBoxElement e => ConfigureComboBox(GetOrCreate<ComboBox>(path), e),
+            ItemComboBoxElement e => ConfigureItemComboBox(GetOrCreate<ComboBox>(path), e),
             ImageElement e => ConfigureImage(GetOrCreate<Image>(path), e),
             BorderElement e => ConfigureBorder(GetOrCreate<Border>(path), e, path, effects),
             StackElement e => ConfigureStack(GetOrCreate<Border>(path), e, path, effects),
@@ -1262,6 +1297,68 @@ internal sealed class UiRenderer(Action requestRender)
         return control;
     }
 
+    private ComboBox ConfigureItemComboBox(ComboBox control, ItemComboBoxElement element)
+    {
+        control.SelectionChanged -= ItemComboBoxSelectionChanged;
+        var previous = control.Tag as ItemComboBoxElement;
+        control.Tag = element;
+
+        // Rebuild the row containers only when the item set actually changes. Rebuilding on every
+        // render would dismiss an open dropdown, which is the #970 session-picker regression.
+        if (previous is null || !ItemComboBoxElement.ItemsEqual(previous.Items, element.Items))
+        {
+            control.Items.Clear();
+            foreach (var item in element.Items)
+                control.Items.Add(CreateComboBoxItem(item));
+        }
+
+        // Reconcile selection by stable id every render (a status re-render must not change it).
+        ComboBoxItem? target = null;
+        if (element.SelectedId is { } selectedId)
+        {
+            foreach (var candidate in control.Items)
+            {
+                if (candidate is ComboBoxItem { Tag: string id } container && id == selectedId)
+                {
+                    target = container;
+                    break;
+                }
+            }
+        }
+        if (!ReferenceEquals(control.SelectedItem, target))
+            control.SelectedItem = target;
+
+        // Reattach only after programmatic mutations so those don't fire the user callback.
+        control.SelectionChanged += ItemComboBoxSelectionChanged;
+        ApplyModifiers(control, element);
+        ApplySetters(control, element);
+        return control;
+    }
+
+    private static ComboBoxItem CreateComboBoxItem(ComboItem item)
+    {
+        if (item.IsHeader)
+        {
+            return new ComboBoxItem
+            {
+                Content = item.Label,
+                IsEnabled = false,
+                IsHitTestVisible = false,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 10,
+                Padding = new Thickness(4, 2, 4, 2),
+            };
+        }
+
+        return new ComboBoxItem
+        {
+            Content = item.Label,
+            Tag = item.Id,
+            IsEnabled = item.Enabled,
+            Padding = new Thickness(8 + item.Indent, 4, 4, 4),
+        };
+    }
+
     private Image ConfigureImage(Image control, ImageElement element)
     {
         var sourceUri = new Uri(element.Source);
@@ -1441,6 +1538,15 @@ internal sealed class UiRenderer(Action requestRender)
             _contentFlyouts.Remove(path);
         }
 
+        foreach (var (path, flyout) in _menuFlyouts
+                     .Where(pair => IsPathAtOrBelow(pair.Key, prefix) && !_visitedMenuFlyoutPaths.Contains(pair.Key))
+                     .ToArray())
+        {
+            flyout.Hide();
+            flyout.Items.Clear();
+            _menuFlyouts.Remove(path);
+        }
+
         foreach (var (path, cachedControl) in _controls
                      .Where(pair => IsPathAtOrBelow(pair.Key, prefix) && !_visitedControlPaths.Contains(pair.Key))
                      .OrderByDescending(pair => pair.Key.Length)
@@ -1469,6 +1575,15 @@ internal sealed class UiRenderer(Action requestRender)
         {
             flyout.Hide();
             _contentFlyouts.Remove(path);
+        }
+
+        foreach (var (path, flyout) in _menuFlyouts
+                     .Where(pair => IsPathAtOrBelow(pair.Key, prefix))
+                     .ToArray())
+        {
+            flyout.Hide();
+            flyout.Items.Clear();
+            _menuFlyouts.Remove(path);
         }
 
         foreach (var (path, cachedControl) in _controls
@@ -1588,7 +1703,7 @@ internal sealed class UiRenderer(Action requestRender)
         return element switch
         {
             ContentFlyoutElement content => CreateContentFlyout(content, path, effects),
-            MenuFlyoutContentElement menu => CreateMenuFlyout(menu),
+            MenuFlyoutContentElement menu => CreateMenuFlyout(menu, path),
             _ => throw new NotSupportedException($"Unsupported functional UI flyout: {element.GetType().Name}")
         };
     }
@@ -1608,7 +1723,7 @@ internal sealed class UiRenderer(Action requestRender)
         // and stops the open popup from being torn apart mid-interaction.
         if (!_contentFlyouts.TryGetValue(path, out var flyout))
         {
-            flyout = new Flyout();
+            flyout = new Flyout { FlyoutPresenterStyle = TightFlyoutPresenterStyle() };
             _contentFlyouts[path] = flyout;
         }
 
@@ -1620,6 +1735,28 @@ internal sealed class UiRenderer(Action requestRender)
             flyout.Content = content;
         }
         return flyout;
+    }
+
+    // A FlyoutPresenter style that strips the default padding / min-width so a
+    // content flyout reads as tight as a MenuFlyout (whose MenuFlyoutPresenter
+    // uses ~0,4,0,4 padding and no wide min-width). The flyout content supplies
+    // its own inner sizing. Cached so the identical Style is shared across all
+    // content flyouts.
+    private static Style? _tightFlyoutPresenterStyle;
+
+    private static Style TightFlyoutPresenterStyle()
+    {
+        if (_tightFlyoutPresenterStyle is not null)
+            return _tightFlyoutPresenterStyle;
+
+        var style = new Style(typeof(FlyoutPresenter));
+        // Equal inset on all four sides so the floating rows have the same
+        // breathing room top/bottom as they do left/right (matches the modern
+        // WinUI menu-flyout look). The rows supply their own inner padding.
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(4, 4, 4, 4)));
+        style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 0.0));
+        _tightFlyoutPresenterStyle = style;
+        return style;
     }
 
     private void PruneUnvisitedPaths()
@@ -1647,6 +1784,16 @@ internal sealed class UiRenderer(Action requestRender)
             flyout.Hide();
             flyout.Content = null;
             _contentFlyouts.Remove(path);
+        }
+
+        foreach (var (path, flyout) in _menuFlyouts.ToArray())
+        {
+            if (_visitedMenuFlyoutPaths.Contains(path) || IsOwnedByVirtualStack(path))
+                continue;
+
+            flyout.Hide();
+            flyout.Items.Clear();
+            _menuFlyouts.Remove(path);
         }
 
         foreach (var (path, control) in _controls.ToArray())
@@ -1680,9 +1827,17 @@ internal sealed class UiRenderer(Action requestRender)
         || path.StartsWith(prefix + ".", StringComparison.Ordinal)
         || path.StartsWith(prefix + ":", StringComparison.Ordinal);
 
-    private static MenuFlyout CreateMenuFlyout(MenuFlyoutContentElement element)
+    private MenuFlyout CreateMenuFlyout(MenuFlyoutContentElement element, string path)
     {
-        var flyout = new MenuFlyout { Placement = element.Placement };
+        _visitedMenuFlyoutPaths.Add(path);
+        if (!_menuFlyouts.TryGetValue(path, out var flyout))
+        {
+            flyout = new MenuFlyout();
+            _menuFlyouts[path] = flyout;
+        }
+
+        flyout.Placement = element.Placement;
+        flyout.Items.Clear();
         foreach (var item in element.Items)
             flyout.Items.Add(CreateMenuFlyoutItem(item));
         return flyout;
@@ -1715,6 +1870,15 @@ internal sealed class UiRenderer(Action requestRender)
                 };
                 radioItem.Click += RadioMenuFlyoutItemClick;
                 return radioItem;
+            case ToggleMenuFlyoutItemData data:
+                var toggleItem = new ToggleMenuFlyoutItem
+                {
+                    Text = data.Text,
+                    IsChecked = data.IsChecked,
+                    Tag = data
+                };
+                toggleItem.Click += ToggleMenuFlyoutItemClick;
+                return toggleItem;
             case MenuFlyoutSeparatorData:
                 return new MenuFlyoutSeparator();
             default:
@@ -2103,6 +2267,12 @@ internal sealed class UiRenderer(Action requestRender)
             element.OnSelectionChanged?.Invoke(combo.SelectedIndex);
     }
 
+    private static void ItemComboBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { Tag: ItemComboBoxElement element, SelectedItem: ComboBoxItem { Tag: string id } })
+            element.OnSelectionChanged?.Invoke(id);
+    }
+
     private static void MenuFlyoutItemClick(object sender, RoutedEventArgs e)
     {
         if (sender is MenuFlyoutItem { Tag: MenuFlyoutItemData data })
@@ -2113,6 +2283,19 @@ internal sealed class UiRenderer(Action requestRender)
     {
         if (sender is RadioMenuFlyoutItem { Tag: RadioMenuFlyoutItemData data })
             data.OnClick?.Invoke();
+    }
+
+    private static void ToggleMenuFlyoutItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleMenuFlyoutItem { Tag: ToggleMenuFlyoutItemData data } item)
+        {
+            // The menu is rebuilt from props on every re-render, so the rendered
+            // IsChecked is the single source of truth. Undo WinUI's automatic
+            // click-toggle here so a stale check can't linger if the click does
+            // not produce a re-render (e.g. re-selecting the current item).
+            item.IsChecked = data.IsChecked;
+            data.OnClick?.Invoke();
+        }
     }
 }
 }

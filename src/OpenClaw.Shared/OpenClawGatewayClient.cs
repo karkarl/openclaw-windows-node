@@ -164,8 +164,12 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
     protected override Task OnConnectedAsync()
     {
         ResetUnsupportedMethodFlags();
+        RaiseTransportConnected();
         return Task.CompletedTask;
     }
+
+    protected void RaiseTransportConnected() =>
+        TransportConnected?.Invoke(this, EventArgs.Empty);
 
     protected override bool ShouldAutoReconnect()
     {
@@ -232,6 +236,8 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
     public event EventHandler<DeviceTokenReceivedEventArgs>? DeviceTokenReceived;
     /// <summary>Raised when the hello-ok handshake completes successfully.</summary>
     public event EventHandler? HandshakeSucceeded;
+    /// <summary>Raised after the WebSocket transport connects, before the gateway handshake begins.</summary>
+    public event EventHandler? TransportConnected;
     /// <summary>Raised when the gateway requires pairing approval for this device.</summary>
     public event EventHandler<string?>? PairingRequired;
     /// <summary>Raised when v3 signature was rejected and client fell back to v2.</summary>
@@ -1292,10 +1298,16 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
             // Return a populated result with the error so the UI can surface
             // it in the diagnostic disclosure. Returning null would lose the
             // gateway's actual reason for failing.
+            //
+            // Use ex.Message (the clean, gateway-relayed reason — e.g.
+            // "web login provider is not available") rather than ex.ToString():
+            // the latter leaks our own .NET stack trace with internal CI build
+            // paths into user-facing UI (issue #957). The message is the signal
+            // the page pattern-matches on and shows to the user.
             return new WebLoginStartResult
             {
                 Error = ex.Message,
-                RawResponse = ex.ToString(),
+                RawResponse = ex.Message,
             };
         }
     }
@@ -1321,10 +1333,12 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
         catch (Exception ex)
         {
             _logger.Warn($"web.login.wait failed: {ex.Message}");
+            // ex.Message, not ex.ToString(): keep the clean gateway reason and
+            // avoid leaking an internal .NET stack trace into the UI (issue #957).
             return new WebLoginWaitResult
             {
                 Error = ex.Message,
-                RawResponse = ex.ToString(),
+                RawResponse = ex.Message,
             };
         }
     }

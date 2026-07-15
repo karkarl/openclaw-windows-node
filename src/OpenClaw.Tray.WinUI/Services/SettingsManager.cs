@@ -93,6 +93,8 @@ public class SettingsManager
     public string AppTheme { get => NormalizeAppTheme(_data.AppTheme); set => _data = _data with { AppTheme = NormalizeAppTheme(value) }; }
     public bool? ShowDiagnosticsOverride { get => _data.ShowDiagnostics; set => _data = _data with { ShowDiagnostics = value }; }
     public bool ShowDiagnosticsEffective => _data.ShowDiagnostics ?? OpenClawTray.Helpers.DiagnosticsGate.BuildDefault;
+    public string OpenTelemetryEndpoint { get => _data.OpenTelemetryEndpoint ?? ""; set => _data = _data with { OpenTelemetryEndpoint = NormalizeOptionalString(value) }; }
+    public string OpenTelemetryProtocol { get => OpenTelemetryEndpointProtocol.Normalize(_data.OpenTelemetryProtocol); set => _data = _data with { OpenTelemetryProtocol = OpenTelemetryEndpointProtocol.Normalize(value) }; }
 
     // Node mode(gateway WebSocket connection — separate from MCP)
     public bool EnableNodeMode { get => _data.EnableNodeMode; set => _data = _data with { EnableNodeMode = value }; }
@@ -121,6 +123,8 @@ public class SettingsManager
     public float SttSilenceTimeout { get => _data.SttSilenceTimeout > 0 ? _data.SttSilenceTimeout : 1.5f; set => _data = _data with { SttSilenceTimeout = value }; }
     /// <summary>Enable TTS playback of responses during voice sessions.</summary>
     public bool VoiceTtsEnabled { get => _data.VoiceTtsEnabled; set => _data = _data with { VoiceTtsEnabled = value }; }
+    /// <summary>Show tool-call and usage chips inline in the chat timeline.</summary>
+    public bool ShowChatToolCalls { get => _data.ShowChatToolCalls; set => _data = _data with { ShowChatToolCalls = value }; }
     /// <summary>Play audio feedback chimes on listen start/stop.</summary>
     public bool VoiceAudioFeedback { get => _data.VoiceAudioFeedback; set => _data = _data with { VoiceAudioFeedback = value }; }
     public bool NodeTtsEnabled { get => _data.NodeTtsEnabled; set => _data = _data with { NodeTtsEnabled = value }; }
@@ -246,6 +250,8 @@ public class SettingsManager
         UseLegacyWebChat = false,
         ShowCompletedSessions = false,
         AppTheme = AppThemeSystem,
+        OpenTelemetryEndpoint = null,
+        OpenTelemetryProtocol = OpenTelemetryEndpointProtocol.Grpc,
         EnableNodeMode = false,
         NodeCanvasEnabled = true,
         NodeScreenEnabled = true,
@@ -313,6 +319,8 @@ public class SettingsManager
             PreferredGatewayId = loaded.PreferredGatewayId ?? defaults.PreferredGatewayId,
             AppTheme = NormalizeAppTheme(loaded.AppTheme),
             ShowDiagnostics = loaded.ShowDiagnostics,
+            OpenTelemetryEndpoint = NormalizeOptionalString(loaded.OpenTelemetryEndpoint),
+            OpenTelemetryProtocol = OpenTelemetryEndpointProtocol.Normalize(loaded.OpenTelemetryProtocol),
             UserRules = loaded.UserRules != null ? new List<UserNotificationRule>(loaded.UserRules) : new(),
             SandboxCustomFolders = CloneSandboxCustomFolders(loaded.SandboxCustomFolders),
             SystemRunBlockHostFallbackWhenMxcUnavailable = loaded.SystemRunBlockHostFallbackWhenMxcUnavailable,
@@ -398,6 +406,8 @@ public class SettingsManager
         TtsPiperVoiceId = TtsPiperVoiceId,
         AppTheme = AppTheme,
         ShowDiagnostics = ShowDiagnosticsOverride,
+        OpenTelemetryEndpoint = NormalizeOptionalString(OpenTelemetryEndpoint),
+        OpenTelemetryProtocol = OpenTelemetryEndpointProtocol.Normalize(OpenTelemetryProtocol),
         A2UIImageHosts = A2UIImageHosts.Count == 0 ? null : new List<string>(A2UIImageHosts),
         SkippedUpdateTag = string.IsNullOrWhiteSpace(SkippedUpdateTag) ? null : SkippedUpdateTag,
         PreferredGatewayId = string.IsNullOrWhiteSpace(PreferredGatewayId) ? null : PreferredGatewayId,
@@ -416,6 +426,9 @@ public class SettingsManager
             return AppThemeDark;
         return AppThemeSystem;
     }
+
+    private static string? NormalizeOptionalString(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public void Save()
     {
