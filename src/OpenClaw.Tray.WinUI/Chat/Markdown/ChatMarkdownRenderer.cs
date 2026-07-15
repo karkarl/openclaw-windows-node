@@ -51,30 +51,36 @@ public static class ChatMarkdownRenderer
         if (document.Blocks.Count == 0)
             return null;
 
-        // Coalesce maximal runs of consecutive text blocks (paragraphs +
-        // headings) into a single RichTextBlock so the whole prose run is one
-        // continuous text-selection scope. Non-text blocks (lists, tables, code,
-        // block quotes, rules) stay as their own selectable sibling controls —
-        // they are natural selection islands and keep their existing layout.
+        // Coalesce maximal runs of consecutive mergeable blocks (paragraphs,
+        // headings, and "simple" bullet/numbered lists) into a single
+        // RichTextBlock so the whole run is one continuous text-selection scope
+        // — a drag can select across paragraphs AND list items. Blocks that
+        // carry their own chrome (code cards, table grids, block-quote borders,
+        // rules) — and any list that contains such a block — stay as their own
+        // selectable sibling controls, keeping their existing layout.
         var blocks = document.Blocks;
         var segments = new List<Element?>(blocks.Count);
         int i = 0;
         while (i < blocks.Count)
         {
-            if (IsMergeableText(blocks[i]))
+            if (IsMergeable(blocks[i]))
             {
                 int start = i;
-                while (i < blocks.Count && IsMergeableText(blocks[i])) i++;
+                while (i < blocks.Count && IsMergeable(blocks[i])) i++;
                 int count = i - start;
-                if (count == 1)
+                if (count == 1 && blocks[start] is MdParagraph or MdHeading)
                 {
-                    // A lone text block keeps the lightweight single-TextBlock
-                    // shape (already internally selectable) — no behavior change.
+                    // A lone paragraph / heading keeps the lightweight
+                    // single-TextBlock shape (already internally selectable) —
+                    // no behavior change.
                     var single = RenderBlock(blocks[start]);
                     if (single is not null) segments.Add(single);
                 }
                 else
                 {
+                    // Multi-block prose runs — and any run containing a list —
+                    // become one continuous RichTextBlock so paragraphs,
+                    // headings, and list items share a single selection scope.
                     var run = new List<MdBlock>(count);
                     for (int j = start; j < i; j++) run.Add(blocks[j]);
                     segments.Add(TextRunRichBlock(run));
@@ -93,7 +99,27 @@ public static class ChatMarkdownRenderer
         return VStack(8.0, segments.ToArray());
     }
 
-    private static bool IsMergeableText(MdBlock block) => block is MdParagraph or MdHeading;
+    // Blocks that can flow into one continuous RichTextBlock: prose (paragraphs,
+    // headings) and "simple" lists whose items contain only more mergeable
+    // blocks. A list containing a code block, table, block quote, thematic
+    // break, or raw block is NOT mergeable — it keeps its own layout as a
+    // sibling island so that chrome (code cards, table grids) survives and the
+    // list's non-text children stay selectable in their native form.
+    private static bool IsMergeable(MdBlock block) => block switch
+    {
+        MdParagraph => true,
+        MdHeading => true,
+        MdList list => IsSimpleList(list),
+        _ => false,
+    };
+
+    private static bool IsSimpleList(MdList list)
+    {
+        foreach (var item in list.Items)
+            foreach (var child in item.Children)
+                if (!IsMergeable(child)) return false;
+        return true;
+    }
 
     public static Element? Render(string? markdown)
     {
@@ -310,12 +336,137 @@ public static class ChatMarkdownRenderer
         }
         s_blocksCache.AddOrUpdate(rtb, blocks);
         rtb.Blocks.Clear();
-        for (int i = 0; i < blocks.Count; i++)
+        foreach (var block in blocks)
         {
-            var paragraph = BuildParagraph(blocks[i]);
-            if (i > 0) paragraph.Margin = new Thickness(0, ParagraphSpacing, 0, 0);
-            rtb.Blocks.Add(paragraph);
+            switch (block)
+            {
+                case MdParagraph:
+                case MdHeading:
+                {
+                    var p = BuildParagraph(block);
+                    p.Margin = new Thickness(0, TopGap(rtb, ParagraphSpacing), 0, 0);
+                    rtb.Blocks.Add(p);
+                    break;
+                }
+                case MdList list:
+                    AppendList(rtb, list, level: 1);
+                    break;
+            }
         }
+    }
+
+    // Vertical gap before the next paragraph: none for the very first paragraph
+    // in the RichTextBlock, otherwise the supplied gap. Keeping this off the
+    // first paragraph avoids a leading blank strip at the top of the bubble.
+    private static double TopGap(RichTextBlock rtb, double gap) =>
+        rtb.Blocks.Count == 0 ? 0.0 : gap;
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Lists coalesced into the shared RichTextBlock (hanging-indent
+    //  paragraphs) — one continuous selection scope with the surrounding
+    //  prose. Only reached for "simple" lists (see IsSimpleList); lists that
+    //  carry chrome-bearing children render via RenderList as their own island.
+    // ────────────────────────────────────────────────────────────────────
+
+    private const double ListIndentPerLevel = 18.0;
+    private const double ListItemSpacing = 3.0;
+    // Fixed offset from a list item's marker column to its text/content column.
+    // Applied as a hanging indent (negative TextIndent on the marker line) so
+    // wrapped lines and continuation paragraphs align under the text rather than
+    // back at the marker — approximating the Grid path's Auto/Star columns with
+    // the flat Paragraph model (which has no per-item measured marker width).
+    private const double ListHangingIndent = 18.0;
+    // Marker → text separator. En space gives a stable, font-independent gap
+    // after the bullet / number without relying on tab stops (which Paragraph
+    // does not expose).
+    private const string ListMarkerGap = "\u2002";
+
+    private static void AppendList(RichTextBlock rtb, MdList list, int level)
+    {
+        bool ordered = list.Marker == MdListMarker.Ordered;
+        int number = ordered ? list.StartNumber : 0;
+        for (int idx = 0; idx < list.Items.Count; idx++)
+        {
+            var item = list.Items[idx];
+            string marker = item.TaskState switch
+            {
+                MdTaskState.Checked   => "\u2611",
+                MdTaskState.Unchecked => "\u2610",
+                _ => ordered ? $"{number}." : "\u2022",
+            };
+            if (ordered) number++;
+            // A top-level list's first item gets the fuller paragraph gap so the
+            // list separates from preceding prose; every other item uses the
+            // tighter inter-item gap.
+            double leadGap = (level == 1 && idx == 0) ? ParagraphSpacing : ListItemSpacing;
+            AppendListItem(rtb, item, marker, level, leadGap);
+        }
+    }
+
+    private static void AppendListItem(
+        RichTextBlock rtb, MdListItem item, string marker, int level, double leadGap)
+    {
+        double indent = ListIndentPerLevel * level;
+        bool markerEmitted = false;
+        foreach (var child in item.Children)
+        {
+            double gap = markerEmitted ? ListItemSpacing : leadGap;
+            switch (child)
+            {
+                case MdParagraph p:
+                    rtb.Blocks.Add(BuildListParagraph(
+                        rtb, p.Inlines, indent, markerEmitted ? null : marker, gap));
+                    markerEmitted = true;
+                    break;
+                case MdHeading h:
+                {
+                    int hidx = Math.Clamp(h.Level - 1, 0, HeadingFontSizes.Length - 1);
+                    rtb.Blocks.Add(BuildListParagraph(
+                        rtb, h.Inlines, indent, markerEmitted ? null : marker, gap,
+                        HeadingFontSizes[hidx], semiBold: true));
+                    markerEmitted = true;
+                    break;
+                }
+                case MdList nested:
+                    if (!markerEmitted)
+                    {
+                        rtb.Blocks.Add(BuildListParagraph(
+                            rtb, Array.Empty<MdInline>(), indent, marker, leadGap));
+                        markerEmitted = true;
+                    }
+                    AppendList(rtb, nested, level + 1);
+                    break;
+            }
+        }
+        if (!markerEmitted)
+        {
+            // Empty item — still emit the marker so numbering stays consistent.
+            rtb.Blocks.Add(BuildListParagraph(
+                rtb, Array.Empty<MdInline>(), indent, marker, leadGap));
+        }
+    }
+
+    private static Paragraph BuildListParagraph(
+        RichTextBlock rtb, IReadOnlyList<MdInline> inlines, double indent,
+        string? marker, double gap, double fontSize = BodyFontSize, bool semiBold = false)
+    {
+        var p = new Paragraph
+        {
+            FontSize = fontSize,
+            // Content column sits a fixed hanging offset past the marker indent
+            // so wrapped lines / continuation paragraphs align under the text.
+            Margin = new Thickness(indent + ListHangingIndent, TopGap(rtb, gap), 0, 0),
+        };
+        if (semiBold) p.FontWeight = MUIText.FontWeights.SemiBold;
+        if (marker is not null)
+        {
+            // Hanging indent: pull the marker line back to the marker column
+            // while wrapped lines stay at the content column set by Margin.
+            p.TextIndent = -ListHangingIndent;
+            p.Inlines.Add(new Run { Text = marker + ListMarkerGap });
+        }
+        AppendInlines(p.Inlines, inlines);
+        return p;
     }
 
     // Compare coalesced text runs structurally rather than via record equality.
@@ -341,8 +492,30 @@ public static class ChatMarkdownRenderer
     {
         (MdHeading ha, MdHeading hb) => ha.Level == hb.Level && ha.Inlines.SequenceEqual(hb.Inlines),
         (MdParagraph pa, MdParagraph pb) => pa.Inlines.SequenceEqual(pb.Inlines),
+        (MdList la, MdList lb) => ListEqual(la, lb),
         _ => a.Equals(b),
     };
+
+    // Structural list comparison mirroring BlockEqual's rationale: MdList /
+    // MdListItem records compare their child collections BY REFERENCE, so a
+    // re-parsed-but-identical list would otherwise force a Blocks rebuild and
+    // wipe the active selection. Recurse through items and their block children
+    // (nested lists included) comparing inline content by value.
+    private static bool ListEqual(MdList a, MdList b)
+    {
+        if (a.Marker != b.Marker || a.StartNumber != b.StartNumber) return false;
+        if (a.Items.Count != b.Items.Count) return false;
+        for (int i = 0; i < a.Items.Count; i++)
+        {
+            var ia = a.Items[i];
+            var ib = b.Items[i];
+            if (ia.TaskState != ib.TaskState) return false;
+            if (ia.Children.Count != ib.Children.Count) return false;
+            for (int j = 0; j < ia.Children.Count; j++)
+                if (!BlockEqual(ia.Children[j], ib.Children[j])) return false;
+        }
+        return true;
+    }
 
     private static Paragraph BuildParagraph(MdBlock block)
     {
@@ -366,7 +539,8 @@ public static class ChatMarkdownRenderer
                 return p;
             }
             default:
-                // Only text blocks (see IsMergeableText) reach this method.
+                // Only paragraphs / headings reach this method — lists flow
+                // through AppendList, other blocks render as sibling islands.
                 return new Paragraph { FontSize = BodyFontSize };
         }
     }
