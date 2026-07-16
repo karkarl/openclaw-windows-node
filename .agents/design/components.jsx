@@ -6,6 +6,13 @@
 // (e.g. var(--color-accent), var(--space-4), var(--radius-md), var(--font-display)).
 //
 // Copilot reads this file to match the house style when it builds new UI.
+//
+// This React is DESIGN INTENT for the canvas preview — not shipping code. To ship,
+// port these patterns into the app's implementation using the port targets in
+// design.json `authority`: most surfaces ship as native WinUI 3 / C# (port via
+// github.com/microsoft/win-dev-skills), while the chat surface (ChatBubble,
+// ChatComposer, ChatThread) ships via Reactor (github.com/microsoft/microsoft-ui-reactor).
+// Don't ship this JSX verbatim.
 
 // Primary action. One per view — it's where the eye should land.
 // Padding mirrors WinUI's default ButtonPadding (Thickness 11,5,11,6 → CSS 5px 11px 6px);

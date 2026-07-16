@@ -4,6 +4,22 @@
 > and Copilot read here. Keep it short enough that people actually read it.
 > This is the design system for the **OpenClaw Windows Hub** app.
 
+## Design leads, native code ships
+These files are the source of truth for **design** — tokens, component intent, and
+principles — and are framework-agnostic. The React in `components.jsx` is design
+intent for the canvas preview, not shipping code. How a design becomes shipping code
+is recorded in `design.json` under `authority`:
+
+- **Default:** surfaces ship as **native WinUI 3 / C#** (Windows Fluent). Port the
+  design into XAML/C# using [win-dev-skills](https://github.com/microsoft/win-dev-skills).
+- **Chat surface** (`ChatBubble`, `ChatComposer`, `ChatThread`): ships via
+  **[Reactor](https://github.com/microsoft/microsoft-ui-reactor)**, the React-style
+  framework for this app's chat. (Reactor has no dedicated porting agent yet — WIP.)
+
+When you need a value the design doesn't cover, add it here first, then port it into
+the native/Reactor implementation via the matching source above — don't hard-code a
+one-off in feature code.
+
 ## The one-line brief
 A calm native Windows companion for your AI assistant. It should feel like a
 quiet, trustworthy extension of Windows — Fluent surfaces, the user's own

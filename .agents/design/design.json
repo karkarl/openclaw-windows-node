@@ -3,7 +3,24 @@
   "meta": {
     "version": 1,
     "updatedBy": "xaml+manual",
-    "note": "Tokens derived by manual inspection of the repo's WinUI 3 / XAML and C# surfaces (the CSS/JSX scanner finds no files in a XAML repo). This app themes off Windows Fluent system resources (SystemAccentColor, Mica, Segoe UI Variable), so tokens below map to Fluent theme resources rather than a bespoke hex palette. Edit in the Design System canvas or directly."
+    "note": "These tokens are the source of truth for DESIGN (brand, color, type, spacing, principles) and are framework-agnostic — components.jsx shows design intent for the canvas preview, not shipping code. They were captured by manual inspection of the repo's WinUI 3 / XAML and C# surfaces (the CSS/JSX scanner finds no files in a XAML repo) and map to Windows Fluent system resources (SystemAccentColor, Mica, Segoe UI Variable). To ship, port the design into native code via the port targets in `authority`. Edit in the Design System canvas or directly."
+  },
+  "authority": {
+    "designSource": "self",
+    "port": {
+      "authoritySource": "Native WinUI 3 / C# (Windows Fluent)",
+      "syncSource": "https://github.com/microsoft/win-dev-skills",
+      "helperAgent": "win-dev-skills"
+    },
+    "portOverrides": [
+      {
+        "area": "chat",
+        "components": ["ChatBubble", "ChatComposer", "ChatThread"],
+        "authoritySource": "Reactor (Microsoft.UI.Reactor)",
+        "syncSource": "https://github.com/microsoft/microsoft-ui-reactor",
+        "helperAgent": ""
+      }
+    ]
   },
   "brand": {
     "name": "Windows Fluent UI for OpenClaw",
