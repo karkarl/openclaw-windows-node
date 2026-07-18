@@ -14,6 +14,8 @@ public sealed class ProgramArgumentTests : IDisposable
         "--local-data-dir",
         "--distro-name",
         "--gateway-port",
+        "--tailscale-auth",
+        "--tailscale-hostname",
         "--autostart-name",
         "--startup-task-name",
     ];
@@ -28,6 +30,8 @@ public sealed class ProgramArgumentTests : IDisposable
         "--uninstall",
         "--confirm-destructive",
         "--preserve-logs",
+        "--tailscale",
+        "--tailscale-trust-auth",
     ];
 
     private readonly string _tempDir;

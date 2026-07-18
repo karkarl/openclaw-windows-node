@@ -37,6 +37,11 @@ public class SetupConfigTests : IDisposable
         Assert.True(config.WindowsNodeContext.Enabled);
         Assert.Null(config.WindowsNodeContext.WorkspacePath);
         Assert.Equal(180, config.WindowsNodeContext.TimeoutSeconds);
+        Assert.False(config.Tailscale.Enabled);
+        Assert.False(config.Tailscale.TrustTailscaleAuth);
+        Assert.Equal(TailscaleAuthMode.Browser, config.Tailscale.AuthMode);
+        Assert.Equal(300, config.Tailscale.AuthTimeoutSeconds);
+        Assert.Equal(300, config.Tailscale.ServeApprovalTimeoutSeconds);
     }
 
     [Fact]
@@ -77,6 +82,48 @@ public class SetupConfigTests : IDisposable
     {
         var config = new SetupConfig { GatewayUrl = "ws://custom:1234" };
         Assert.Equal("ws://custom:1234", config.EffectiveGatewayUrl);
+    }
+
+    [Fact]
+    public void TailscaleConfig_NormalizesHostnameAndRejectsIncompatibleGatewaySettings()
+    {
+        var config = new SetupConfig
+        {
+            GatewayUrl = "wss://external.example.test",
+            Tailscale = new TailscaleConfig { Enabled = true, Hostname = "OpenClaw !!! Gateway" }
+        };
+
+        Assert.Equal("openclaw-gateway", config.Tailscale.EffectiveHostname);
+        Assert.Contains("GatewayUrl", TailscaleSetupPolicy.ValidateConfig(config));
+
+        config.GatewayUrl = null;
+        config.Gateway.Bind = "lan";
+        Assert.Contains("loopback", TailscaleSetupPolicy.ValidateConfig(config));
+
+        config.Gateway.Bind = "loopback";
+        config.BaseDistro = "Debian";
+        Assert.Contains("Ubuntu-24.04", TailscaleSetupPolicy.ValidateConfig(config));
+    }
+
+    [Fact]
+    public void TailscaleAuthKey_IsRuntimeOnlyAndStatusParsesMagicDns()
+    {
+        var config = new SetupConfig
+        {
+            Tailscale = new TailscaleConfig { Enabled = true, AuthMode = TailscaleAuthMode.AuthKey, AuthKey = "tskey-auth-secret" }
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(config, SetupConfig.JsonWriteOptions);
+
+        Assert.DoesNotContain("tskey-auth-secret", json);
+        Assert.DoesNotContain("\"AuthKey\":", json);
+        Assert.True(TailscaleSetupPolicy.TryParseStatus("""{"BackendState":"Running","Self":{"DNSName":"openclaw.tailnet.ts.net."}}""", out var status));
+        Assert.True(status.IsRunning);
+        Assert.Equal("tailnet.ts.net", TailscaleSetupPolicy.GetTailnetDnsSuffix(status.DnsName));
+        Assert.Equal("openclaw-gateway", TailscaleSetupPolicy.NormalizeHostname("openclaw_gateway", "ignored"));
+
+        Assert.True(TailscaleSetupPolicy.TryParseStatus("""{"BackendState":"NeedsLogin","AuthURL":"https://login.tailscale.com/a/next-token","Health":["register request: http 410: auth path not found"]}""", out var staleAuthorization));
+        Assert.True(staleAuthorization.HasExpiredAuthorizationPath);
+        Assert.Equal("https://login.tailscale.com/a/next-token", staleAuthorization.AuthorizationUri?.AbsoluteUri);
     }
 
     [Fact]
@@ -134,22 +181,27 @@ public class SetupConfigTests : IDisposable
         var prevDistro = Environment.GetEnvironmentVariable("OPENCLAW_SETUP_DISTRO");
         var prevPort = Environment.GetEnvironmentVariable("OPENCLAW_SETUP_PORT");
         var prevHeadless = Environment.GetEnvironmentVariable("OPENCLAW_SETUP_HEADLESS");
+        var prevTrustTailscaleAuth = Environment.GetEnvironmentVariable("OPENCLAW_SETUP_TAILSCALE_TRUST_AUTH");
         try
         {
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_DISTRO", "EnvDistro");
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_PORT", "9876");
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_HEADLESS", "true");
+            Environment.SetEnvironmentVariable("OPENCLAW_SETUP_TAILSCALE_TRUST_AUTH", "true");
 
             var config = SetupConfig.FromEnvironment();
             Assert.Equal("EnvDistro", config.DistroName);
             Assert.Equal(9876, config.GatewayPort);
             Assert.True(config.Headless);
+            Assert.True(config.Tailscale.Enabled);
+            Assert.True(config.Tailscale.TrustTailscaleAuth);
         }
         finally
         {
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_DISTRO", prevDistro);
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_PORT", prevPort);
             Environment.SetEnvironmentVariable("OPENCLAW_SETUP_HEADLESS", prevHeadless);
+            Environment.SetEnvironmentVariable("OPENCLAW_SETUP_TAILSCALE_TRUST_AUTH", prevTrustTailscaleAuth);
         }
     }
 
@@ -304,6 +356,40 @@ public class SetupConfigTests : IDisposable
             Environment.SetEnvironmentVariable("OPENCLAW_TRAY_DATA_DIR", oldData);
             Environment.SetEnvironmentVariable("OPENCLAW_TRAY_LOCAL_DATA_DIR", oldLocalData);
         }
+    }
+
+    [Fact]
+    public void SetupReviewSummary_UsesDiscoveredTailnetSuffix()
+    {
+        var config = new SetupConfig
+        {
+            Tailscale = new TailscaleConfig
+            {
+                Enabled = true,
+                Hostname = "openclaw-test",
+                TailnetDnsSuffix = "example.ts.net"
+            }
+        };
+
+        var summary = SetupReviewSummaryBuilder.Build(config);
+
+        Assert.Equal("wss://openclaw-test.example.ts.net", summary.GatewayEndpoint);
+        Assert.DoesNotContain("<tailnet>", summary.GatewayEndpoint);
+        Assert.Contains("requires existing Companion token or device authentication", summary.GatewayDescription);
+        Assert.Equal("OpenClawGateway · wss://openclaw-test.example.ts.net", summary.CompletionGatewaySummary);
+    }
+
+    [Fact]
+    public void SetupReviewSummary_StatesWhenTailscaleAuthIsTrusted()
+    {
+        var config = new SetupConfig
+        {
+            Tailscale = new TailscaleConfig { Enabled = true, TrustTailscaleAuth = true }
+        };
+
+        var summary = SetupReviewSummaryBuilder.Build(config);
+
+        Assert.Contains("trusts tailnet identity authentication", summary.GatewayDescription);
     }
 
     [Fact]

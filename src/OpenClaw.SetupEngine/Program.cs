@@ -16,6 +16,8 @@ public static class Program
         "--local-data-dir",
         "--distro-name",
         "--gateway-port",
+        "--tailscale-auth",
+        "--tailscale-hostname",
         "--autostart-name",
         "--startup-task-name",
     ]);
@@ -30,6 +32,8 @@ public static class Program
         "--uninstall",
         "--confirm-destructive",
         "--preserve-logs",
+        "--tailscale",
+        "--tailscale-trust-auth",
     ]);
 
     public static async Task<int> Main(string[] args)
@@ -58,6 +62,10 @@ public static class Program
         var localDataDir = parsedArguments.GetValue("--local-data-dir");
         var distroName = parsedArguments.GetValue("--distro-name");
         var gatewayPortText = parsedArguments.GetValue("--gateway-port");
+        var tailscale = parsedArguments.HasFlag("--tailscale");
+        var tailscaleTrustAuth = parsedArguments.HasFlag("--tailscale-trust-auth");
+        var tailscaleAuth = parsedArguments.GetValue("--tailscale-auth");
+        var tailscaleHostname = parsedArguments.GetValue("--tailscale-hostname");
         var autoStartName = parsedArguments.GetValue("--autostart-name") ?? "OpenClawTray";
         var startupTaskName = parsedArguments.GetValue("--startup-task-name") ?? WindowsStartupTaskRegistration.TaskName;
 
@@ -106,6 +114,24 @@ public static class Program
             config.GatewayPort = gatewayPort;
             config.GatewayUrl = null;
         }
+        if (tailscale)
+            config.Tailscale.Enabled = true;
+        if (tailscaleTrustAuth)
+        {
+            config.Tailscale.Enabled = true;
+            config.Tailscale.TrustTailscaleAuth = true;
+        }
+        if (!string.IsNullOrWhiteSpace(tailscaleAuth))
+        {
+            if (!TailscaleConfig.TryParseAuthMode(tailscaleAuth, out var authMode))
+            {
+                Console.Error.WriteLine($"ERROR: Invalid --tailscale-auth value '{tailscaleAuth}'. Use browser or auth-key.");
+                return 2;
+            }
+            config.Tailscale.AuthMode = authMode;
+        }
+        if (!string.IsNullOrWhiteSpace(tailscaleHostname))
+            config.Tailscale.Hostname = tailscaleHostname;
         GatewayLkgVersion.ApplyToConfig(config);
         if (headless) config.Headless = true;
         if (rollback) config.RollbackOnFailure = true;
@@ -114,6 +140,12 @@ public static class Program
         if (logPath != null) config.LogPath = logPath;
         if (dryRun) config.DryRun = true;
         if (confirmDestructive) config.ConfirmDestructive = true;
+
+        if (TailscaleSetupPolicy.ValidateConfig(config) is { } tailscaleConfigError)
+        {
+            Console.Error.WriteLine($"ERROR: {tailscaleConfigError}");
+            return 2;
+        }
 
         // Default log path if not specified
         var logLabel = uninstall ? "uninstall" : "setup";
@@ -176,7 +208,8 @@ public static class Program
             commands,
             cts.Token,
             dataDir,
-            localDataDir);
+            localDataDir,
+            new ConsoleExternalAuthorizationPresenter());
 
         // Build step pipeline
         List<SetupStep> steps;
