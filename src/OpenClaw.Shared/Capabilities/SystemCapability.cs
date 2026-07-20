@@ -49,10 +49,35 @@ public class SystemCapability : NodeCapabilityBase
         "shutdown",
         "invoke-webrequest",
         "invoke-restmethod",
+        "invoke-expression",
+        "iex ",
+        "invoke-command",
+        "icm ",
         "start-process",
         "set-executionpolicy",
         "reg ",
-        "net "
+        "net ",
+        // Living-off-the-land binaries: native tools whose purpose here is code execution or remote
+        // download-and-run — the same intent already blocked for the PowerShell downloaders
+        // (invoke-webrequest/-restmethod) and process spawning (start-process), but in native-binary
+        // form the fragments above miss. A remote .set must not be able to whitelist one and invoke
+        // it (mshta/regsvr32/rundll32 run remote script; certutil/bitsadmin/curl/wget download). A
+        // denylist cannot be exhaustive against the LOLBAS set — the local Permissions UI, not a
+        // remote caller, is the place to allow anything broader than the read-only defaults.
+        "mshta",
+        "rundll32",
+        "regsvr32",
+        "regsvcs",
+        "regasm",
+        "installutil",
+        "msbuild",
+        "wmic",
+        "cscript",
+        "wscript",
+        "certutil",
+        "bitsadmin",
+        "curl",
+        "wget"
     ];
     
     private readonly bool _includeRunCommands;

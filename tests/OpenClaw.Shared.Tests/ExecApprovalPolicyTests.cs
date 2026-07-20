@@ -966,6 +966,52 @@ public class SystemCapabilityExecApprovalsTests
         }
     }
 
+    [Theory]
+    [InlineData("mshta *")]
+    [InlineData("rundll32 *")]
+    [InlineData("regsvr32 *")]
+    [InlineData("certutil *")]
+    [InlineData("bitsadmin *")]
+    [InlineData("wmic *")]
+    [InlineData("curl *")]
+    [InlineData("iex *")]
+    [InlineData("invoke-expression *")]
+    [InlineData("invoke-command *")]
+    [InlineData("icm *")]
+    public async Task ExecApprovalsSet_RejectsLolbinAllowRule(string lolbinPattern)
+    {
+        // Regression (policy-weakening bypass): a remote .set must not whitelist a living-off-the-land
+        // binary the fragment list missed and then invoke it — the "compromise token -> whitelist ->
+        // invoke" EoP the validator exists to stop. These are the native forms of the download /
+        // exec-spawn intent already blocked for invoke-webrequest / start-process.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var policy = new ExecApprovalPolicy(tempDir, _logger);
+            var cap = CreateCapability(policy);
+
+            var json = JsonDocument.Parse($@"{{
+                ""baseHash"": ""{policy.GetPolicyHash()}"",
+                ""rules"": [ {{""pattern"": ""{lolbinPattern}"", ""action"": ""allow""}} ],
+                ""defaultAction"": ""deny""
+            }}");
+            var result = await cap.ExecuteAsync(new NodeInvokeRequest
+            {
+                Command = "system.execApprovals.set",
+                Args = json.RootElement
+            });
+
+            Assert.False(result.Ok);
+            Assert.Contains("Dangerous allow rule is not permitted", result.Error!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            // slopwatch-ignore: SW003 Test cleanup or fixture teardown is best-effort and must not hide the test outcome.
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
     [Fact]
     public async Task ExecApprovalsGet_ReturnsPolicy()
     {
