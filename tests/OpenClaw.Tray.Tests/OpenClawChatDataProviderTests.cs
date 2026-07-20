@@ -88,6 +88,28 @@ public class OpenClawChatDataProviderTests
         public Func<CommandCatalogQuery?, Task<CommandCatalog>>? ListCommandsBehavior { get; set; }
         public int ListCommandsCallCount { get; private set; }
         public CommandCatalogQuery? LastListCommandsQuery { get; private set; }
+        public SessionCreateResult CreateSessionResult { get; set; } = new()
+        {
+            Ok = true,
+            Key = "agent:main:new-session"
+        };
+        public List<SessionCreateRequest> CreateSessionRequests { get; } = new();
+        public List<string> ResetSessionKeys { get; } = new();
+        public SessionResetResult ResetSessionResult { get; set; } = new()
+        {
+            Ok = true,
+            Key = "main"
+        };
+        public List<string> CompactSessionKeys { get; } = new();
+        public List<string> ModelCompactSessionKeys { get; } = new();
+        public SessionCompactResult CompactSessionResult { get; set; } = new()
+        {
+            Ok = true,
+            Key = "main",
+            Compacted = true
+        };
+        public int RequestSessionsCallCount { get; private set; }
+        public List<string?> RequestedHistoryKeys { get; } = new();
 
         public SessionInfo[] GetSessionList() => Sessions;
         public ModelsListInfo? GetCurrentModelsList() => CurrentModels;
@@ -98,6 +120,42 @@ public class OpenClawChatDataProviderTests
             ListCommandsCallCount++;
             LastListCommandsQuery = query;
             return ListCommandsBehavior?.Invoke(query) ?? Task.FromResult(CommandCatalogResult);
+        }
+
+        public Task<SessionCreateResult> CreateSessionAsync(SessionCreateRequest request)
+        {
+            CreateSessionRequests.Add(request);
+            return Task.FromResult(CreateSessionResult);
+        }
+
+        public Task<bool> ResetSessionAsync(string sessionKey)
+        {
+            ResetSessionKeys.Add(sessionKey);
+            return Task.FromResult(true);
+        }
+
+        public Task<SessionResetResult> ResetSessionDetailedAsync(string sessionKey)
+        {
+            ResetSessionKeys.Add(sessionKey);
+            return Task.FromResult(ResetSessionResult);
+        }
+
+        public Task<bool> CompactSessionAsync(string sessionKey, int maxLines = 400)
+        {
+            CompactSessionKeys.Add(sessionKey);
+            return Task.FromResult(true);
+        }
+
+        public Task<SessionCompactResult> CompactSessionDetailedAsync(string sessionKey)
+        {
+            ModelCompactSessionKeys.Add(sessionKey);
+            return Task.FromResult(CompactSessionResult);
+        }
+
+        public Task RequestSessionsAsync()
+        {
+            RequestSessionsCallCount++;
+            return Task.CompletedTask;
         }
 
         public Task SendChatMessageAsync(string message, string? sessionKey, string? sessionId, IReadOnlyList<ChatAttachment>? attachments = null)
@@ -139,6 +197,7 @@ public class OpenClawChatDataProviderTests
 
         public Task<ChatHistoryInfo> RequestChatHistoryAsync(string? sessionKey)
         {
+            RequestedHistoryKeys.Add(sessionKey);
             return HistoryBehavior?.Invoke(sessionKey)
                 ?? Task.FromResult(new ChatHistoryInfo { SessionKey = sessionKey ?? "" });
         }
@@ -213,6 +272,399 @@ public class OpenClawChatDataProviderTests
             SessionKey = sessionKey,
             RunId = runId ?? string.Empty
         };
+    }
+
+    [Theory]
+    [InlineData("/new", "New")]
+    [InlineData(" /RESET ", "Reset")]
+    [InlineData("/Compact", "Compact")]
+    public void LifecycleCommandParser_RecognizesOnlyExactCommands(
+        string text,
+        string expected)
+    {
+        Assert.True(ChatLifecycleCommandParser.TryParse(text, hasAttachments: false, out var command));
+        Assert.Equal(expected, command.ToString());
+    }
+
+    [Fact]
+    public void CompactionPresenter_WithTokenCounts_FormatsSavings()
+    {
+        var presentation = ChatCompactionPresenter.Create(42000, 12000);
+
+        Assert.Equal("Context compacted", presentation.Title);
+        Assert.Contains("42", presentation.Detail);
+        Assert.Contains("12", presentation.Detail);
+        Assert.Contains("30", presentation.Detail);
+        Assert.Contains("saved", presentation.Detail);
+    }
+
+    [Fact]
+    public void CompactionPresenter_WithoutTokenCounts_ExplainsCheckpoint()
+    {
+        var presentation = ChatCompactionPresenter.Create(null, null);
+
+        Assert.Contains("checkpoint", presentation.Detail);
+        Assert.Contains(presentation.Title, presentation.AutomationName);
+    }
+
+    [Theory]
+    [InlineData("/new worktree", false)]
+    [InlineData("/reset model", false)]
+    [InlineData("/compact now", false)]
+    [InlineData("/new", true)]
+    public void LifecycleCommandParser_LeavesArgumentsAndAttachmentsForChatSend(
+        string text,
+        bool hasAttachments)
+    {
+        Assert.False(ChatLifecycleCommandParser.TryParse(text, hasAttachments, out _));
+    }
+
+    [Fact]
+    public void LifecycleSelectionPolicy_PreservesPendingCreatedSession()
+    {
+        Assert.False(ChatLifecycleSelectionPolicy.ShouldFallback(
+            "agent:main:new-session",
+            "agent:main:new-session",
+            "main"));
+        Assert.True(ChatLifecycleSelectionPolicy.ShouldFallback(
+            "missing-session",
+            pendingSelectedId: null,
+            fallbackThreadId: "main"));
+    }
+
+    [Fact]
+    public async Task LifecycleCommandDispatcher_NewCreatesChildWithoutFallbackMutation()
+    {
+        var bridge = new FakeBridge();
+        var dispatcher = new ChatLifecycleCommandDispatcher(bridge);
+
+        var result = await dispatcher.ExecuteAsync("agent:main:main", ChatLifecycleCommandKind.New);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("agent:main:new-session", result.NewSessionKey);
+        var request = Assert.Single(bridge.CreateSessionRequests);
+        Assert.Equal("agent:main:main", request.ParentSessionKey);
+        Assert.True(request.EmitCommandHooks);
+        Assert.Equal(false, request.SucceedsParent);
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_CompactRefreshesHistoryWithoutChatSend()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "user",
+                Text = "Old context",
+                State = "final",
+                OpenClawSeq = 1
+            });
+            bridge.HistoryBehavior = key => Task.FromResult(new ChatHistoryInfo
+            {
+                SessionKey = key ?? "",
+                Messages =
+                [
+                    new ChatMessageInfo
+                    {
+                        SessionKey = key ?? "",
+                        Role = "system",
+                        Text = "Context compacted",
+                        OpenClawKind = "compaction",
+                        OpenClawSeq = 2
+                    }
+                ]
+            });
+
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Compact);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(["main"], bridge.ModelCompactSessionKeys);
+            Assert.Empty(bridge.CompactSessionKeys);
+            Assert.Equal(["main"], bridge.RequestedHistoryKeys);
+            Assert.Empty(bridge.SentMessages);
+            var timeline = (await provider.LoadAsync()).Timelines["main"];
+            var compactedEntry = Assert.Single(timeline.Entries);
+            Assert.Equal(ChatTimelineItemKind.Status, compactedEntry.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task CompactCompletion_QueuesAuthoritativeReloadBehindInflightHistory()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        var staleHistory = new TaskCompletionSource<ChatHistoryInfo>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.HistoryBehavior = key =>
+            bridge.RequestedHistoryKeys.Count == 1
+                ? staleHistory.Task
+                : Task.FromResult(new ChatHistoryInfo
+                {
+                    SessionKey = key ?? "",
+                    Messages =
+                    [
+                        new ChatMessageInfo
+                        {
+                            SessionKey = key ?? "",
+                            Role = "system",
+                            Text = "Context compacted",
+                            OpenClawKind = "compaction",
+                            OpenClawSeq = 2
+                        }
+                    ]
+                });
+
+        await using (provider)
+        {
+            var initialLoad = provider.LoadHistoryAsync("main", force: true);
+            await provider.ExecuteLifecycleCommandAsync("main", ChatLifecycleCommandKind.Compact);
+            Assert.Single(bridge.RequestedHistoryKeys);
+
+            staleHistory.SetResult(new ChatHistoryInfo
+            {
+                SessionKey = "main",
+                Messages =
+                [
+                    new ChatMessageInfo
+                    {
+                        SessionKey = "main",
+                        Role = "user",
+                        Text = "Stale context",
+                        OpenClawSeq = 1
+                    }
+                ]
+            });
+            await initialLoad;
+
+            for (var attempt = 0; attempt < 20 && bridge.RequestedHistoryKeys.Count < 2; attempt++)
+                await Task.Delay(10);
+
+            Assert.Equal(2, bridge.RequestedHistoryKeys.Count);
+            var timeline = (await provider.LoadAsync()).Timelines["main"];
+            var compactedEntry = Assert.Single(timeline.Entries);
+            Assert.Equal(ChatTimelineItemKind.Status, compactedEntry.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task CompactAuthoritativeReload_RetriesAfterTransientFailureWhenHistoryWasLoaded()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        var historyCall = 0;
+        bridge.HistoryBehavior = key =>
+        {
+            historyCall++;
+            if (historyCall == 2)
+                return Task.FromException<ChatHistoryInfo>(new IOException("transient"));
+
+            return Task.FromResult(new ChatHistoryInfo
+            {
+                SessionKey = key ?? "",
+                Messages =
+                [
+                    new ChatMessageInfo
+                    {
+                        SessionKey = key ?? "",
+                        Role = historyCall == 1 ? "user" : "system",
+                        Text = historyCall == 1 ? "Old context" : "Context compacted",
+                        OpenClawKind = historyCall == 1 ? null : "compaction",
+                        OpenClawSeq = historyCall
+                    }
+                ]
+            });
+        };
+
+        await using (provider)
+        {
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            await provider.LoadHistoryAsync("main", force: true);
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Compact);
+
+            Assert.True(result.Succeeded);
+            for (var attempt = 0; attempt < 40 && bridge.RequestedHistoryKeys.Count < 3; attempt++)
+                await Task.Delay(100);
+
+            Assert.Equal(3, bridge.RequestedHistoryKeys.Count);
+            var timeline = (await provider.LoadAsync()).Timelines["main"];
+            var compactedEntry = Assert.Single(timeline.Entries);
+            Assert.Equal(ChatTimelineItemKind.Status, compactedEntry.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task LiveCompactionMessage_PreservesStructuredMetadata()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "system",
+                Text = "Context compacted",
+                State = "final",
+                OpenClawKind = "compaction",
+                CompactionTokensBefore = 42000,
+                CompactionTokensAfter = 12000
+            });
+
+            var entry = Assert.Single(snapshots[^1].Timelines["main"].Entries);
+            var metadata = provider.GetEntryMetadata("main")[entry.Id];
+            Assert.Equal("compaction", metadata.OpenClawKind);
+            Assert.Equal(42000, metadata.CompactionTokensBefore);
+            Assert.Equal(12000, metadata.CompactionTokensAfter);
+        }
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_NewRefreshesSessionsWithoutChatSend()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        await using (provider)
+        {
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.New);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("agent:main:new-session", result.NewSessionKey);
+            Assert.Equal(1, bridge.RequestSessionsCallCount);
+            Assert.Empty(bridge.SentMessages);
+        }
+        Assert.Empty(bridge.ResetSessionKeys);
+        Assert.Empty(bridge.SentMessages);
+    }
+
+    [Fact]
+    public async Task LifecycleCommandDispatcher_UnsupportedNewPreservesCurrentSession()
+    {
+        var bridge = new FakeBridge
+        {
+            CreateSessionResult = new SessionCreateResult
+            {
+                Ok = false,
+                IsSupported = false,
+                Error = "unknown method"
+            }
+        };
+        var dispatcher = new ChatLifecycleCommandDispatcher(bridge);
+
+        var result = await dispatcher.ExecuteAsync("main", ChatLifecycleCommandKind.New);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.NewSessionKey);
+        Assert.Contains("does not support", result.Error);
+        Assert.Empty(bridge.ResetSessionKeys);
+        Assert.Empty(bridge.SentMessages);
+    }
+
+    [Fact]
+    public async Task LifecycleCommandDispatcher_NewRejectsCurrentSessionKey()
+    {
+        var bridge = new FakeBridge
+        {
+            CreateSessionResult = new SessionCreateResult
+            {
+                Ok = true,
+                Key = " main "
+            }
+        };
+        var dispatcher = new ChatLifecycleCommandDispatcher(bridge);
+
+        var result = await dispatcher.ExecuteAsync("main", ChatLifecycleCommandKind.New);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.NewSessionKey);
+        Assert.Contains("current session", result.Error);
+        Assert.Empty(bridge.ResetSessionKeys);
+        Assert.Empty(bridge.SentMessages);
+    }
+
+    [Fact]
+    public async Task LifecycleCommandDispatcher_ResetAndCompactUseDirectRpcs()
+    {
+        var bridge = new FakeBridge();
+        var dispatcher = new ChatLifecycleCommandDispatcher(bridge);
+
+        var reset = await dispatcher.ExecuteAsync("main", ChatLifecycleCommandKind.Reset);
+        var compact = await dispatcher.ExecuteAsync("main", ChatLifecycleCommandKind.Compact);
+
+        Assert.True(reset.Succeeded);
+        Assert.True(compact.Succeeded);
+        Assert.Equal(["main"], bridge.ResetSessionKeys);
+        Assert.Equal(["main"], bridge.ModelCompactSessionKeys);
+        Assert.Empty(bridge.CompactSessionKeys);
+        Assert.Empty(bridge.SentMessages);
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_ResetFailurePreservesTranscriptAndSurfacesError()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        bridge.ResetSessionResult = new SessionResetResult
+        {
+            Ok = false,
+            Key = "main",
+            Reason = "active run",
+            Error = "active run"
+        };
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "user",
+                Text = "Keep me",
+                State = "final"
+            });
+
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Reset);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(["main"], bridge.ResetSessionKeys);
+            var entries = (await provider.LoadAsync()).Timelines["main"].Entries;
+            Assert.Contains(entries, entry => entry.Text == "Keep me");
+            Assert.Contains(entries, entry =>
+                entry.Kind == ChatTimelineItemKind.Status &&
+                entry.Text.Contains("active run", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_ResetSuccessClearsTranscriptAfterResponse()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "user",
+                Text = "Clear me",
+                State = "final"
+            });
+
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Reset);
+
+            Assert.True(result.Succeeded);
+            Assert.Empty((await provider.LoadAsync()).Timelines["main"].Entries);
+        }
     }
 
     [Fact]

@@ -1176,6 +1176,96 @@ public class OpenClawGatewayClientTests
     }
 
     [Fact]
+    public void ParseChatHistoryPayload_CompactionMetadata_PreservesBoundaryDetails()
+    {
+        var helper = new GatewayClientTestHelper();
+
+        var history = helper.ParseChatHistoryPayload("""
+        {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Context compacted",
+              "timestamp": 1,
+              "__openclaw": {
+                "id": "compact-1",
+                "seq": 8,
+                "kind": "compaction",
+                "tokensBefore": 42000,
+                "tokensAfter": 12000
+              }
+            }
+          ]
+        }
+        """);
+
+        var message = Assert.Single(history.Messages);
+        Assert.Equal("compaction", message.OpenClawKind);
+        Assert.Equal(42000, message.CompactionTokensBefore);
+        Assert.Equal(12000, message.CompactionTokensAfter);
+    }
+
+    [Fact]
+    public void ParseChatHistoryPayload_MalformedCompactionMetadata_IsIgnored()
+    {
+        var helper = new GatewayClientTestHelper();
+
+        var history = helper.ParseChatHistoryPayload("""
+        {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Context compacted",
+              "__openclaw": {
+                "kind": 42,
+                "tokensBefore": "many",
+                "tokensAfter": false
+              }
+            }
+          ]
+        }
+        """);
+
+        var message = Assert.Single(history.Messages);
+        Assert.Null(message.OpenClawKind);
+        Assert.Null(message.CompactionTokensBefore);
+        Assert.Null(message.CompactionTokensAfter);
+    }
+
+    [Fact]
+    public void ProcessRawMessage_LiveCompaction_PreservesBoundaryDetails()
+    {
+        var helper = new GatewayClientTestHelper();
+        ChatMessageInfo? received = null;
+        helper.Client.ChatMessageReceived += (_, message) => received = message;
+
+        helper.ProcessRawMessage("""
+        {
+          "type": "event",
+          "event": "chat",
+          "payload": {
+            "sessionKey": "main",
+            "state": "final",
+            "message": {
+              "role": "system",
+              "content": "Context compacted",
+              "__openclaw": {
+                "kind": "compaction",
+                "tokensBefore": 42000,
+                "tokensAfter": 12000
+              }
+            }
+          }
+        }
+        """);
+
+        Assert.NotNull(received);
+        Assert.Equal("compaction", received!.OpenClawKind);
+        Assert.Equal(42000, received.CompactionTokensBefore);
+        Assert.Equal(12000, received.CompactionTokensAfter);
+    }
+
+    [Fact]
     public void ProcessRawMessage_SessionMessageWithMalformedMessage_DropsFrame()
     {
         var logger = new TestLogger();
@@ -2144,6 +2234,39 @@ public class OpenClawGatewayClientTests
         var llama = info.Models[2];
         Assert.False(llama.IsAvailable); // unavailable:true inverts to false
         Assert.Equal("local-llama", llama.DisplayName); // name omitted → id
+    }
+
+    [Fact]
+    public void ParseModelsList_InvalidContextWindow_DoesNotDropModelList()
+    {
+        var helper = new GatewayClientTestHelper();
+        var info = helper.ParseModelsListPayload("""
+            {
+              "models": [
+                { "id": "oversized", "contextWindow": 2147483648 },
+                { "id": "non-positive", "contextWindow": 0 },
+                { "id": "valid", "contextWindow": 64000 }
+              ]
+            }
+            """);
+
+        Assert.Collection(
+            info.Models,
+            oversized =>
+            {
+                Assert.Equal("oversized", oversized.Id);
+                Assert.Null(oversized.ContextWindow);
+            },
+            nonPositive =>
+            {
+                Assert.Equal("non-positive", nonPositive.Id);
+                Assert.Null(nonPositive.ContextWindow);
+            },
+            valid =>
+            {
+                Assert.Equal("valid", valid.Id);
+                Assert.Equal(64000, valid.ContextWindow);
+            });
     }
 
     [Fact]

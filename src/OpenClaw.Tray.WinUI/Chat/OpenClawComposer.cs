@@ -58,7 +58,7 @@ public record OpenClawComposerProps(
     string? CurrentModelProvider,
     string? CurrentThinkingLevel,
     bool MessageOptionsDisabled,
-    Action<string, IReadOnlyList<ChatAttachment>> OnSend,
+    Func<string, IReadOnlyList<ChatAttachment>, Task<bool>> OnSend,
     Action OnStop,
     Action<string> OnChannelChanged,
     Action<string> OnModelChanged,
@@ -229,17 +229,35 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
         // Register the voice starter so external callers (e.g. hotkey) can trigger recording
         Props.RegisterVoiceStarter?.Invoke(startVoiceRecording);
 
-        var sendAction = () =>
+        var sendInFlightRef = UseRef(false);
+        Action sendAction = async () =>
         {
+            if (sendInFlightRef.Current)
+                return;
+
             var msg = inputRef.Current?.Trim();
             if (string.IsNullOrEmpty(msg) && pendingAttachments.Count == 0) return;
-            Props.OnSend(msg ?? "", pendingAttachments.ToArray());
-            inputRef.Current = "";
-            hasTextState.Set(false);
-            // Clear any open slash menu so it doesn't re-open over the now-empty
-            // composer (programmatic text reset doesn't fire TextChanged).
-            slashMenuState.Set((false, "", 0, false));
-            sendVersion.Set(sendVersion.Value + 1);
+            sendInFlightRef.Current = true;
+            try
+            {
+                if (!await Props.OnSend(msg ?? "", pendingAttachments.ToArray()))
+                    return;
+
+                inputRef.Current = "";
+                hasTextState.Set(false);
+                // Clear any open slash menu so it doesn't re-open over the now-empty
+                // composer (programmatic text reset doesn't fire TextChanged).
+                slashMenuState.Set((false, "", 0, false));
+                sendVersion.Set(sendVersion.Value + 1);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[chat] composer send failed: {ex}");
+            }
+            finally
+            {
+                sendInFlightRef.Current = false;
+            }
         };
         var sendActionRef = UseRef<Action>(sendAction);
         sendActionRef.Current = sendAction;

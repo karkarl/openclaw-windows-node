@@ -579,7 +579,7 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
             else if (m.TryGetProperty("ts", out var tsProp2) && tsProp2.ValueKind == JsonValueKind.Number)
                 ts = tsProp2.GetInt64();
 
-            var (openClawId, openClawSeq) = ExtractOpenClawMetadata(m);
+            var openClawMetadata = ExtractOpenClawMetadata(m);
 
             // stopReason on assistant messages (e.g. "stop", "toolUse", possibly "abort")
             string? stopReason = null;
@@ -600,8 +600,11 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                 Text = text,
                 State = "final",
                 Ts = ts,
-                OpenClawId = openClawId,
-                OpenClawSeq = openClawSeq,
+                OpenClawId = openClawMetadata.Id,
+                OpenClawSeq = openClawMetadata.Seq,
+                OpenClawKind = openClawMetadata.Kind,
+                CompactionTokensBefore = openClawMetadata.TokensBefore,
+                CompactionTokensAfter = openClawMetadata.TokensAfter,
                 StopReason = stopReason,
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
@@ -3141,8 +3144,8 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
             if (string.IsNullOrEmpty(text)) return;
             if (ChatMessageInfo.IsSilentAssistantDirective(role, text)) return;
 
-            var (messageOpenClawId, messageOpenClawSeq) = ExtractOpenClawMetadata(message);
-            var (payloadOpenClawId, payloadOpenClawSeq) = ExtractOpenClawMetadata(payload);
+            var messageOpenClawMetadata = ExtractOpenClawMetadata(message);
+            var payloadOpenClawMetadata = ExtractOpenClawMetadata(payload);
             EmitChatMessageReceived(
                 sessionKey,
                 role,
@@ -3153,8 +3156,11 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                 outTok,
                 respTok,
                 ctxPct,
-                messageOpenClawId ?? payloadOpenClawId,
-                messageOpenClawSeq ?? payloadOpenClawSeq);
+                messageOpenClawMetadata.Id ?? payloadOpenClawMetadata.Id,
+                messageOpenClawMetadata.Seq ?? payloadOpenClawMetadata.Seq,
+                messageOpenClawMetadata.Kind ?? payloadOpenClawMetadata.Kind,
+                messageOpenClawMetadata.TokensBefore ?? payloadOpenClawMetadata.TokensBefore,
+                messageOpenClawMetadata.TokensAfter ?? payloadOpenClawMetadata.TokensAfter);
 
             if (role == "assistant" && string.Equals(state, "final", StringComparison.OrdinalIgnoreCase))
             {
@@ -3176,7 +3182,7 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
             {
                 if (ChatMessageInfo.IsSilentAssistantDirective(role, text)) return;
 
-                var (openClawId, openClawSeq) = ExtractOpenClawMetadata(payload);
+                var openClawMetadata = ExtractOpenClawMetadata(payload);
                 EmitChatMessageReceived(
                     sessionKey,
                     role,
@@ -3187,8 +3193,11 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                     outTok,
                     respTok,
                     ctxPct,
-                    openClawId,
-                    openClawSeq);
+                    openClawMetadata.Id,
+                    openClawMetadata.Seq,
+                    openClawMetadata.Kind,
+                    openClawMetadata.TokensBefore,
+                    openClawMetadata.TokensAfter);
 
                 if (role == "assistant")
                 {
@@ -3261,7 +3270,10 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
         int? responseTokens = null,
         int? contextPct = null,
         string? openClawId = null,
-        int? openClawSeq = null)
+        int? openClawSeq = null,
+        string? openClawKind = null,
+        long? compactionTokensBefore = null,
+        long? compactionTokensAfter = null)
     {
         if (ChatMessageInfo.IsSilentAssistantDirective(role, text))
             return;
@@ -3280,7 +3292,10 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                 ResponseTokens = responseTokens,
                 ContextPercent = contextPct,
                 OpenClawId = openClawId,
-                OpenClawSeq = openClawSeq
+                OpenClawSeq = openClawSeq,
+                OpenClawKind = openClawKind,
+                CompactionTokensBefore = compactionTokensBefore,
+                CompactionTokensAfter = compactionTokensAfter
             });
         }
         catch (Exception ex)
@@ -3289,13 +3304,18 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
         }
     }
 
-    private static (string? Id, int? Seq) ExtractOpenClawMetadata(JsonElement node)
+    private static (
+        string? Id,
+        int? Seq,
+        string? Kind,
+        long? TokensBefore,
+        long? TokensAfter) ExtractOpenClawMetadata(JsonElement node)
     {
         if (node.ValueKind != JsonValueKind.Object ||
             !node.TryGetProperty("__openclaw", out var openClaw) ||
             openClaw.ValueKind != JsonValueKind.Object)
         {
-            return (null, null);
+            return (null, null, null, null, null);
         }
 
         var id = openClaw.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String
@@ -3306,7 +3326,21 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                   seqProp.TryGetInt32(out var parsedSeq)
             ? parsedSeq
             : (int?)null;
-        return (id, seq);
+        var kind = openClaw.TryGetProperty("kind", out var kindProp) &&
+                   kindProp.ValueKind == JsonValueKind.String
+            ? kindProp.GetString()
+            : null;
+        var tokensBefore = openClaw.TryGetProperty("tokensBefore", out var beforeProp) &&
+                           beforeProp.ValueKind == JsonValueKind.Number &&
+                           beforeProp.TryGetInt64(out var parsedBefore)
+            ? parsedBefore
+            : (long?)null;
+        var tokensAfter = openClaw.TryGetProperty("tokensAfter", out var afterProp) &&
+                          afterProp.ValueKind == JsonValueKind.Number &&
+                          afterProp.TryGetInt64(out var parsedAfter)
+            ? parsedAfter
+            : (long?)null;
+        return (id, seq, kind, tokensBefore, tokensAfter);
     }
 
     private static long ExtractChatTimestampMs(JsonElement node)
@@ -4270,7 +4304,7 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
                         Id = item.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
                         Name = item.TryGetProperty("name", out var name) ? name.GetString() : null,
                         Provider = item.TryGetProperty("provider", out var prov) ? prov.GetString() : null,
-                        ContextWindow = item.TryGetProperty("contextWindow", out var cw) && cw.ValueKind == JsonValueKind.Number ? cw.GetInt32() : null,
+                        ContextWindow = ReadPositiveInt32(item, "contextWindow"),
                         IsConfigured = hasConfiguredFlag && cfg.ValueKind == JsonValueKind.True,
                         HasConfiguredFlag = hasConfiguredFlag,
                         IsDefault = ReadBool(item, "default", "isDefault"),
@@ -4287,6 +4321,19 @@ public partial class OpenClawGatewayClient : WebSocketClientBase, IOperatorGatew
         {
             _logger.Warn($"Failed to parse models.list: {ex.Message}");
         }
+    }
+
+    private static int? ReadPositiveInt32(JsonElement obj, string key)
+    {
+        if (!obj.TryGetProperty(key, out var value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt32(out var parsed)
+            || parsed <= 0)
+        {
+            return null;
+        }
+
+        return parsed;
     }
 
     // Reads the first present boolean property among <paramref name="keys"/>.

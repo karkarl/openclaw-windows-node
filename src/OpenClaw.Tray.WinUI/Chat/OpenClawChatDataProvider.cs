@@ -116,6 +116,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     private readonly Dictionary<string, string> _sessionIds = new();      // sessionKey → immutable sessionId
     private readonly HashSet<string> _historyLoaded = new();              // sessionKey
     private readonly HashSet<string> _historyInFlight = new();            // sessionKey
+    private readonly HashSet<string> _authoritativeHistoryReloadPending = new(); // sessionKey
     private readonly Dictionary<string, Task> _pendingModelPatches = new(); // sessionKey -> in-flight model set/clear
     private readonly Dictionary<string, long> _resetVersions = new(); // sessionKey -> reset generation
     private readonly Dictionary<string, long> _resetCutoffUtcMs = new(); // sessionKey -> local reset time
@@ -439,6 +440,63 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
         if (dispatch is not null)
             await DispatchQueuedSendAsync(dispatch, rethrow: true, cancellationToken);
+    }
+
+    internal async Task<ChatLifecycleCommandResult> ExecuteLifecycleCommandAsync(
+        string threadId,
+        ChatLifecycleCommandKind command,
+        CancellationToken cancellationToken = default)
+    {
+        ChatLifecycleCommandResult result;
+        try
+        {
+            result = await new ChatLifecycleCommandDispatcher(_bridge)
+                .ExecuteAsync(threadId, command, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            result = new ChatLifecycleCommandResult(
+                command,
+                Succeeded: false,
+                Error: $"The lifecycle command failed: {ex.Message}");
+        }
+
+        if (!result.Succeeded)
+        {
+            ApplyEventAndPublish(
+                threadId,
+                new ChatErrorEvent(result.Error ?? "The lifecycle command failed."));
+            return result;
+        }
+
+        if (command == ChatLifecycleCommandKind.New)
+        {
+            try
+            {
+                await _bridge.RequestSessionsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                ApplyEventAndPublish(
+                    threadId,
+                    new ChatStatusEvent($"The new session was created, but the session list could not refresh: {ex.Message}", ChatTone.Warning));
+            }
+        }
+        else if (command == ChatLifecycleCommandKind.Compact)
+        {
+            _ = LoadHistoryAsync(threadId, force: true, authoritative: true);
+        }
+        else if (command == ChatLifecycleCommandKind.Reset)
+        {
+            ApplySuccessfulReset(threadId);
+        }
+
+        return result;
     }
 
     public Task<bool> CancelQueuedMessageAsync(string threadId, string queuedMessageId, CancellationToken cancellationToken = default)
@@ -771,6 +829,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 ApplyEventAndPublish(threadId, new ChatTurnEndEvent());
                 return;
             }
+
         }
         else
         {
@@ -813,7 +872,11 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
     /// the timeline; subsequent calls are no-ops unless <paramref name="force"/>
     /// is true. Safe to call from any thread.
     /// </summary>
-    public async Task LoadHistoryAsync(string threadId, bool force = false, CancellationToken cancellationToken = default)
+    public async Task LoadHistoryAsync(
+        string threadId,
+        bool force = false,
+        CancellationToken cancellationToken = default,
+        bool authoritative = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrEmpty(threadId)) return;
@@ -822,10 +885,16 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         lock (_gate)
         {
             if (!force && _historyLoaded.Contains(threadId)) return;
-            if (!_historyInFlight.Add(threadId)) return; // another loader already in progress
+            if (!_historyInFlight.Add(threadId))
+            {
+                if (authoritative)
+                    _authoritativeHistoryReloadPending.Add(threadId);
+                return;
+            }
             requestResetVersion = GetResetVersionLocked(threadId);
         }
 
+        var historyRequestStartedAt = DateTimeOffset.Now;
         var historyOperation = _telemetry.StartHistoryLoad(
             force ? ChatHistoryTelemetrySource.Forced : ChatHistoryTelemetrySource.Initial);
         var historyOutcome = ChatTelemetryOutcome.Success;
@@ -909,7 +978,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                         msg.ResponseTokens,
                         msg.ContextPercent,
                         GatewayMessageId: msg.OpenClawId,
-                        OpenClawSeq: msg.OpenClawSeq);
+                        OpenClawSeq: msg.OpenClawSeq,
+                        OpenClawKind: msg.OpenClawKind,
+                        CompactionTokensBefore: msg.CompactionTokensBefore,
+                        CompactionTokensAfter: msg.CompactionTokensAfter);
 
                     // Cap per-message text up front so heuristics, logging,
                     // and the reducer all see the same bounded value
@@ -1158,6 +1230,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                     var newEntries = rebuilt.Entries.ToBuilder();
                     var skippedDup = 0;
                     var reidCount = 0;
+                    var authoritativeMaxHistorySequence = authoritative
+                        ? history.Messages
+                            .Where(message => message.OpenClawSeq is not null)
+                            .Select(message => message.OpenClawSeq!.Value)
+                            .DefaultIfEmpty(int.MinValue)
+                            .Max()
+                        : int.MinValue;
 
                     foreach (var entry in prior.Entries)
                     {
@@ -1177,6 +1256,16 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                             ConsumeAnyTimestamp(rebuiltContentTimestamps, ContentKey(entry.Kind, entry.Text));
                             skippedDup++;
                             continue;
+                        }
+
+                        if (authoritative)
+                        {
+                            var arrivedAfterRequest =
+                                em?.OpenClawSeq is { } liveSequence && liveSequence > authoritativeMaxHistorySequence ||
+                                em?.Timestamp is { } liveTimestamp && liveTimestamp >= historyRequestStartedAt ||
+                                em?.IsLocalQueuedSend == true;
+                            if (!arrivedAfterRequest)
+                                continue;
                         }
 
                         // Rule 2: content+timestamp dedup only when BOTH sides
@@ -1274,7 +1363,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             {
                 _historyRetryCount.TryGetValue(threadId, out var retries);
                 shouldRetry = _status == ConnectionStatus.Connected
-                              && !_historyLoaded.Contains(threadId)
+                              && (authoritative || !_historyLoaded.Contains(threadId))
                               && retries < MaxHistoryRetries;
                 if (shouldRetry)
                     _historyRetryCount[threadId] = retries + 1;
@@ -1284,14 +1373,24 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(2000);
-                    await LoadHistoryAsync(threadId, force: true);
+                    await LoadHistoryAsync(
+                        threadId,
+                        force: true,
+                        authoritative: authoritative);
                 });
             }
         }
         finally
         {
-            lock (_gate) { _historyInFlight.Remove(threadId); }
+            bool rerunAuthoritative;
+            lock (_gate)
+            {
+                _historyInFlight.Remove(threadId);
+                rerunAuthoritative = _authoritativeHistoryReloadPending.Remove(threadId);
+            }
             _telemetry.FinishHistoryLoad(historyOperation, historyOutcome, historyException);
+            if (rerunAuthoritative)
+                _ = LoadHistoryAsync(threadId, force: true, authoritative: true);
         }
     }
 
@@ -1986,24 +2085,36 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
     private void OnSessionCommandCompleted(object? sender, SessionCommandResult result)
     {
-        if (result is not { Ok: true } ||
-            !string.Equals(result.Method, "sessions.reset", StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(result.Key))
+        if (result is not { Ok: true } || string.IsNullOrWhiteSpace(result.Key))
         {
             return;
         }
 
+        if (string.Equals(result.Method, "sessions.compact", StringComparison.Ordinal))
+        {
+            _ = LoadHistoryAsync(result.Key, force: true, authoritative: true);
+            return;
+        }
+
+        if (!string.Equals(result.Method, "sessions.reset", StringComparison.Ordinal))
+            return;
+
+        ApplySuccessfulReset(result.Key);
+    }
+
+    private void ApplySuccessfulReset(string threadId)
+    {
         ChatDataSnapshot snapshot;
         ResetClearPersistence persistence;
         lock (_gate)
         {
-            persistence = ClearThreadHistoryAfterResetLocked(result.Key);
+            persistence = ClearThreadHistoryAfterResetLocked(threadId);
             snapshot = BuildSnapshotLocked();
         }
 
         Publish(snapshot);
         PersistClearedResetState(persistence);
-        AbortSubmittedRunsAfterReset(result.Key, persistence.SubmittedRunIds);
+        AbortSubmittedRunsAfterReset(threadId, persistence.SubmittedRunIds);
     }
 
     private void AbortSubmittedRunsAfterReset(string threadId, IReadOnlyList<string> runIds)
@@ -2159,6 +2270,29 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
                 _ = FetchRemoteUserMessageAsync(msgThreadId, openResetGateOnSuccess: true);
 
             Logger.Debug($"[Reset] Dropping stale chat message after reset for threadId='{msgThreadId}' role='{roleLower}'");
+            return;
+        }
+
+        if (roleLower == "system" &&
+            string.Equals(message.OpenClawKind, "compaction", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(message.Text))
+        {
+            ChatEntryMetadata compactionMeta;
+            lock (_gate)
+            {
+                compactionMeta = BuildLiveMetaLocked(
+                    msgThreadId,
+                    message.Ts,
+                    message.OpenClawId,
+                    message.OpenClawSeq,
+                    openClawKind: message.OpenClawKind,
+                    compactionTokensBefore: message.CompactionTokensBefore,
+                    compactionTokensAfter: message.CompactionTokensAfter);
+            }
+            ApplyEventAndPublish(
+                msgThreadId,
+                new ChatStatusEvent(TruncateForChatEntry(message.Text), ChatTone.Dim),
+                compactionMeta);
             return;
         }
 
@@ -5721,7 +5855,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
         string? gatewayMessageId = null,
         int? openClawSeq = null,
         bool isLocalQueuedSend = false,
-        string? localQueuedMessageId = null)
+        string? localQueuedMessageId = null,
+        string? openClawKind = null,
+        long? compactionTokensBefore = null,
+        long? compactionTokensAfter = null)
     {
         var ts = tsMs is { } v && v > 0
             ? DateTimeOffset.FromUnixTimeMilliseconds(v).ToLocalTime()
@@ -5732,6 +5869,9 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             session?.Model,
             GatewayMessageId: gatewayMessageId,
             OpenClawSeq: openClawSeq,
+            OpenClawKind: openClawKind,
+            CompactionTokensBefore: compactionTokensBefore,
+            CompactionTokensAfter: compactionTokensAfter,
             IsLocalQueuedSend: isLocalQueuedSend,
             LocalQueuedMessageId: localQueuedMessageId);
     }
