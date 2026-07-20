@@ -897,6 +897,15 @@ public class SystemCapability : NodeCapabilityBase
                     return $"Dangerous allow rule is not permitted: {pattern}";
                 }
             }
+
+            // Finally: the executable (first whitespace-delimited token) must be a concrete literal. A
+            // wildcard there lets a NON-dangerous pattern match ANY command (MatchesPattern globs
+            // * -> .* over the whole command line), e.g. "*.*", "*e*", "*.exe", "c*" — the broad-allow
+            // class the earlier shape checks miss. Runs after the dangerous-fragment check so a
+            // dangerous stem keeps its specific message. Legit rules pin the command ("git *").
+            var firstToken = normalized.Split(new[] { ' ', '\t' }, 2)[0];
+            if (firstToken.Contains('*') || firstToken.Contains('?'))
+                return $"Allow rule must name a concrete command (no wildcard in the executable): {pattern}";
         }
 
         return null;
