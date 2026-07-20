@@ -300,6 +300,165 @@
           }
         ]
       }
+    },
+    {
+      "name": "Toggle",
+      "note": "WinUI ToggleSwitch — a pill track with a knob. The static preview shows one state: pass the on defaults (accent track, knob right) or override for off (bordered track, muted knob, knob left). In a prototype, swap an on-instance and an off-instance with visibleWhen so a tap flips the visible switch. Track 40×20 mirrors the Fluent ToggleSwitch pill; only the accent is spent when on.",
+      "props": { "trackBg": "var(--color-accent)", "trackBorder": "var(--color-accent)", "knobBg": "var(--color-accentInk)", "knobJustify": "flex-end" },
+      "root": {
+        "el": "div",
+        "attrs": {
+          "role": "switch",
+          "style": "display:inline-flex;align-items:center;justify-content:{knobJustify};width:40px;height:20px;padding:3px;border-radius:var(--radius-pill);background:{trackBg};border:1px solid {trackBorder};box-sizing:border-box;cursor:pointer"
+        },
+        "children": [
+          { "el": "div", "attrs": { "style": "width:12px;height:12px;border-radius:var(--radius-pill);background:{knobBg}" } }
+        ]
+      }
+    },
+    {
+      "name": "Select",
+      "note": "WinUI ComboBox at rest — a bordered surface showing the selected value with a chevron. Padding mirrors TextControlThemePadding; 32px min-height so it lines up with a Field or Button on the same row. (Preview shows the closed state; open/flyout is out of scope for the static interpreter.)",
+      "props": { "value": "Read only" },
+      "root": {
+        "el": "button",
+        "attrs": {
+          "type": "button",
+          "style": "display:inline-flex;align-items:center;justify-content:space-between;gap:var(--space-3);min-width:150px;height:32px;padding:5px 10px 6px;border-radius:var(--radius-sm);border:1px solid var(--color-line);background:var(--color-surface);color:var(--color-ink);font-family:var(--font-body);font-size:14px;line-height:20px;cursor:pointer;box-sizing:border-box"
+        },
+        "children": [
+          { "el": "span", "children": ["{value}"] },
+          {
+            "el": "svg",
+            "attrs": { "width": "12", "height": "12", "viewBox": "0 0 24 24", "fill": "none", "aria-hidden": "true", "stroke": "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "style": "color:var(--color-muted)" },
+            "children": [ { "el": "path", "attrs": { "d": "M6 9l6 6 6-6" } } ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "RadioRow",
+      "note": "One option in a radio group — a ring + label. Defaults render the unselected look (muted ring, hollow); pass ring/dot accent for the selected option. In a prototype, put the selected and unselected instances behind visibleWhen keyed on a state value to make the group live.",
+      "props": { "label": "None (default)", "ring": "var(--color-muted)", "dot": "transparent" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:inline-flex;align-items:center;gap:var(--space-3)" },
+        "children": [
+          {
+            "el": "div",
+            "attrs": { "style": "flex:0 0 auto;width:18px;height:18px;border-radius:var(--radius-pill);border:2px solid {ring};display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box" },
+            "children": [ { "el": "div", "attrs": { "style": "width:8px;height:8px;border-radius:var(--radius-pill);background:{dot}" } } ]
+          },
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:14px;line-height:20px;color:var(--color-ink)" }, "children": ["{label}"] }
+        ]
+      }
+    },
+    {
+      "name": "Slider",
+      "note": "WinUI Slider at rest — a label + value on one line over a track with a filled portion and a knob. `fill` is the filled width as a percentage (e.g. \"9%\"); the value string is shown in mono, matching the app's use of Cascadia for numbers and units. Static preview: the knob doesn't drag.",
+      "props": { "label": "Command timeout", "value": "30 sec", "fill": "9%" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:flex;flex-direction:column;gap:var(--space-2);width:360px" },
+        "children": [
+          {
+            "el": "div",
+            "attrs": { "style": "display:flex;align-items:center;justify-content:space-between" },
+            "children": [
+              { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:14px;line-height:20px;color:var(--color-ink)" }, "children": ["{label}"] },
+              { "el": "span", "attrs": { "style": "font-family:var(--font-mono);font-size:13px;line-height:18px;color:var(--color-muted)" }, "children": ["{value}"] }
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": { "style": "position:relative;height:4px;border-radius:var(--radius-pill);background:var(--color-line)" },
+            "children": [
+              { "el": "div", "attrs": { "style": "position:absolute;left:0;top:0;height:4px;width:{fill};border-radius:var(--radius-pill);background:var(--color-accent)" } },
+              { "el": "div", "attrs": { "style": "position:absolute;top:-6px;left:{fill};width:16px;height:16px;border-radius:var(--radius-pill);background:var(--color-accent);border:2px solid var(--color-surface);box-sizing:border-box;transform:translateX(-8px)" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "PresetCard",
+      "note": "A selectable preset tile — bold title + one-line description, as a bordered card-button. Defaults render the unselected look (1px line border); pass bw \"2px\" / bc accent for the selected tile. Used for one-click security presets — place three in a 3-column grid (each with \"grow\": true) so they share the row evenly and shrink to fit. Fills its container (width:100%).",
+      "props": { "title": "🛡 Recommended", "body": "Internet on. Read-only on Documents, Downloads, Desktop. Clipboard read.", "bw": "1px", "bc": "var(--color-line)" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:flex;flex-direction:column;gap:var(--space-2);width:100%;min-height:130px;padding:18px 20px;border-radius:var(--radius-md);border:{bw} solid {bc};background:var(--color-surface);cursor:pointer;box-sizing:border-box" },
+        "children": [
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:16px;line-height:22px;font-weight:600;color:var(--color-ink)" }, "children": ["{title}"] },
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:13px;line-height:18px;color:var(--color-muted)" }, "children": ["{body}"] }
+        ]
+      }
+    },
+    {
+      "name": "NavItem",
+      "note": "One row in the HubWindow NavigationView pane — an icon glyph + label, at a fixed 248px width so the pane column stays even (the scene-graph component host is shrink-to-fit; layout nodes can't set width). Defaults render an unselected item; for the current page pass bg subtlePressed, bar accent, weight 600 to show selection (the 3px left bar is Fluent's NavigationViewItem selection indicator). App icons are real SVGs in the app; the prototype uses emoji stand-ins.",
+      "props": { "icon": "•", "label": "Item", "bg": "transparent", "bar": "transparent", "ink": "var(--color-ink)", "weight": "400" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "position:relative;display:flex;align-items:center;gap:10px;width:248px;height:36px;padding:0 12px;border-radius:var(--radius-md);background:{bg};cursor:pointer;box-sizing:border-box" },
+        "children": [
+          { "el": "div", "attrs": { "style": "position:absolute;left:3px;top:8px;width:3px;height:20px;border-radius:2px;background:{bar}" } },
+          { "el": "span", "attrs": { "style": "flex:0 0 auto;width:18px;text-align:center;font-size:15px" }, "children": ["{icon}"] },
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:14px;line-height:20px;color:{ink};font-weight:{weight}" }, "children": ["{label}"] }
+        ]
+      }
+    },
+    {
+      "name": "NavHeader",
+      "note": "A section label in the NavigationView pane (\"Gateway\", \"This Computer\") — Fluent's NavigationViewItemHeader. Caption weight, muted, with a little top space to separate groups.",
+      "props": { "label": "Section" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "width:248px;padding:10px 12px 4px;font-family:var(--font-body);font-size:12px;line-height:16px;font-weight:600;color:var(--color-muted);box-sizing:border-box" },
+        "children": ["{label}"]
+      }
+    },
+    {
+      "name": "Divider",
+      "note": "A thin horizontal rule for the nav pane (NavigationViewItemSeparator). 1px line token; fixed width to match the pane column.",
+      "props": {},
+      "root": {
+        "el": "div",
+        "attrs": { "style": "width:248px;height:1px;margin:4px 0;background:var(--color-line)" }
+      }
+    },
+    {
+      "name": "SearchField",
+      "note": "The title-bar AutoSuggestBox at rest — a recessed rounded field with a find glyph and placeholder. Fixed 360px so it sits between the title and the status pill; the static preview doesn't focus or type.",
+      "props": { "placeholder": "Search… (Ctrl+E)" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:inline-flex;align-items:center;gap:8px;width:360px;height:32px;padding:0 10px;border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--color-paper);box-sizing:border-box" },
+        "children": [
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:14px;line-height:20px;color:var(--color-muted)" }, "children": ["{placeholder}"] },
+          {
+            "el": "svg",
+            "attrs": { "width": "14", "height": "14", "viewBox": "0 0 24 24", "fill": "none", "aria-hidden": "true", "stroke": "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "style": "margin-left:auto;color:var(--color-muted)" },
+            "children": [
+              { "el": "circle", "attrs": { "cx": "11", "cy": "11", "r": "7" } },
+              { "el": "path", "attrs": { "d": "M21 21l-4.3-4.3" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "StatusPill",
+      "note": "The title-bar connection status button — a dot + state text + chevron in a rounded pill. Defaults show the disconnected (muted dot) look; pass dot positive/warning for connected/connecting. Mirrors the StatusPillButton flyout trigger in HubWindow.",
+      "props": { "label": "Disconnected", "dot": "var(--color-muted)" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border:1px solid var(--color-line);border-radius:var(--radius-pill);background:var(--color-surface);cursor:pointer;box-sizing:border-box" },
+        "children": [
+          { "el": "div", "attrs": { "style": "flex:0 0 auto;width:10px;height:10px;border-radius:var(--radius-pill);background:{dot}" } },
+          { "el": "span", "attrs": { "style": "font-family:var(--font-body);font-size:13px;line-height:18px;color:var(--color-ink)" }, "children": ["{label}"] },
+          { "el": "span", "attrs": { "style": "font-size:9px;color:var(--color-muted)" }, "children": ["\u25be"] }
+        ]
+      }
     }
   ]
 }
