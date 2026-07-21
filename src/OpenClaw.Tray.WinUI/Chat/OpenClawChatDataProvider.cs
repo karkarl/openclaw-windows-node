@@ -1591,8 +1591,15 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             lock (_gate)
             {
                 if (_historyConnectionVersion == requestConnectionVersion)
+                {
                     _historyInFlight.Remove(threadId);
-                rerunAuthoritative = _authoritativeHistoryReloadPending.Remove(threadId);
+                    rerunAuthoritative = _authoritativeHistoryReloadPending.Remove(threadId);
+                }
+                else
+                {
+                    // Generation advance owns clearing pending authoritative state.
+                    rerunAuthoritative = false;
+                }
             }
             _telemetry.FinishHistoryLoad(historyOperation, historyOutcome, historyException);
             if (rerunAuthoritative)
@@ -2303,6 +2310,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             _historyGenerationCancellation = new CancellationTokenSource();
         _historyInFlight.Clear();
         _historyRetryCount.Clear();
+        _authoritativeHistoryReloadPending.Clear();
         if (clearLoaded)
             _historyLoaded.Clear();
         return previousCancellation;

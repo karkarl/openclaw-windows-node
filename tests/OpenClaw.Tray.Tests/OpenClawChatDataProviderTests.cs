@@ -907,6 +907,50 @@ public class OpenClawChatDataProviderTests
     }
 
     [Fact]
+    public async Task StaleGenerationAuthoritativeReload_DoesNotReloadInNewGeneration()
+    {
+        var (bridge, provider, _, _) = CreateProvider([MainSession()]);
+        var staleHistory = new TaskCompletionSource<ChatHistoryInfo>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var freshHistory = new TaskCompletionSource<ChatHistoryInfo>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.HistoryBehavior = key =>
+        {
+            return bridge.RequestedHistoryKeys.Count switch
+            {
+                1 => staleHistory.Task,
+                2 => freshHistory.Task,
+                _ => Task.FromResult(new ChatHistoryInfo { SessionKey = key ?? "" }),
+            };
+        };
+
+        await using (provider)
+        {
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            var staleLoad = provider.LoadHistoryAsync("main", force: true);
+            await provider.LoadHistoryAsync("main", force: true, authoritative: true);
+            Assert.Single(bridge.RequestedHistoryKeys);
+
+            bridge.RaiseStatus(ConnectionStatus.Disconnected);
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            staleHistory.SetResult(new ChatHistoryInfo { SessionKey = "main" });
+            await staleLoad;
+
+            Assert.Single(bridge.RequestedHistoryKeys);
+
+            var freshLoad = provider.LoadHistoryAsync(
+                "main",
+                force: true,
+                authoritative: true);
+            Assert.Equal(2, bridge.RequestedHistoryKeys.Count);
+            freshHistory.SetResult(new ChatHistoryInfo { SessionKey = "main" });
+            await freshLoad;
+
+            Assert.Equal(2, bridge.RequestedHistoryKeys.Count);
+        }
+    }
+
+    [Fact]
     public async Task LiveCompactionMessage_PreservesStructuredMetadata()
     {
         var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
