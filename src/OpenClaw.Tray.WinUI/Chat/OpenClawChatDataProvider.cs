@@ -5995,6 +5995,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             threadList.Add(ToThread(_sessions[i], threadTitles[i]));
 
         var composeKey = _bridge.MainSessionKey;
+        var composeAgentId = _sessions
+            .FirstOrDefault(session => string.Equals(session.Key, composeKey, StringComparison.Ordinal)) is { } mainSession
+                ? SessionPresentationResolver.Resolve(mainSession).AgentId ?? "main"
+                : "main";
         var composeReady = _bridge.HasHandshakeSnapshot
             && !string.IsNullOrWhiteSpace(composeKey)
             && _status == ConnectionStatus.Connected
@@ -6023,6 +6027,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             threadList.Add(new ChatThread
             {
                 Id = ck,
+                AgentId = composeAgentId,
                 Title = _lastChatState?.ThreadTitle ?? "OpenClaw Windows Tray",
                 Model = _lastChatState?.Model,
                 ModelProvider = _lastChatState?.ModelProvider,
@@ -6075,7 +6080,7 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             };
 
         var composeTarget = composeReady
-            ? new ChatComposeTarget(composeKey, true)
+            ? new ChatComposeTarget(composeKey, true, composeAgentId)
             : ChatComposeTarget.NotReady;
 
         return new ChatDataSnapshot(
@@ -6160,10 +6165,13 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
     private static ChatThread ToThread(SessionInfo s, string title)
     {
+        var presentation = SessionPresentationResolver.Resolve(s);
         return new ChatThread
         {
             Id = s.Key ?? string.Empty,
             Title = title,
+            AgentId = presentation.AgentId,
+            IsBackground = presentation.IsBackground,
             Status = SessionVisibilityFilter.ToChatThreadStatus(s),
             Activity = string.IsNullOrEmpty(s.CurrentActivity) ? ChatActivity.Idle : ChatActivity.Working,
             Workspace = s.Channel,
