@@ -644,22 +644,18 @@ public sealed class OpenClawChatRoot : Component
         // so scrolling and the last message stay live.
         static Brush BuildComposerFadeBrush(ElementTheme theme)
         {
-            // Match the composer dock fill exactly by reading the color of the same
-            // resolved base-surface brush the dock uses, so the timeline fades
-            // seamlessly into the dock in both light and dark. Resolving the brush
-            // (rather than the bare Color token) keeps the fade aligned with the
-            // dock even where the Color primitive is not surfaced in the theme
-            // dictionaries, and flips live on a runtime light/dark switch.
-            var baseColor = (Theme.ResolveBrush("SolidBackgroundFillColorBaseBrush", theme) as SolidColorBrush)?.Color
-                ?? Theme.ResolveColor("SolidBackgroundFillColorBase", theme);
-            var grad = new LinearGradientBrush
-            {
-                StartPoint = new global::Windows.Foundation.Point(0, 0),
-                EndPoint = new global::Windows.Foundation.Point(0, 1),
-            };
-            grad.GradientStops.Add(new GradientStop { Offset = 0, Color = global::Windows.UI.Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B) });
-            grad.GradientStops.Add(new GradientStop { Offset = 1, Color = baseColor });
-            return grad;
+            // Resolve the fade as a WHOLE brush per theme rather than reading a
+            // color off a walked brush. Reading .Color out of the visual tree
+            // re-resolves any {ThemeResource} against the ambient (light) app
+            // theme, which is why the fade previously read white on a dark page.
+            // ChatComposerFadeBrush is declared with literal colors per theme in
+            // App.xaml ThemeDictionaries (which the FunctionalUI walk can reach),
+            // so it flips correctly and stays aligned with the composer dock fill.
+            // A not-yet-loaded element can report ElementTheme.Default; coerce it
+            // to Dark so resolution never falls through to a missing app-root key
+            // (Loaded/ActualThemeChanged re-apply with the real theme).
+            var resolved = theme == ElementTheme.Light ? ElementTheme.Light : ElementTheme.Dark;
+            return Theme.ResolveBrush("ChatComposerFadeBrush", resolved);
         }
 
         var composerFade = Border(Empty())
