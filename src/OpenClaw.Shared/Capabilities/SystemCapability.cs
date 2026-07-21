@@ -349,21 +349,37 @@ public class SystemCapability : NodeCapabilityBase
         {
             Logger.Info($"[system.run] corr={correlationId} path=v2");
             ExecApprovalV2Result v2Result;
-            try
+            if (_commandRunner is IDirectArgvSupportAwareCommandRunner argvAware
+                && !argvAware.CanExecuteDirectArgv())
             {
-                v2Result = await _v2Handler.HandleAsync(request, correlationId);
+                // Approved commands execute as a direct argv, which the active
+                // sandbox transport cannot carry yet. Fail closed before any
+                // evaluation or prompt so nothing gets approved that cannot
+                // execute. The sandbox is never bypassed or disabled from here.
+                v2Result = ExecApprovalV2Result.Unavailable(
+                    "sandboxed system.run cannot execute the approved command form yet; " +
+                    "keep the sandbox on and disable the new approvals path, or turn the sandbox off, to run commands");
             }
-            catch (Exception ex)
+            else
             {
-                // Rail 1: no silent fallback — handler exceptions become typed denies.
-                Logger.Error($"[system.run] corr={correlationId} path=v2 handler threw", ex);
-                v2Result = ExecApprovalV2Result.ValidationFailed("Handler exception");
+                try
+                {
+                    v2Result = await _v2Handler.HandleAsync(request, correlationId);
+                }
+                catch (Exception ex)
+                {
+                    // Rail 1: no silent fallback — handler exceptions become typed denies.
+                    Logger.Error($"[system.run] corr={correlationId} path=v2 handler threw", ex);
+                    v2Result = ExecApprovalV2Result.ValidationFailed("Handler exception");
+                }
             }
 
             Logger.Info($"[system.run] corr={correlationId} decision={v2Result.Code} reason={v2Result.Reason}");
-            // Rail 1: no silent fallback to legacy regardless of result code.
-            // In PR1 only ExecApprovalV2NullHandler exists (always unavailable); the real
-            // coordinator that can produce an allow decision is wired in PR7/PR8.
+            if (v2Result.IsAllow && v2Result.Execution is { } approvedExecution)
+                return await RunApprovedAsync(approvedExecution, correlationId);
+
+            // No fallback to legacy regardless of result code: any non-allow
+            // outcome from the approval handler is a terminal, typed error.
             return Error($"exec-approvals-v2: {v2Result.Code} ({v2Result.Reason})");
         }
 
@@ -504,6 +520,39 @@ public class SystemCapability : NodeCapabilityBase
         catch (Exception ex)
         {
             Logger.Error("system.run failed", ex);
+            return Error("Execution failed");
+        }
+    }
+
+    /// <summary>
+    /// Execute a command the V2 approval handler allowed. The request is built
+    /// from the approved payload only — validated argv plus sanitized env — so
+    /// the process receives exactly what was approved, with no shell re-parsing
+    /// and nothing re-derived from the raw request. The payload's constructor
+    /// already clamps the timeout to the system.run maximum.
+    /// </summary>
+    private async Task<NodeInvokeResponse> RunApprovedAsync(ExecApprovedExecution execution, string correlationId)
+    {
+        if (_commandRunner == null)
+            return Error("Command execution not available");
+
+        try
+        {
+            var result = await _commandRunner.RunAsync(execution.ToCommandRequest());
+            Logger.Info($"[system.run] corr={correlationId} path=v2 executed exit={result.ExitCode} timedOut={result.TimedOut}");
+            return Success(new
+            {
+                stdout = result.Stdout,
+                stderr = result.Stderr,
+                exitCode = result.ExitCode,
+                timedOut = result.TimedOut,
+                success = result.ExitCode == 0 && !result.TimedOut,
+                durationMs = result.DurationMs
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[system.run] corr={correlationId} path=v2 execution failed", ex);
             return Error("Execution failed");
         }
     }
