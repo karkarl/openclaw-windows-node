@@ -108,6 +108,18 @@ internal static class ThemeResources
         if (Application.Current is { Resources: { } resources }
             && resources.TryGetValue(resourceKey, out var resource) && resource is Color color)
             return color;
+        // WinUI color tokens are paired with a "<key>Brush" SolidColorBrush. Some
+        // hosts (including minimal test surfaces) register only the brush form, so
+        // fall back to the paired brush's color before giving up. In production
+        // both forms resolve to the same value, so this stays correct while
+        // keeping rendering resilient instead of throwing mid-render.
+        var brushKey = resourceKey + "Brush";
+        if (FindThemedResource(brushKey, theme) is SolidColorBrush themedBrush)
+            return themedBrush.Color;
+        if (Application.Current is { Resources: { } brushResources }
+            && brushResources.TryGetValue(brushKey, out var brushResource)
+            && brushResource is SolidColorBrush appBrush)
+            return appBrush.Color;
         throw new InvalidOperationException($"Color resource '{resourceKey}' was not found.");
     }
 
