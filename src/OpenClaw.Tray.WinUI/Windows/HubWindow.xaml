@@ -480,14 +480,14 @@
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_Sandbox" Tag="sandbox" Content="Sandbox">
                 <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Sandbox_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
-            <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_133" Tag="settings" Content="Settings">
-                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Settings_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
-            </NavigationViewItem>
         </NavigationView.MenuItems>
 
         <NavigationView.FooterMenuItems>
             <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_145" x:Name="NavDiagnostics" Tag="debug" Content="Debug">
                 <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Debug_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem x:Uid="HubWindow_NavigationViewItem_133" Tag="settings" Content="Settings">
+                <NavigationViewItem.Icon><ImageIcon Source="{StaticResource Settings_Icon}" AutomationProperties.AccessibilityView="Raw"/></NavigationViewItem.Icon>
             </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
