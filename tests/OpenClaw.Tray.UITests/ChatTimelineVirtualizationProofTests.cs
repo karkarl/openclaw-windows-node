@@ -357,6 +357,129 @@ public sealed class ChatTimelineVirtualizationProofTests
         await _ui.RunOnUIAsync(() => host!.Dispose());
     }
 
+    // Regression proof for the moderate-scroll band: a user who scrolls JUST above
+    // FollowThreshold (gap = 61–900px, well below the large abandonGap) during an ACTIVE settle
+    // timer must not be re-pinned to the bottom by subsequent timer ticks or streaming revisions.
+    // This is the fix for the "61–900px re-pin" band identified in review: the ViewChanged
+    // handler now cancels the settle timer immediately when isFollowing flips false, regardless
+    // of whether the gap also exceeds the large abandon threshold. The test uses a bottom-follow
+    // starting state with a ScrollToBottomToken (which starts a settle timer), then simulates a
+    // user scroll to a gap of ~FollowThreshold+100px (well below abandonGap), and asserts the
+    // view is NOT re-pinned across multiple streaming revisions.
+    [Fact]
+    public async Task ModerateScrollUpDuringSettleTimer_IsNotRepinned()
+    {
+        await _ui.ResetContainerAsync();
+
+        const int rows = 60;
+        FunctionalHostControl? host = null;
+
+        var props = BuildProps(rows, scrollToBottomToken: 0, sessionId: "ui-proof-moderate-scroll");
+        await _ui.RunOnUIAsync(() =>
+        {
+            TestApp.EnsureFluentBrushFallbacks(Application.Current.Resources);
+            _ui.TestWindow.AppWindow.MoveAndResize(new RectInt32(-32000, -32000, 960, 720));
+            _ui.Container.Width = 900;
+            _ui.Container.Height = 640;
+
+            host = new FunctionalHostControl { Width = 860, Height = 560, SuppressAutoDispose = true };
+            _ui.Container.Children.Add(host);
+            host.Mount(_ => Component<OpenClawChatTimeline, OpenClawChatTimelineProps>(props));
+        });
+
+        await DrainRenderQueueAsync();
+        await DrainRenderQueueAsync();
+
+        // Verify we start pinned to the bottom.
+        await _ui.RunOnUIAsync(() =>
+        {
+            var scrollViewer = FindLogical<ScrollViewer>(host!).Single();
+            _ui.Container.UpdateLayout();
+            Assert.True(
+                scrollViewer.ScrollableHeight - scrollViewer.VerticalOffset <= 4,
+                $"precondition: view should start pinned to bottom; offset={scrollViewer.VerticalOffset:0.0}, " +
+                $"scrollable={scrollViewer.ScrollableHeight:0.0}");
+        });
+
+        // Trigger a scroll-to-bottom token bump, which starts a settle timer.
+        props = props with { ScrollToBottomToken = 1 };
+        await _ui.RunOnUIAsync(() => host!.Mount(_ => Component<OpenClawChatTimeline, OpenClawChatTimelineProps>(props)));
+        // Only one drain pass — enough for the enqueued pin to fire and the timer to start,
+        // but not enough for it to fully converge and stop.
+        await _ui.RunOnUIAsync(() => _ui.Container.UpdateLayout());
+        await _ui.YieldToRenderAsync();
+        await Task.Delay(20);
+
+        // User scrolls up a MODERATE amount: above FollowThreshold (60px) but well below the
+        // abandonGap (900px/1.5 viewports). This is the critical band that previously was re-pinned.
+        var userOffset = 0.0;
+        await _ui.RunOnUIAsync(() =>
+        {
+            var scrollViewer = FindLogical<ScrollViewer>(host!).Single();
+            _ui.Container.UpdateLayout();
+            // Target: gap of ~400px from bottom. Above FollowThreshold (60), below abandonGap
+            // (900/1.5*560=840), and far enough from the actively-streaming bottom row that
+            // FunctionalUI's full-remount row re-estimation doesn't affect the viewport.
+            var targetOffset = Math.Max(0, scrollViewer.ScrollableHeight - 400);
+            scrollViewer.ChangeView(null, targetOffset, null, disableAnimation: true);
+            _ui.Container.UpdateLayout();
+        });
+        await DrainRenderQueueAsync();
+
+        await _ui.RunOnUIAsync(() =>
+        {
+            var scrollViewer = FindLogical<ScrollViewer>(host!).Single();
+            _ui.Container.UpdateLayout();
+            userOffset = scrollViewer.VerticalOffset;
+            var gap = scrollViewer.ScrollableHeight - userOffset;
+            Assert.True(
+                gap > FollowThreshold && gap < 840,
+                "precondition: user should be in the moderate band (above FollowThreshold, below abandonGap); " +
+                $"gap={gap:0.0}, threshold={FollowThreshold}");
+        });
+
+        // Stream multiple revisions with timer ticks firing. If the fix is correct, the
+        // timer was cancelled by the user's ViewChanged and subsequent streaming won't re-pin.
+        props = props with { ShowThinkingIndicator = true };
+        for (var revision = 1; revision <= 4; revision++)
+        {
+            var streamed = BuildStreamingEntries(rows, revision);
+            props = props with { Entries = streamed };
+            await _ui.RunOnUIAsync(() => host!.Mount(_ => Component<OpenClawChatTimeline, OpenClawChatTimelineProps>(props)));
+            await DrainRenderQueueAsync();
+            await DrainRenderQueueAsync();
+
+            await _ui.RunOnUIAsync(() =>
+            {
+                var scrollViewer = FindLogical<ScrollViewer>(host!).Single();
+                _ui.Container.UpdateLayout();
+                var gap = scrollViewer.ScrollableHeight - scrollViewer.VerticalOffset;
+                var drift = Math.Abs(scrollViewer.VerticalOffset - userOffset);
+                Console.WriteLine(
+                    "CHAT_TIMELINE_MODERATE_SCROLL_STABLE " +
+                    $"revision={revision} userOffset={userOffset:0.0} offset={scrollViewer.VerticalOffset:0.0} " +
+                    $"drift={drift:0.0} gap={gap:0.0} scrollable={scrollViewer.ScrollableHeight:0.0}");
+
+                // The view must NOT be re-pinned to the bottom...
+                Assert.True(
+                    gap > FollowThreshold,
+                    $"moderate scroll must not be re-pinned to the bottom during streaming; revision {revision}, " +
+                    $"gap={gap:0.0}, threshold={FollowThreshold}");
+                // ...and the user's reading position must remain bounded-stable. Near the
+                // bottom edge, FunctionalUI's full-remount re-estimates row heights around
+                // the viewport boundary, causing up to ~80px drift per revision (independent
+                // of scroll-anchoring; same drift exists with anchoring disabled). The key
+                // invariant is NOT re-pinned, not zero-drift.
+                Assert.True(
+                    drift <= 80,
+                    $"moderate scroll position must stay bounded-stable while streaming; revision {revision}, " +
+                    $"drift={drift:0.0}, userOffset={userOffset:0.0}, offset={scrollViewer.VerticalOffset:0.0}");
+            });
+        }
+
+        await _ui.RunOnUIAsync(() => host!.Dispose());
+    }
+
     // Load-earlier / prepend restore. This scenario isn't reproducible on a fresh live session
     // (which has no earlier history to load), so it is proven here instead of in the recording.
     // When earlier messages are prepended this test guards the invariants a temporary scroll fix
