@@ -20,14 +20,42 @@
                 <ResourceDictionary x:Key="Default">
                     <SolidColorBrush x:Key="SetupIndicatorAccentBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="SetupInactiveDotBrush" Color="{ThemeResource ControlStrongFillColorDefault}" />
+
+                    <!-- FunctionalUI resolves a brush for a target ElementTheme by walking the
+                         app-level ThemeDictionaries; the framework's XamlControlsResources
+                         brushes are not surfaced through that enumerable walk, so a control
+                         rendering dark kept the light snapshot (the composer read as light on
+                         a dark page). Re-declaring the exact framework keys here materializes
+                         them per theme with identical values (each aliases its built-in color
+                         token), so the walk flips them correctly. No hardcoded colors. -->
+                    <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+                    <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource ControlFillColorDefault}" />
+                    <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+                    <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+                    <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+                    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="SetupIndicatorAccentBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="SetupInactiveDotBrush" Color="{ThemeResource ControlStrongFillColorDefault}" />
+
+                    <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+                    <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource ControlFillColorDefault}" />
+                    <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+                    <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+                    <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+                    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="SetupIndicatorAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="SetupInactiveDotBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+
+                    <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+                    <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource ControlFillColorDefault}" />
+                    <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+                    <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+                    <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+                    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

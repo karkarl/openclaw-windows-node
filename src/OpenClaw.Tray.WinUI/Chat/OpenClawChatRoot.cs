@@ -634,10 +634,51 @@ public sealed class OpenClawChatRoot : Component
             chatSurfaceHeight.Set(Math.Round(height));
         }
 
+        // Copilot-style scrim: instead of a hard divider line, the timeline
+        // dissolves into the composer dock via a vertical gradient that runs
+        // from transparent at the top to the solid theme-base fill at the
+        // bottom. The composer dock uses that same base fill, so the fade lands
+        // seamlessly. The color is resolved from the element's ActualTheme (not
+        // Application.Resources, which snapshots the default theme) so it flips
+        // live on a runtime light/dark switch. It never captures pointer input,
+        // so scrolling and the last message stay live.
+        static Brush BuildComposerFadeBrush(ElementTheme theme)
+        {
+            // Match the composer dock fill exactly by reading the color of the same
+            // resolved base-surface brush the dock uses, so the timeline fades
+            // seamlessly into the dock in both light and dark. Resolving the brush
+            // (rather than the bare Color token) keeps the fade aligned with the
+            // dock even where the Color primitive is not surfaced in the theme
+            // dictionaries, and flips live on a runtime light/dark switch.
+            var baseColor = (Theme.ResolveBrush("SolidBackgroundFillColorBaseBrush", theme) as SolidColorBrush)?.Color
+                ?? Theme.ResolveColor("SolidBackgroundFillColorBase", theme);
+            var grad = new LinearGradientBrush
+            {
+                StartPoint = new global::Windows.Foundation.Point(0, 0),
+                EndPoint = new global::Windows.Foundation.Point(0, 1),
+            };
+            grad.GradientStops.Add(new GradientStop { Offset = 0, Color = global::Windows.UI.Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B) });
+            grad.GradientStops.Add(new GradientStop { Offset = 1, Color = baseColor });
+            return grad;
+        }
+
+        var composerFade = Border(Empty())
+            .Set(f =>
+            {
+                f.Height = 28;
+                f.VerticalAlignment = VerticalAlignment.Bottom;
+                f.IsHitTestVisible = false;
+                void ApplyFade() => f.Background = BuildComposerFadeBrush(f.ActualTheme);
+                ApplyFade();
+                f.Loaded += (_, _) => ApplyFade();
+                f.ActualThemeChanged += (_, _) => ApplyFade();
+            });
+
         return Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
             header.Grid(row: 0, column: 0),
             divider.Grid(row: 1, column: 0),
             body.Grid(row: 2, column: 0),
+            composerFade.Grid(row: 2, column: 0),
             composer.Grid(row: 3, column: 0)
         ).OnMount(root =>
         {
@@ -843,14 +884,15 @@ public sealed class OpenClawChatRoot : Component
 
                     // Subtle style: drop the default button stroke and elevation
                     // "depth", keeping only a light, low-opacity fill at rest.
+                    // Resolve the subtle fill against the button's own ActualTheme
+                    // (re-applying on a runtime light/dark switch) so the rest fill
+                    // follows the theme instead of snapshotting the app default.
                     b.BorderThickness = new Thickness(0);
                     b.BorderBrush = null;
-                    if (Application.Current?.Resources is { } appResources
-                        && appResources.TryGetValue("SubtleFillColorSecondaryBrush", out var subtleFill)
-                        && subtleFill is Brush subtleBrush)
-                    {
-                        b.Background = subtleBrush;
-                    }
+                    void ApplyRestFill() => b.Background = Theme.ResolveBrush("SubtleFillColorSecondaryBrush", b.ActualTheme);
+                    ApplyRestFill();
+                    b.Loaded += (_, _) => ApplyRestFill();
+                    b.ActualThemeChanged += (_, _) => ApplyRestFill();
                 });
 
         return Border(
