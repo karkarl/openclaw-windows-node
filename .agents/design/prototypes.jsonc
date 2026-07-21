@@ -5,6 +5,19 @@
 // may carry id, on (interactions), visibleWhen/hiddenWhen. Actions: navigate, back,
 // setState, toggle, openModal, closeModal. This file is regenerated with stable key order
 // on save — use "note" fields for durable annotations.
+//
+// Scrolling model (per-screen, per-region — configure it here, not in the renderer):
+//   • A screen may set "fit":"screen" to become a PINNED APP SHELL: the screen is bounded to
+//     the device viewport (no whole-window scroll), so header/sidebar regions stay fixed and
+//     only the regions you mark as scrollable move. Screens WITHOUT "fit":"screen" keep the
+//     default behavior — the whole page scrolls as one surface.
+//   • Inside a "fit":"screen" shell, mark each independent scroll region with "scroll":true
+//     (or layout:"scroll"). Everything you do NOT mark stays pinned. So "what's pinned" is
+//     simply "whatever isn't a scroll region" — different apps pin different parts (a fixed
+//     titlebar, a sidebar, a bottom toolbar) purely by choosing which regions get "scroll".
+//   • Example (the `sandbox` screen below): app-titlebar is pinned; nav-scroll and
+//     sandbox-content each carry "scroll":true, so the nav list and page content scroll
+//     independently while the titlebar + shell chrome stay put.
 {
   "meta": {
     "version": 1,
