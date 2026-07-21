@@ -22,7 +22,7 @@ namespace OpenClaw.Shared;
 // (logged at warn) instead of throwing. Genuine protocol errors are NOT
 // swallowed: read methods propagate the gateway error (e.g. not-found / too-large
 // on sessions.files.get), and mutation methods surface it in the result's Error
-// field. Timeouts propagate as TimeoutException from the request helper.
+// field. Lifecycle RPCs convert request timeouts into action-specific results.
 //
 // Parsing is factored into internal static methods so the JSON contract is unit
 // testable directly (InternalsVisibleTo OpenClaw.Shared.Tests), reusing the
@@ -61,6 +61,11 @@ public partial class OpenClawGatewayClient
                 timeoutMs).ConfigureAwait(false);
             return ParseSessionResetResult(payload);
         }
+        catch (TimeoutException ex)
+        {
+            _logger.Warn($"sessions.reset timed out: {ex.Message}");
+            return CreateSessionResetTimeoutResult();
+        }
         catch (InvalidOperationException ex)
         {
             _logger.Warn($"sessions.reset failed: {ex.Message}");
@@ -71,6 +76,12 @@ public partial class OpenClawGatewayClient
             };
         }
     }
+
+    internal static SessionResetResult CreateSessionResetTimeoutResult() => new()
+    {
+        Ok = false,
+        Error = "The gateway did not respond before the reset timed out. Refresh the session before trying again."
+    };
 
     internal static SessionResetResult ParseSessionResetResult(JsonElement payload)
     {
@@ -117,6 +128,11 @@ public partial class OpenClawGatewayClient
                 timeoutMs).ConfigureAwait(false);
             return ParseSessionCompactResult(payload);
         }
+        catch (TimeoutException ex)
+        {
+            _logger.Warn($"sessions.compact timed out: {ex.Message}");
+            return CreateSessionCompactTimeoutResult();
+        }
         catch (InvalidOperationException ex)
         {
             _logger.Warn($"sessions.compact failed: {ex.Message}");
@@ -128,24 +144,30 @@ public partial class OpenClawGatewayClient
         }
     }
 
+    internal static SessionCompactResult CreateSessionCompactTimeoutResult() => new()
+    {
+        Ok = false,
+        Error = "The gateway did not respond before compaction timed out. Refresh the conversation to check whether compaction completed."
+    };
+
     internal static SessionCompactResult ParseSessionCompactResult(JsonElement payload)
     {
         var ok = !payload.TryGetProperty("ok", out var okElement) ||
                  okElement.ValueKind == JsonValueKind.True;
         var compacted = payload.TryGetProperty("compacted", out var compactedElement) &&
                         compactedElement.ValueKind == JsonValueKind.True;
-        int? tokensBefore = null;
-        int? tokensAfter = null;
+        long? tokensBefore = null;
+        long? tokensAfter = null;
         if (payload.TryGetProperty("result", out var result) &&
             result.ValueKind == JsonValueKind.Object)
         {
             if (result.TryGetProperty("tokensBefore", out var before) &&
-                before.TryGetInt32(out var beforeValue))
+                before.TryGetInt64(out var beforeValue))
             {
                 tokensBefore = beforeValue;
             }
             if (result.TryGetProperty("tokensAfter", out var after) &&
-                after.TryGetInt32(out var afterValue))
+                after.TryGetInt64(out var afterValue))
             {
                 tokensAfter = afterValue;
             }

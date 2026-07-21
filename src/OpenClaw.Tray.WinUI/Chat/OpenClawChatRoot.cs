@@ -284,7 +284,10 @@ public sealed class OpenClawChatRoot : Component
         // same Id and `selectedThread` resolves to it on the next render
         // without any re-keying or migration.
         ChatThread? composeOnlyThread = null;
-        var composeKey = _pendingSelectedThreadId ??
+        var pendingComposeKey = ChatLifecycleSelectionPolicy.RetainPendingForSelection(
+            _pendingSelectedThreadId,
+            selectedIdState.Value);
+        var composeKey = pendingComposeKey ??
             (snapshot.ComposeTarget.IsReady ? snapshot.ComposeTarget.SessionKey : null);
         if (selectedThread is null && composeKey is not null)
         {
@@ -625,6 +628,9 @@ public sealed class OpenClawChatRoot : Component
                 OnStop: () => OnStop(composerThread.Id!),
                 OnChannelChanged: id =>
                 {
+                    _pendingSelectedThreadId = ChatLifecycleSelectionPolicy.RetainPendingForSelection(
+                        _pendingSelectedThreadId,
+                        id);
                     selectedIdState.Set(id);
                     selectedIdRef.Current = id;
                     if (_provider is OpenClawChatDataProvider nativeProvider)
@@ -965,6 +971,7 @@ public sealed class OpenClawChatRoot : Component
         catch (Exception ex)
         {
             System.Diagnostics.Trace.WriteLine($"[chat] send failed: {ex}");
+            return false;
         }
         return true;
     }

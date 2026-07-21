@@ -1260,11 +1260,10 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
 
                         if (authoritative)
                         {
-                            var arrivedAfterRequest =
-                                em?.OpenClawSeq is { } liveSequence && liveSequence > authoritativeMaxHistorySequence ||
-                                em?.Timestamp is { } liveTimestamp && liveTimestamp >= historyRequestStartedAt ||
-                                em?.IsLocalQueuedSend == true;
-                            if (!arrivedAfterRequest)
+                            if (!ShouldPreserveLiveEntryDuringAuthoritativeReload(
+                                    em,
+                                    authoritativeMaxHistorySequence,
+                                    historyRequestStartedAt))
                                 continue;
                         }
 
@@ -2082,6 +2081,15 @@ public sealed class OpenClawChatDataProvider : IChatDataProvider
             TryDispatchNextQueuedSend(threadId);
         }
     }
+
+    internal static bool ShouldPreserveLiveEntryDuringAuthoritativeReload(
+        ChatEntryMetadata? metadata,
+        int maxHistorySequence,
+        DateTimeOffset historyRequestStartedAt) =>
+        metadata is null ||
+        metadata.OpenClawSeq is { } liveSequence && liveSequence > maxHistorySequence ||
+        metadata.Timestamp is { } liveTimestamp && liveTimestamp >= historyRequestStartedAt ||
+        metadata.IsLocalQueuedSend;
 
     private void OnSessionCommandCompleted(object? sender, SessionCommandResult result)
     {

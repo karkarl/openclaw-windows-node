@@ -45,6 +45,14 @@ internal static class ChatLifecycleCommandParser
 
 internal static class ChatLifecycleSelectionPolicy
 {
+    public static string? RetainPendingForSelection(
+        string? pendingSelectedId,
+        string? selectedId) =>
+        pendingSelectedId is not null &&
+        string.Equals(pendingSelectedId, selectedId, StringComparison.Ordinal)
+            ? pendingSelectedId
+            : null;
+
     public static bool ShouldFallback(
         string staleSelectedId,
         string? pendingSelectedId,

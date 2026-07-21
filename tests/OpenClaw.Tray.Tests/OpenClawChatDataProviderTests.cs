@@ -322,6 +322,14 @@ public class OpenClawChatDataProviderTests
     [Fact]
     public void LifecycleSelectionPolicy_PreservesPendingCreatedSession()
     {
+        Assert.Equal(
+            "agent:main:new-session",
+            ChatLifecycleSelectionPolicy.RetainPendingForSelection(
+                "agent:main:new-session",
+                "agent:main:new-session"));
+        Assert.Null(ChatLifecycleSelectionPolicy.RetainPendingForSelection(
+            "agent:main:new-session",
+            "agent:main:other-session"));
         Assert.False(ChatLifecycleSelectionPolicy.ShouldFallback(
             "agent:main:new-session",
             "agent:main:new-session",
@@ -330,6 +338,28 @@ public class OpenClawChatDataProviderTests
             "missing-session",
             pendingSelectedId: null,
             fallbackThreadId: "main"));
+    }
+
+    [Fact]
+    public void AuthoritativeReload_PreservesMetadataLessAndPostRequestEntries()
+    {
+        var requestStartedAt = DateTimeOffset.UtcNow;
+
+        Assert.True(OpenClawChatDataProvider.ShouldPreserveLiveEntryDuringAuthoritativeReload(
+            metadata: null,
+            maxHistorySequence: 10,
+            requestStartedAt));
+        Assert.True(OpenClawChatDataProvider.ShouldPreserveLiveEntryDuringAuthoritativeReload(
+            new ChatEntryMetadata(requestStartedAt.AddMilliseconds(1), Model: null),
+            maxHistorySequence: 10,
+            requestStartedAt));
+        Assert.False(OpenClawChatDataProvider.ShouldPreserveLiveEntryDuringAuthoritativeReload(
+            new ChatEntryMetadata(
+                requestStartedAt.AddSeconds(-1),
+                Model: null,
+                OpenClawSeq: 10),
+            maxHistorySequence: 10,
+            requestStartedAt));
     }
 
     [Fact]

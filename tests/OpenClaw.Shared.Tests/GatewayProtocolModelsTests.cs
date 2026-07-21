@@ -130,6 +130,19 @@ public class GatewayProtocolModelsTests
         Assert.Equal(42000, result.TokensBefore);
         Assert.Equal(12000, result.TokensAfter);
 
+        var large = OpenClawGatewayClient.ParseSessionCompactResult(Parse("""
+        {
+          "ok": true,
+          "compacted": true,
+          "result": {
+            "tokensBefore": 3000000000,
+            "tokensAfter": 2500000000
+          }
+        }
+        """));
+        Assert.Equal(3_000_000_000L, large.TokensBefore);
+        Assert.Equal(2_500_000_000L, large.TokensAfter);
+
         var failed = OpenClawGatewayClient.ParseSessionCompactResult(Parse("""
         {"ok":false,"compacted":false,"reason":"active run"}
         """));
@@ -151,6 +164,20 @@ public class GatewayProtocolModelsTests
         """));
         Assert.False(failed.Ok);
         Assert.Equal("active run", failed.Error);
+    }
+
+    [Fact]
+    public void LifecycleTimeoutResults_UseActionSpecificRecoveryGuidance()
+    {
+        var reset = OpenClawGatewayClient.CreateSessionResetTimeoutResult();
+        Assert.False(reset.Ok);
+        Assert.Contains("reset timed out", reset.Error);
+        Assert.Contains("Refresh the session", reset.Error);
+
+        var compact = OpenClawGatewayClient.CreateSessionCompactTimeoutResult();
+        Assert.False(compact.Ok);
+        Assert.Contains("compaction timed out", compact.Error);
+        Assert.Contains("check whether compaction completed", compact.Error);
     }
 
     // ── commands.list ──

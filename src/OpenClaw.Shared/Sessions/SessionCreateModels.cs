@@ -38,7 +38,7 @@ public sealed class SessionCompactResult
     public string? Key { get; init; }
     public bool Compacted { get; init; }
     public string? Reason { get; init; }
-    public int? TokensBefore { get; init; }
-    public int? TokensAfter { get; init; }
+    public long? TokensBefore { get; init; }
+    public long? TokensAfter { get; init; }
     public string? Error { get; init; }
 }
