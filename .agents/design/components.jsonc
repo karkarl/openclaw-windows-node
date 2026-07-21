@@ -1850,6 +1850,703 @@
           }
         ]
       }
+    },
+    {
+      "name": "PermToggle",
+      "note": "A two-state permission dropdown for the containment demo, standing in for the Files access combo box (Read only <-> Write). Renders as a Select-styled control (border, radius, chevron) but is driven by a real hidden checkbox so its state persists in the DOM without a scene action; the visible face swaps Read only / Write via the :checked sibling. When set to Write the control takes a critical accent to telegraph relaxed containment. Toggling it also feeds the page's ContainmentMeter and level Badge through global :has() count selectors keyed off the checkbox id. Preview-only: ships as the real WinUI combo box bound to the folder's access mode; the demo uses a checkbox purely to make the count reactive without app code.",
+      "props": {
+        "cbid": "fdocs",
+        "off": "Read only",
+        "on": "Write"
+      },
+      "root": {
+        "el": "label",
+        "class": "pmt",
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".pmt{position:relative;display:inline-flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-width:132px;height:32px;padding:0 var(--space-2);border:1px solid var(--color-line);border-radius:var(--radius-sm);background:var(--color-surface);font-family:var(--font-body);font-size:13px;line-height:18px;color:var(--color-ink);cursor:pointer;box-sizing:border-box}.pmt:hover{background:var(--color-subtleHover)}.pmt-cb{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}.pmt-face{white-space:nowrap}.pmt-on{display:none}.pmt-cb:checked ~ .pmt-off{display:none}.pmt-cb:checked ~ .pmt-on{display:inline}.pmt:has(.pmt-cb:checked){border-color:var(--color-critical)}.pmt:has(.pmt-cb:checked) .pmt-face{color:var(--color-critical)}.pmt-chev{flex:0 0 auto;opacity:.7}"
+            ]
+          },
+          {
+            "el": "input",
+            "attrs": {
+              "type": "checkbox",
+              "id": "{cbid}",
+              "class": "pmt-cb",
+              "aria-label": "Toggle write access"
+            }
+          },
+          {
+            "el": "span",
+            "class": "pmt-face pmt-off",
+            "children": [
+              "{off}"
+            ]
+          },
+          {
+            "el": "span",
+            "class": "pmt-face pmt-on",
+            "children": [
+              "{on}"
+            ]
+          },
+          {
+            "el": "svg",
+            "class": "pmt-chev",
+            "attrs": {
+              "width": "12",
+              "height": "12",
+              "viewBox": "0 0 24 24",
+              "fill": "none",
+              "aria-hidden": "true",
+              "stroke": "currentColor",
+              "stroke-width": "2",
+              "stroke-linecap": "round",
+              "stroke-linejoin": "round"
+            },
+            "children": [
+              {
+                "el": "path",
+                "attrs": {
+                  "d": "M6 9l6 6 6-6"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ContainmentMeter",
+      "note": "The interactive containment risk meter for the demo: a dense, full-width tick band (Fluent volume/EQ language) whose left-anchored fill length + tone report the security level by position, Unprotected -> Recommended -> Locked down in equal thirds (a subtle divider marks the Unprotected|Recommended boundary at 1/3). Unlike the static LevelTicksStatic, its fill is COUNT-DRIVEN: the more Files folders set to Write (via PermToggle checkboxes #fdocs/#fdl/#fdesk), the shorter the green fill; at all three the tip retreats past the 1/3 boundary and the meter turns critical/red. The same globally-injected <style> also flips the level Badge (Recommended -> Unprotected) and fades the in-page security card on scroll so the floating ContainmentRiskBarLive can take over. Counting is done in pure CSS with :root:has() comma-OR selectors because the prototype's scene engine has no arithmetic; height is set inline per instance so the same component can be tall in-page and compact in the floating bar. Preview-only technique: ships as a WinUI meter observing the real access controls.",
+      "props": {
+        "h": "40px"
+      },
+      "root": {
+        "el": "div",
+        "class": "cm",
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".cm{display:flex;width:100%}.cm-band{display:flex;width:100%;align-items:center;gap:0;position:relative}.cm-tick{flex:1;display:flex;align-items:center;justify-content:center;height:100%}.cm-line{width:3px;height:16px;border-radius:var(--radius-pill);background:var(--color-line);transition:background 160ms ease-out}.cm-div{position:absolute;left:33.33%;top:50%;transform:translate(-50%,-50%);width:2px;height:24px;border-radius:var(--radius-pill);background:var(--color-line);opacity:.55}.cm .cm-tick:nth-child(-n+30) .cm-line{background:var(--color-positive)}:root:has(#fdocs:checked) .cm .cm-tick:nth-child(n+25) .cm-line,:root:has(#fdl:checked) .cm .cm-tick:nth-child(n+25) .cm-line,:root:has(#fdesk:checked) .cm .cm-tick:nth-child(n+25) .cm-line{background:var(--color-line)}:root:has(#fdocs:checked):has(#fdl:checked) .cm .cm-tick:nth-child(n+19) .cm-line,:root:has(#fdocs:checked):has(#fdesk:checked) .cm .cm-tick:nth-child(n+19) .cm-line,:root:has(#fdl:checked):has(#fdesk:checked) .cm .cm-tick:nth-child(n+19) .cm-line{background:var(--color-line)}:root:has(#fdocs:checked):has(#fdl:checked):has(#fdesk:checked) .cm .cm-tick:nth-child(n+11) .cm-line{background:var(--color-line)}:root:has(#fdocs:checked):has(#fdl:checked):has(#fdesk:checked) .cm .cm-tick:nth-child(-n+10) .cm-line{background:var(--color-critical)}.ds-badge.lvl-alt{display:none}:root:has(#fdocs:checked):has(#fdl:checked):has(#fdesk:checked) .ds-badge.lvl-main{display:none}:root:has(#fdocs:checked):has(#fdl:checked):has(#fdesk:checked) .ds-badge.lvl-alt{display:inline-block}.proto-layout:has(> .proto-layout > .proto-component > .cm){animation:cm-cardhide linear both;animation-timeline:scroll(nearest);animation-range:140px 300px}@keyframes cm-cardhide{to{opacity:0;visibility:hidden}}"
+            ]
+          },
+          {
+            "el": "div",
+            "class": "cm-band",
+            "attrs": {
+              "style": "height:{h}"
+            },
+            "children": [
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-tick",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "cm-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "cm-div"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LevelReadout",
+      "note": "The security level as a Badge (see Badge component) for the top-right of the Security level header and the floating recap bar. Renders both states -- Recommended (positive) and Unprotected (critical) -- and lets ContainmentMeter's global count CSS show exactly one: Recommended by default, flipping to Unprotected once all three Files folders are set to Write. Uses the ds-badge tokens so tone comes from semantic color, never a raw hex.",
+      "props": {},
+      "root": {
+        "el": "span",
+        "attrs": {
+          "style": "display:inline-flex;align-items:center"
+        },
+        "children": [
+          {
+            "el": "span",
+            "class": "ds-badge ds-badge-positive lvl-main",
+            "children": [
+              "Recommended"
+            ]
+          },
+          {
+            "el": "span",
+            "class": "ds-badge ds-badge-critical lvl-alt",
+            "children": [
+              "Unprotected"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ContainmentRiskBarLive",
+      "note": "Live, count-driven twin of ContainmentRiskBar for the Sandbox demo: the same floating acrylic recap bar (sticky, blurred, slides in once the in-page control scrolls away) but its level Badge and tick meter are reactive. The right-hand level is a LevelReadout (Recommended/Unprotected Badge) and the meter row is a ContainmentMeter -- both flip via ContainmentMeter's global :has() count CSS as the Files PermToggles move to Write. Shares the .ccrb shell + <style> with ContainmentRiskBar (same sticky/scrollbar behavior). Use for sandbox ON; keep the static ContainmentRiskBar for sandbox OFF.",
+      "props": {
+        "status": "Node sandbox is on",
+        "caption": "Tracks your Files, Clipboard & Network choices"
+      },
+      "root": {
+        "el": "div",
+        "class": "ccrb",
+        "attrs": {
+          "style": "display:flex;flex-direction:column;gap:var(--space-3);width:calc(100% + 24px);margin:0 calc(var(--space-3) * -1);box-sizing:border-box;padding:var(--space-3) var(--space-4) calc(var(--space-3) + 64px);border-radius:var(--radius-lg);border:1px solid var(--color-line);background:color-mix(in srgb, var(--color-surface) 92%, transparent);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);box-shadow:var(--shadow-lg)"
+        },
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".proto-component:has(> .ccrb){position:sticky;top:calc(var(--space-3) - 24px);z-index:6;height:0;margin-bottom:calc(var(--space-5) * -1);overflow:visible;display:block;width:100%;align-self:stretch;max-width:none;opacity:0;transform:translateY(-6px);pointer-events:none;animation:ccrb-in linear both;animation-timeline:scroll(nearest);animation-range:140px 300px} .ccrb{width:calc(100% + 24px);margin:0 calc(var(--space-3) * -1)} @keyframes ccrb-in{to{opacity:1;transform:none;pointer-events:auto} } .proto-node.proto-layout::-webkit-scrollbar{width:12px;height:12px} .proto-node.proto-layout::-webkit-scrollbar-track{background:transparent} .proto-node.proto-layout::-webkit-scrollbar-button{display:none;width:0;height:0} .proto-node.proto-layout::-webkit-scrollbar-thumb{background:transparent;border:4px solid transparent;background-clip:padding-box;border-radius:999px;min-height:32px} .proto-node.proto-layout:hover::-webkit-scrollbar-thumb{background:var(--color-muted);background-clip:padding-box} .proto-node.proto-layout::-webkit-scrollbar-thumb:hover{background:var(--color-ink);background-clip:padding-box}"
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": {
+              "style": "display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);width:100%"
+            },
+            "children": [
+              {
+                "el": "div",
+                "attrs": {
+                  "style": "display:flex;align-items:center;gap:var(--space-3);min-width:0"
+                },
+                "children": [
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-size:20px;line-height:1;flex:0 0 auto"
+                    },
+                    "children": [
+                      "🛡"
+                    ]
+                  },
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-family:var(--font-body);font-size:14px;line-height:20px;font-weight:600;color:var(--color-ink);flex:0 0 auto"
+                    },
+                    "children": [
+                      "{status}"
+                    ]
+                  },
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-family:var(--font-body);font-size:12px;line-height:16px;color:var(--color-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0"
+                    },
+                    "children": [
+                      "{caption}"
+                    ]
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "attrs": {
+                  "style": "flex:0 0 auto"
+                },
+                "children": [
+                  {
+                    "component": "LevelReadout"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": {
+              "style": "width:100%"
+            },
+            "children": [
+              {
+                "component": "ContainmentMeter",
+                "props": {
+                  "h": "26px"
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

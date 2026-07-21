@@ -703,54 +703,15 @@
                         }
                       },
                       {
-                        "id": "riskbar-locked",
-                        "component": "ContainmentRiskBar",
+                        "id": "riskbar-live",
+                        "component": "ContainmentRiskBarLive",
                         "width": "100%",
                         "visibleWhen": {
-                          "sandbox": "on",
-                          "preset": "locked"
+                          "sandbox": "on"
                         },
                         "props": {
                           "status": "Node sandbox is on",
-                          "caption": "Tracks your Files, Clipboard & Network choices",
-                          "level": "Locked down",
-                          "active": "l",
-                          "fill": "8%",
-                          "tone": "warning"
-                        }
-                      },
-                      {
-                        "id": "riskbar-balanced",
-                        "component": "ContainmentRiskBar",
-                        "width": "100%",
-                        "visibleWhen": {
-                          "sandbox": "on",
-                          "preset": "balanced"
-                        },
-                        "props": {
-                          "status": "Node sandbox is on",
-                          "caption": "Tracks your Files, Clipboard & Network choices",
-                          "level": "Recommended",
-                          "active": "r",
-                          "fill": "50%",
-                          "tone": "positive"
-                        }
-                      },
-                      {
-                        "id": "riskbar-permissive",
-                        "component": "ContainmentRiskBar",
-                        "width": "100%",
-                        "visibleWhen": {
-                          "sandbox": "on",
-                          "preset": "permissive"
-                        },
-                        "props": {
-                          "status": "Node sandbox is on",
-                          "caption": "Tracks your Files, Clipboard & Network choices",
-                          "level": "Unprotected",
-                          "active": "u",
-                          "fill": "92%",
-                          "tone": "critical"
+                          "caption": "Tracks your Files, Clipboard & Network choices"
                         }
                       },
                       {
@@ -948,31 +909,8 @@
                                 "style": "heading"
                               },
                               {
-                                "id": "sec-read-locked-x",
-                                "text": "Locked down",
-                                "style": "body",
-                                "color": "positive",
-                                "visibleWhen": {
-                                  "preset": "locked"
-                                }
-                              },
-                              {
-                                "id": "sec-read-balanced-x",
-                                "text": "Recommended",
-                                "style": "body",
-                                "color": "positive",
-                                "visibleWhen": {
-                                  "preset": "balanced"
-                                }
-                              },
-                              {
-                                "id": "sec-read-permissive-x",
-                                "text": "Unprotected",
-                                "style": "body",
-                                "color": "critical",
-                                "visibleWhen": {
-                                  "preset": "permissive"
-                                }
+                                "id": "sec-read-x",
+                                "component": "LevelReadout"
                               }
                             ]
                           },
@@ -988,36 +926,11 @@
                             "direction": "vertical",
                             "children": [
                               {
-                                "id": "sec-slider-locked-x",
-                                "component": "LevelTicks",
+                                "id": "sec-meter-x",
+                                "component": "ContainmentMeter",
                                 "grow": true,
                                 "props": {
-                                  "active": "l"
-                                },
-                                "visibleWhen": {
-                                  "preset": "locked"
-                                }
-                              },
-                              {
-                                "id": "sec-slider-balanced-x",
-                                "component": "LevelTicks",
-                                "grow": true,
-                                "props": {
-                                  "active": "r"
-                                },
-                                "visibleWhen": {
-                                  "preset": "balanced"
-                                }
-                              },
-                              {
-                                "id": "sec-slider-permissive-x",
-                                "component": "LevelTicks",
-                                "grow": true,
-                                "props": {
-                                  "active": "u"
-                                },
-                                "visibleWhen": {
-                                  "preset": "permissive"
+                                  "h": "40px"
                                 }
                               }
                             ]
@@ -1210,9 +1123,9 @@
                                   },
                                   {
                                     "id": "files-docs-x",
-                                    "component": "Select",
+                                    "component": "PermToggle",
                                     "props": {
-                                      "value": "Read only"
+                                      "cbid": "fdocs"
                                     }
                                   },
                                   {
@@ -1222,9 +1135,9 @@
                                   },
                                   {
                                     "id": "files-dl-x",
-                                    "component": "Select",
+                                    "component": "PermToggle",
                                     "props": {
-                                      "value": "Read only"
+                                      "cbid": "fdl"
                                     }
                                   },
                                   {
@@ -1234,9 +1147,9 @@
                                   },
                                   {
                                     "id": "files-desk-x",
-                                    "component": "Select",
+                                    "component": "PermToggle",
                                     "props": {
-                                      "value": "Blocked"
+                                      "cbid": "fdesk"
                                     }
                                   }
                                 ]
