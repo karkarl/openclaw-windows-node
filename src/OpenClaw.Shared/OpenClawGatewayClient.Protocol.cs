@@ -230,6 +230,11 @@ public partial class OpenClawGatewayClient
 
             return ParseSessionCreateResult(payload);
         }
+        catch (TimeoutException ex)
+        {
+            _logger.Warn($"sessions.create timed out: {ex.Message}");
+            return CreateSessionCreationTimeoutResult();
+        }
         catch (InvalidOperationException ex) when (IsUnknownMethodError(ex.Message))
         {
             _logger.Warn("sessions.create unsupported on gateway");
@@ -250,6 +255,12 @@ public partial class OpenClawGatewayClient
             };
         }
     }
+
+    internal static SessionCreateResult CreateSessionCreationTimeoutResult() => new()
+    {
+        Ok = false,
+        Error = "The gateway did not respond before session creation timed out. Check the session list to see whether a new session was created before trying again."
+    };
 
     internal static Dictionary<string, object?> BuildSessionCreateParameters(
         SessionCreateRequest request,

@@ -614,7 +614,11 @@ public sealed class OpenClawChatRoot : Component
                         msg,
                         attachments);
                     if (accepted)
-                        SetPendingAttachments(Array.Empty<ChatAttachment>());
+                    {
+                        SetPendingAttachments(ChatComposerSubmissionPolicy.RemoveSubmittedAttachments(
+                            pendingAttachmentsRef.Current,
+                            attachments));
+                    }
                     return accepted;
                 },
                 OnStop: () => OnStop(composerThread.Id!),
@@ -940,6 +944,9 @@ public sealed class OpenClawChatRoot : Component
         if (_provider is OpenClawChatDataProvider native &&
             ChatLifecycleCommandParser.TryParse(message, attachments.Count > 0, out var command))
         {
+            if (ChatLifecycleCommandExecutionPolicy.ShouldQueue(command))
+                return await native.EnqueueCompactCommandAsync(threadId);
+
             if (command == ChatLifecycleCommandKind.Reset &&
                 _confirmResetAsync is not null &&
                 !await _confirmResetAsync(threadId, displayName))

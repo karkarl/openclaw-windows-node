@@ -169,6 +169,11 @@ public class GatewayProtocolModelsTests
     [Fact]
     public void LifecycleTimeoutResults_UseActionSpecificRecoveryGuidance()
     {
+        var create = OpenClawGatewayClient.CreateSessionCreationTimeoutResult();
+        Assert.False(create.Ok);
+        Assert.Contains("session creation timed out", create.Error);
+        Assert.Contains("Check the session list", create.Error);
+
         var reset = OpenClawGatewayClient.CreateSessionResetTimeoutResult();
         Assert.False(reset.Ok);
         Assert.Contains("reset timed out", reset.Error);

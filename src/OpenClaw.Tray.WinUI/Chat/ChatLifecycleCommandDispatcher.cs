@@ -61,6 +61,12 @@ internal static class ChatLifecycleSelectionPolicy
         !string.Equals(staleSelectedId, fallbackThreadId, StringComparison.Ordinal);
 }
 
+internal static class ChatLifecycleCommandExecutionPolicy
+{
+    public static bool ShouldQueue(ChatLifecycleCommandKind command) =>
+        command == ChatLifecycleCommandKind.Compact;
+}
+
 internal sealed class ChatLifecycleCommandDispatcher(IChatGatewayBridge bridge)
 {
     public async Task<ChatLifecycleCommandResult> ExecuteAsync(

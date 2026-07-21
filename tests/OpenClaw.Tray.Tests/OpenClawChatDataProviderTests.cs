@@ -108,6 +108,7 @@ public class OpenClawChatDataProviderTests
             Key = "main",
             Compacted = true
         };
+        public Func<string, Task<SessionCompactResult>>? CompactSessionBehavior { get; set; }
         public int RequestSessionsCallCount { get; private set; }
         public List<string?> RequestedHistoryKeys { get; } = new();
 
@@ -149,7 +150,7 @@ public class OpenClawChatDataProviderTests
         public Task<SessionCompactResult> CompactSessionDetailedAsync(string sessionKey)
         {
             ModelCompactSessionKeys.Add(sessionKey);
-            return Task.FromResult(CompactSessionResult);
+            return CompactSessionBehavior?.Invoke(sessionKey) ?? Task.FromResult(CompactSessionResult);
         }
 
         public Task RequestSessionsAsync()
@@ -379,6 +380,14 @@ public class OpenClawChatDataProviderTests
     }
 
     [Fact]
+    public void LifecycleCommandExecutionPolicy_OnlyQueuesCompact()
+    {
+        Assert.False(ChatLifecycleCommandExecutionPolicy.ShouldQueue(ChatLifecycleCommandKind.New));
+        Assert.False(ChatLifecycleCommandExecutionPolicy.ShouldQueue(ChatLifecycleCommandKind.Reset));
+        Assert.True(ChatLifecycleCommandExecutionPolicy.ShouldQueue(ChatLifecycleCommandKind.Compact));
+    }
+
+    [Fact]
     public async Task LifecycleCommandProvider_CompactRefreshesHistoryWithoutChatSend()
     {
         var (bridge, provider, _, _) = CreateProvider([MainSession()]);
@@ -421,6 +430,297 @@ public class OpenClawChatDataProviderTests
             var timeline = (await provider.LoadAsync()).Timelines["main"];
             var compactedEntry = Assert.Single(timeline.Entries);
             Assert.Equal(ChatTimelineItemKind.Status, compactedEntry.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_NewLeavesOriginalRunAndQueueUntouched()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-2", Status = "started" });
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            await provider.SendMessageAsync("main", "first");
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-1"));
+            await provider.SendMessageAsync("main", "second");
+
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.New);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("agent:main:new-session", result.NewSessionKey);
+            Assert.Empty(bridge.AbortedRunIds);
+            Assert.Collection(
+                GetQueuedMessages(snapshots[^1], "main"),
+                queued => Assert.Equal("second", queued.Text));
+
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "assistant",
+                Text = "first response",
+                State = "final"
+            });
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"end"}""", runId: "run-1"));
+
+            await WaitForConditionAsync(() => bridge.SentMessages.Count == 2);
+            Assert.Equal(["first", "second"], bridge.SentMessages);
+        }
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_ResetImmediatelyClearsQueueAndAbortsActiveRun()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            await provider.SendMessageAsync("main", "first");
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-1"));
+            await provider.SendMessageAsync("main", "second");
+
+            var result = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Reset);
+
+            Assert.True(result.Succeeded);
+            Assert.Empty(GetQueuedMessages(snapshots[^1], "main"));
+            Assert.Empty((await provider.LoadAsync()).Timelines["main"].Entries);
+            await WaitForConditionAsync(() => bridge.AbortedRunIds.Contains("run-1"));
+            Assert.Equal(["first"], bridge.SentMessages);
+        }
+    }
+
+    [Fact]
+    public async Task EnqueueCompactCommandAsync_WhenIdleStartsWithoutChatSend()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+        var compactCompletion = new TaskCompletionSource<SessionCompactResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.CompactSessionBehavior = _ => compactCompletion.Task;
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+
+            Assert.True(await provider.EnqueueCompactCommandAsync("main"));
+
+            await WaitForConditionAsync(() => bridge.ModelCompactSessionKeys.Count == 1);
+            var queued = Assert.Single(GetQueuedMessages(snapshots[^1], "main"));
+            Assert.Equal("/compact", queued.Text);
+            Assert.Equal(ChatQueuedMessageSendState.Sending, queued.SendState);
+            Assert.Empty(bridge.SentMessages);
+
+            await provider.SendMessageAsync("main", "after compact");
+            Assert.Empty(bridge.SentMessages);
+
+            compactCompletion.SetResult(new SessionCompactResult
+            {
+                Ok = true,
+                Key = "main",
+                Compacted = true
+            });
+            await WaitForConditionAsync(() => bridge.SentMessages.Count == 1);
+            Assert.Equal(["after compact"], bridge.SentMessages);
+        }
+    }
+
+    [Fact]
+    public async Task EnqueueCompactCommandAsync_WaitsBehindEarlierMessagesWithoutChatSend()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-2", Status = "started" });
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-3", Status = "started" });
+        var compactCompletion = new TaskCompletionSource<SessionCompactResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.CompactSessionBehavior = _ => compactCompletion.Task;
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            snapshots.Clear();
+
+            await provider.SendMessageAsync("main", "first");
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-1"));
+            await provider.SendMessageAsync("main", "second");
+            Assert.True(await provider.EnqueueCompactCommandAsync("main"));
+            await provider.SendMessageAsync("main", "third");
+
+            Assert.Empty(bridge.ModelCompactSessionKeys);
+            Assert.Collection(
+                GetQueuedMessages(snapshots[^1], "main"),
+                queued => Assert.Equal("second", queued.Text),
+                queued => Assert.Equal("/compact", queued.Text),
+                queued => Assert.Equal("third", queued.Text));
+
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "assistant",
+                Text = "first response",
+                State = "final"
+            });
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"end"}""", runId: "run-1"));
+
+            await WaitForConditionAsync(() => bridge.SentMessages.Count == 2);
+            Assert.Empty(bridge.ModelCompactSessionKeys);
+
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-2"));
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "assistant",
+                Text = "second response",
+                State = "final"
+            });
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"end"}""", runId: "run-2"));
+
+            await WaitForConditionAsync(() => bridge.ModelCompactSessionKeys.Count == 1);
+            Assert.Equal(["first", "second"], bridge.SentMessages);
+            Assert.Collection(
+                GetQueuedMessages(snapshots[^1], "main"),
+                queued =>
+                {
+                    Assert.Equal("/compact", queued.Text);
+                    Assert.Equal(ChatQueuedMessageSendState.Sending, queued.SendState);
+                },
+                queued => Assert.Equal("third", queued.Text));
+
+            compactCompletion.SetResult(new SessionCompactResult
+            {
+                Ok = true,
+                Key = "main",
+                Compacted = true
+            });
+
+            await WaitForConditionAsync(() => bridge.SentMessages.Count == 3);
+            await WaitForConditionAsync(() => GetQueuedMessages(snapshots[^1], "main").Count == 0);
+            Assert.Equal(["first", "second", "third"], bridge.SentMessages);
+            Assert.Equal(["main"], bridge.ModelCompactSessionKeys);
+            Assert.DoesNotContain(
+                snapshots[^1].Timelines["main"].Entries,
+                entry => entry.Kind == ChatTimelineItemKind.User && entry.Text == "/compact");
+        }
+    }
+
+    [Fact]
+    public async Task CancelQueuedMessageAsync_RemovesPendingCompactCommand()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            await provider.SendMessageAsync("main", "first");
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-1"));
+            await provider.EnqueueCompactCommandAsync("main");
+            var compact = Assert.Single(GetQueuedMessages(snapshots[^1], "main"));
+
+            Assert.True(await provider.CancelQueuedMessageAsync("main", compact.Id));
+
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "assistant",
+                Text = "done",
+                State = "final"
+            });
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"end"}""", runId: "run-1"));
+            await Task.Delay(50);
+
+            Assert.Empty(bridge.ModelCompactSessionKeys);
+            Assert.Empty(GetQueuedMessages(snapshots[^1], "main"));
+        }
+    }
+
+    [Fact]
+    public async Task EnqueueCompactCommandAsync_FailureDoesNotBlockLaterMessage()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-1", Status = "started" });
+        bridge.SendResults.Enqueue(new ChatSendResult { RunId = "run-2", Status = "started" });
+        bridge.CompactSessionResult = new SessionCompactResult
+        {
+            Ok = false,
+            Key = "main",
+            Error = "compaction unavailable"
+        };
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            await provider.SendMessageAsync("main", "first");
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"start"}""", runId: "run-1"));
+            await provider.EnqueueCompactCommandAsync("main");
+            await provider.SendMessageAsync("main", "second");
+
+            bridge.RaiseChat(new ChatMessageInfo
+            {
+                SessionKey = "main",
+                Role = "assistant",
+                Text = "first response",
+                State = "final"
+            });
+            bridge.RaiseAgent(MakeAgentEvent("lifecycle", """{"phase":"end"}""", runId: "run-1"));
+
+            await WaitForConditionAsync(() => bridge.SentMessages.Count == 2);
+            Assert.Equal(["first", "second"], bridge.SentMessages);
+            Assert.Contains(
+                GetQueuedMessages(snapshots[^1], "main"),
+                queued =>
+                    queued.Text == "/compact" &&
+                    queued.SendState == ChatQueuedMessageSendState.Failed &&
+                    queued.ErrorText == "compaction unavailable");
+        }
+    }
+
+    [Fact]
+    public async Task LifecycleCommandProvider_ResetSupersedesInflightQueuedCompact()
+    {
+        var (bridge, provider, snapshots, _) = CreateProvider([MainSession()]);
+        var compactCompletion = new TaskCompletionSource<SessionCompactResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.CompactSessionBehavior = _ => compactCompletion.Task;
+
+        await using (provider)
+        {
+            await provider.LoadAsync();
+            bridge.RaiseStatus(ConnectionStatus.Connected);
+            bridge.RequestedHistoryKeys.Clear();
+            await provider.EnqueueCompactCommandAsync("main");
+            await WaitForConditionAsync(() => bridge.ModelCompactSessionKeys.Count == 1);
+
+            var reset = await provider.ExecuteLifecycleCommandAsync(
+                "main",
+                ChatLifecycleCommandKind.Reset);
+
+            Assert.True(reset.Succeeded);
+            Assert.Empty(GetQueuedMessages(snapshots[^1], "main"));
+            compactCompletion.SetResult(new SessionCompactResult
+            {
+                Ok = true,
+                Key = "main",
+                Compacted = true
+            });
+            await Task.Delay(50);
+
+            Assert.Empty(bridge.RequestedHistoryKeys);
+            Assert.Empty(GetQueuedMessages(snapshots[^1], "main"));
         }
     }
 
