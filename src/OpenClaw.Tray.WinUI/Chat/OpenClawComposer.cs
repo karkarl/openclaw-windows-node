@@ -1446,12 +1446,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             b.MinWidth = 40; b.MinHeight = 32; b.Height = 32;
             b.CornerRadius = controlCornerRadius;
             b.IsEnabled = isConnected;
-            void ApplySendBg() => b.Background = hasText
+            Theme.EnsureThemeCallback(b, () => b.Background = hasText
                 ? Theme.ResolveBrush("AccentFillColorDefaultBrush", b.ActualTheme)
-                : new SolidColorBrush(Colors.Transparent);
-            ApplySendBg();
-            b.Loaded += (_, _) => ApplySendBg();
-            b.ActualThemeChanged += (_, _) => ApplySendBg();
+                : new SolidColorBrush(Colors.Transparent));
         })
         .Resources(r =>
         {
@@ -1499,11 +1496,8 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                 b.Padding = new Thickness(0);
                 b.MinWidth = 40; b.MinHeight = 32; b.Height = 32;
                 b.CornerRadius = controlCornerRadius;
-                void ApplyStopBg() => b.Background = Theme.ResolveBrush("TextFillColorPrimaryBrush", b.ActualTheme);
-                ApplyStopBg();
-                b.Loaded += (_, _) => ApplyStopBg();
-                b.ActualThemeChanged += (_, _) => ApplyStopBg();
             })
+            .BackgroundResource("TextFillColorPrimaryBrush")
             .Resources(r =>
             {
                 r.Set("ButtonBackgroundPointerOver", Ref("TextFillColorSecondaryBrush"));
@@ -1559,14 +1553,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             VStack(8, composerInput, voiceIndicator, bottomToolbar)
         ).Set(b =>
         {
-            // Resolve the input-card fill and border from the built-in WinUI theme
-            // tokens for the element's ActualTheme (not Application.Resources, which
-            // snapshots the default theme and leaves the card light-gray in dark
-            // mode). Re-apply on Loaded and ActualThemeChanged so it flips live on a
-            // runtime light/dark switch.
             b.CornerRadius = composerCornerRadius;
             b.Padding = new Thickness(8);
-            void ApplySurface()
+            Theme.EnsureThemeCallback(b, () =>
             {
                 b.Background = Theme.ResolveBrush("ControlFillColorDefaultBrush", b.ActualTheme);
                 if (recording)
@@ -1579,10 +1568,7 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
                     b.BorderBrush = Theme.ResolveBrush("ControlStrokeColorDefaultBrush", b.ActualTheme);
                     b.BorderThickness = new Thickness(1);
                 }
-            }
-            ApplySurface();
-            b.Loaded += (_, _) => ApplySurface();
-            b.ActualThemeChanged += (_, _) => ApplySurface();
+            });
         });
 
         // Queued messages sit above the surface (outside the input card).
@@ -1599,18 +1585,9 @@ public sealed class OpenClawComposer : Component<OpenClawComposerProps>
             Border(composerCore).Padding(16, 12, 16, 12)
              .Set(b =>
              {
-                 // No hard divider between the timeline and the composer. The
-                 // timeline fades into this dock via a gradient scrim rendered
-                 // by OpenClawChatRoot. Give the dock the built-in base surface
-                 // brush resolved from the element's ActualTheme (not
-                 // Application.Resources, which snapshots the default theme) so it
-                 // flips live on a runtime light/dark switch.
                  b.BorderThickness = new Thickness(0);
-                 void ApplyDock() => b.Background = Theme.ResolveBrush("SolidBackgroundFillColorBaseBrush", b.ActualTheme);
-                 ApplyDock();
-                 b.Loaded += (_, _) => ApplyDock();
-                 b.ActualThemeChanged += (_, _) => ApplyDock();
              })
+             .BackgroundResource("SolidBackgroundFillColorBaseBrush")
         );
     }
 

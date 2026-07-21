@@ -668,10 +668,7 @@ public sealed class OpenClawChatRoot : Component
                 f.Height = 28;
                 f.VerticalAlignment = VerticalAlignment.Bottom;
                 f.IsHitTestVisible = false;
-                void ApplyFade() => f.Background = BuildComposerFadeBrush(f.ActualTheme);
-                ApplyFade();
-                f.Loaded += (_, _) => ApplyFade();
-                f.ActualThemeChanged += (_, _) => ApplyFade();
+                Theme.EnsureThemeCallback(f, () => f.Background = BuildComposerFadeBrush(f.ActualTheme));
             });
 
         return Grid([GridSize.Star()], [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
@@ -881,19 +878,10 @@ public sealed class OpenClawChatRoot : Component
                     b.Padding = new Thickness(12, 10, 12, 10);
                     b.CornerRadius = new CornerRadius(8);
                     b.IsEnabled = !suggestionsDisabled;
-
-                    // Subtle style: drop the default button stroke and elevation
-                    // "depth", keeping only a light, low-opacity fill at rest.
-                    // Resolve the subtle fill against the button's own ActualTheme
-                    // (re-applying on a runtime light/dark switch) so the rest fill
-                    // follows the theme instead of snapshotting the app default.
                     b.BorderThickness = new Thickness(0);
                     b.BorderBrush = null;
-                    void ApplyRestFill() => b.Background = Theme.ResolveBrush("SubtleFillColorSecondaryBrush", b.ActualTheme);
-                    ApplyRestFill();
-                    b.Loaded += (_, _) => ApplyRestFill();
-                    b.ActualThemeChanged += (_, _) => ApplyRestFill();
-                });
+                })
+                .BackgroundResource("SubtleFillColorSecondaryBrush");
 
         return Border(
             VStack(12,

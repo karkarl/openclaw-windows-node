@@ -2971,15 +2971,8 @@ public class OpenClawChatTimeline : Component<OpenClawChatTimelineProps>
             })
             ).Set(rootBorder =>
              {
-                 // Keep timestamp / helper-caption text resolved against the
-                 // built-in TextFillColorSecondary token for the element's
-                 // ActualTheme so it stays legible after a runtime light/dark
-                 // switch (Application.Resources snapshots the default theme and
-                 // would leave these dark-on-dark).
-                 void ApplyStamp() => chatStampFg.Color = Theme.ResolveColor("TextFillColorSecondary", rootBorder.ActualTheme);
-                 ApplyStamp();
-                 rootBorder.Loaded += (_, _) => ApplyStamp();
-                 rootBorder.ActualThemeChanged += (_, _) => ApplyStamp();
+                 Theme.EnsureThemeCallback(rootBorder, () =>
+                     chatStampFg.Color = Theme.ResolveColor("TextFillColorSecondary", rootBorder.ActualTheme));
              }).Background(chatPageBg).Grid(row: 0, column: 0)
         );
     }

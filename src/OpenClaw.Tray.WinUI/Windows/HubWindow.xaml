@@ -15,7 +15,6 @@
     <Grid x:Name="RootGrid" PreviewKeyDown="OnRootPreviewKeyDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="48"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -364,7 +363,7 @@
 
         <!-- Main Content -->
         <Grid x:Name="NavContentHost"
-              Grid.Row="2"
+              Grid.Row="1"
               SizeChanged="OnNavContentHostSizeChanged">
             <Grid.Clip>
                 <RectangleGeometry x:Name="NavContentClip"/>
@@ -506,7 +505,7 @@
              area instead of pushing the title bar / content down. The wrapper grid
              pins it to the right ~2/5 of the content width so it never reaches into
              the navigation pane. Multi-line messages grow the banner taller. -->
-        <Grid Grid.Row="2" VerticalAlignment="Top">
+        <Grid Grid.Row="1" VerticalAlignment="Top">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="2*"/>

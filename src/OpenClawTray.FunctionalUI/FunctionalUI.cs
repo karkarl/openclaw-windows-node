@@ -210,6 +210,44 @@ public static class Theme
     /// </summary>
     public static Color ResolveColor(string resourceKey, ElementTheme theme) =>
         ThemeResources.ResolveColor(resourceKey, theme);
+
+    /// <summary>
+    /// Registers a one-time <c>ActualThemeChanged</c> + <c>Loaded</c> subscription
+    /// on <paramref name="control"/> and stores <paramref name="applyNow"/> as the
+    /// latest callback. On each subsequent call for the same control, the stored
+    /// callback is replaced (so it captures the latest per-render state) without
+    /// adding additional event subscriptions. The callback is invoked immediately
+    /// and again whenever the element's theme changes.
+    /// </summary>
+    /// <remarks>
+    /// Use this for imperative theme-aware assignments that cannot be expressed as
+    /// a <see cref="ThemeRef"/>-backed modifier (e.g. custom gradients or shared
+    /// brush mutations). For simple resource-key backgrounds/borders, prefer the
+    /// built-in modifier path (<c>.Background(Ref(...))</c>) instead.
+    /// </remarks>
+    public static void EnsureThemeCallback(FrameworkElement control, Action applyNow)
+    {
+        applyNow();
+        if (ThemeCallbackTable.TryGetValue(control, out var box))
+        {
+            box.Value = applyNow;
+            return;
+        }
+        box = new StrongBox<Action>(applyNow);
+        ThemeCallbackTable.AddOrUpdate(control, box);
+        control.ActualThemeChanged += static (s, _) =>
+        {
+            if (s is FrameworkElement fe && ThemeCallbackTable.TryGetValue(fe, out var b))
+                b.Value?.Invoke();
+        };
+        control.Loaded += static (s, _) =>
+        {
+            if (s is FrameworkElement fe && ThemeCallbackTable.TryGetValue(fe, out var b))
+                b.Value?.Invoke();
+        };
+    }
+
+    internal static readonly ConditionalWeakTable<FrameworkElement, StrongBox<Action>> ThemeCallbackTable = new();
 }
 
 public sealed record ResourceOverrides(IReadOnlyDictionary<string, object> Values);
@@ -2292,6 +2330,9 @@ internal sealed class UiRenderer(Action requestRender)
                 if (m.ForegroundResourceKey is { } controlFgResource) c.Foreground = ThemeResources.ResolveBrush(controlFgResource, control.ActualTheme);
                 else if (m.Foreground is { } controlFg) c.Foreground = controlFg;
                 else c.ClearValue(Control.ForegroundProperty);
+                if (m.BackgroundResourceKey is { } controlBgResource) c.Background = ThemeResources.ResolveBrush(controlBgResource, control.ActualTheme);
+                else if (m.Background is { } controlBg) c.Background = controlBg;
+                // else: leave Control.Background as-is (default chrome or .Set() override)
                 if (m.BorderBrushResourceKey is { } controlBorderResource) c.BorderBrush = ThemeResources.ResolveBrush(controlBorderResource, control.ActualTheme);
                 else if (m.BorderBrush is { } controlBorder) c.BorderBrush = controlBorder;
                 else c.ClearValue(Control.BorderBrushProperty);
@@ -2413,6 +2454,7 @@ internal sealed class UiRenderer(Action requestRender)
                 break;
             case Control c:
                 if (m.ForegroundResourceKey is { } cf) c.Foreground = ThemeResources.ResolveBrush(cf, theme);
+                if (m.BackgroundResourceKey is { } cbg) c.Background = ThemeResources.ResolveBrush(cbg, theme);
                 if (m.BorderBrushResourceKey is { } cb) c.BorderBrush = ThemeResources.ResolveBrush(cb, theme);
                 break;
             case Border b:
