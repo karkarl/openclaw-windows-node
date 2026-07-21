@@ -9,7 +9,7 @@
   "meta": {
     "version": 1,
     "updatedBy": "copilot",
-    "note": "OpenClaw Windows — the 'Sandbox' page under 'This Computer', ported from SandboxPage.xaml into a click-through prototype. The master toggle gates the detail sections; the security-level presets and the 'What gets contained' expander are live; 'Add folder' opens a modal. Static rest states stand in for combo flyouts and slider drag."
+    "note": "Two screens: `sandbox` is the shipping-faithful port; `sandbox-riskbar` is an experiment adding a floating, acrylic ContainmentRiskBar (Microsoft-Store-style: it floats over the page and pins to the top as you scroll, with content visible/blurred beneath). Its risk meter slides Locked down ↔ Recommended ↔ Unprotected as the security level changes — sandbox off → Unprotected, and presets Locked Down / Recommended / Unprotected drive the knob. Keep `sandbox` as the revert point. OpenClaw Windows — the 'Sandbox' page under 'This Computer', ported from SandboxPage.xaml into a click-through prototype. The master toggle gates the detail sections; the security-level presets and the 'What gets contained' expander are live; 'Add folder' opens a modal. Static rest states stand in for combo flyouts and slider drag."
   },
 
   // Master sandbox on/off, the selected security preset, and the internet toggle.
@@ -427,10 +427,1124 @@
           }
         }
       ]
+    },
+    {
+      "id": "sandbox-riskbar",
+      "name": "Sandbox · Risk bar (experiment)",
+      "device": "winui",
+      "fit": "screen",
+      "root": {
+        "id": "sandbox-root-x",
+        "layout": "stack",
+        "direction": "vertical",
+        "background": "paper",
+        "children": [
+          {
+            "id": "app-titlebar-x",
+            "layout": "row",
+            "justify": "space-between",
+            "align": "center",
+            "padding": "3",
+            "background": "surface",
+            "children": [
+              {
+                "id": "titlebar-left-x",
+                "layout": "row",
+                "gap": "3",
+                "align": "center",
+                "children": [
+                  {
+                    "id": "tb-nav-toggle-x",
+                    "text": "☰",
+                    "style": "body",
+                    "color": "muted"
+                  },
+                  {
+                    "id": "tb-icon-x",
+                    "text": "🦞",
+                    "style": "heading"
+                  },
+                  {
+                    "id": "tb-title-x",
+                    "text": "OpenClaw Windows Companion",
+                    "style": "small",
+                    "color": "muted"
+                  }
+                ]
+              },
+              {
+                "id": "titlebar-right-x",
+                "layout": "row",
+                "gap": "3",
+                "align": "center",
+                "children": [
+                  {
+                    "id": "tb-search-x",
+                    "component": "SearchField"
+                  },
+                  {
+                    "id": "tb-status-x",
+                    "component": "StatusPill"
+                  },
+                  {
+                    "id": "tb-caption-reserve-x",
+                    "layout": "stack",
+                    "width": 140
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "app-body-x",
+            "layout": "stack",
+            "direction": "horizontal",
+            "grow": true,
+            "children": [
+              {
+                "id": "nav-pane-x",
+                "layout": "stack",
+                "direction": "vertical",
+                "gap": "1",
+                "padding": "3",
+                "background": "surface",
+                "children": [
+                  {
+                    "id": "nav-scroll-x",
+                    "layout": "stack",
+                    "direction": "vertical",
+                    "grow": true,
+                    "scroll": true,
+                    "gap": "1",
+                    "children": [
+                      {
+                        "id": "nav-chat-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "💬",
+                          "label": "Chat"
+                        }
+                      },
+                      {
+                        "id": "nav-div-1-x",
+                        "component": "Divider"
+                      },
+                      {
+                        "id": "nav-hd-gateway-x",
+                        "component": "NavHeader",
+                        "props": {
+                          "label": "Gateway"
+                        }
+                      },
+                      {
+                        "id": "nav-connection-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🔌",
+                          "label": "Connection"
+                        }
+                      },
+                      {
+                        "id": "nav-sessions-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🗂️",
+                          "label": "Sessions"
+                        }
+                      },
+                      {
+                        "id": "nav-skills-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "✨",
+                          "label": "Skills"
+                        }
+                      },
+                      {
+                        "id": "nav-channels-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "📣",
+                          "label": "Channels"
+                        }
+                      },
+                      {
+                        "id": "nav-instances-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🖥️",
+                          "label": "Instances"
+                        }
+                      },
+                      {
+                        "id": "nav-cron-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "⏰",
+                          "label": "Cron"
+                        }
+                      },
+                      {
+                        "id": "nav-advanced-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "⚙️",
+                          "label": "Advanced"
+                        }
+                      },
+                      {
+                        "id": "nav-div-2-x",
+                        "component": "Divider"
+                      },
+                      {
+                        "id": "nav-hd-computer-x",
+                        "component": "NavHeader",
+                        "props": {
+                          "label": "This Computer"
+                        }
+                      },
+                      {
+                        "id": "nav-voice-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🎙️",
+                          "label": "Voice & Audio"
+                        }
+                      },
+                      {
+                        "id": "nav-permissions-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🔑",
+                          "label": "Permissions"
+                        }
+                      },
+                      {
+                        "id": "nav-sandbox-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🧪",
+                          "label": "Sandbox",
+                          "bg": "var(--color-subtlePressed)",
+                          "bar": "var(--color-accent)",
+                          "weight": "600"
+                        }
+                      },
+                      {
+                        "id": "nav-settings-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🔧",
+                          "label": "Settings"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nav-footer-x",
+                    "layout": "stack",
+                    "direction": "vertical",
+                    "gap": "1",
+                    "children": [
+                      {
+                        "id": "nav-div-3-x",
+                        "component": "Divider"
+                      },
+                      {
+                        "id": "nav-notifications-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🔔",
+                          "label": "Notifications"
+                        }
+                      },
+                      {
+                        "id": "nav-debug-x",
+                        "component": "NavItem",
+                        "props": {
+                          "icon": "🐞",
+                          "label": "Debug"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "content-col-x",
+                "layout": "stack",
+                "direction": "vertical",
+                "grow": true,
+                "children": [
+                  {
+                    "id": "sandbox-content-x",
+                    "layout": "stack",
+                    "direction": "vertical",
+                    "grow": true,
+                    "scroll": true,
+                    "gap": "5",
+                    "padding": "6",
+                    "background": "paper",
+                    "children": [
+                      {
+                        "id": "riskbar-off",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "off"
+                        },
+                        "props": {
+                          "status": "Node sandbox is off",
+                          "caption": "Nothing the agent runs is contained.",
+                          "level": "Unprotected",
+                          "active": "u",
+                          "fill": "100%",
+                          "tone": "critical"
+                        }
+                      },
+                      {
+                        "id": "riskbar-locked",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "on",
+                          "preset": "locked"
+                        },
+                        "props": {
+                          "status": "Node sandbox is on",
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Locked down",
+                          "active": "l",
+                          "fill": "8%",
+                          "tone": "warning"
+                        }
+                      },
+                      {
+                        "id": "riskbar-balanced",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "on",
+                          "preset": "balanced"
+                        },
+                        "props": {
+                          "status": "Node sandbox is on",
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Recommended",
+                          "active": "r",
+                          "fill": "50%",
+                          "tone": "positive"
+                        }
+                      },
+                      {
+                        "id": "riskbar-permissive",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "on",
+                          "preset": "permissive"
+                        },
+                        "props": {
+                          "status": "Node sandbox is on",
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Unprotected",
+                          "active": "u",
+                          "fill": "92%",
+                          "tone": "critical"
+                        }
+                      },
+                      {
+                        "id": "sandbox-status-x",
+                        "layout": "row",
+                        "justify": "space-between",
+                        "align": "center",
+                        "children": [
+                          {
+                            "id": "sandbox-status-left-x",
+                            "layout": "row",
+                            "gap": "4",
+                            "align": "center",
+                            "children": [
+                              {
+                                "id": "sandbox-shield-x",
+                                "text": "🛡",
+                                "style": "title"
+                              },
+                              {
+                                "id": "sandbox-heading-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "1",
+                                "children": [
+                                  {
+                                    "id": "sandbox-title-x",
+                                    "text": "Node sandbox is on",
+                                    "style": "title"
+                                  },
+                                  {
+                                    "id": "sandbox-sub-x",
+                                    "text": "Programs the agent runs on this PC are contained.",
+                                    "style": "small",
+                                    "color": "muted"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "id": "sandbox-toggle-on-x",
+                            "component": "Toggle",
+                            "visibleWhen": {
+                              "sandbox": "on"
+                            },
+                            "on": {
+                              "tap": {
+                                "setState": {
+                                  "sandbox": "off"
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "id": "sandbox-toggle-off-x",
+                            "component": "Toggle",
+                            "props": {
+                              "trackBg": "transparent",
+                              "trackBorder": "var(--color-muted)",
+                              "knobBg": "var(--color-muted)",
+                              "knobJustify": "flex-start"
+                            },
+                            "visibleWhen": {
+                              "sandbox": "off"
+                            },
+                            "on": {
+                              "tap": {
+                                "setState": {
+                                  "sandbox": "on"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "scope-wrap-x",
+                        "layout": "stack",
+                        "direction": "vertical",
+                        "gap": "3",
+                        "padding": "4",
+                        "background": "surface",
+                        "radius": "md",
+                        "children": [
+                          {
+                            "id": "scope-head-x",
+                            "layout": "row",
+                            "justify": "space-between",
+                            "align": "center",
+                            "on": {
+                              "tap": {
+                                "toggle": "scopeOpen"
+                              }
+                            },
+                            "children": [
+                              {
+                                "id": "scope-head-left-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "1",
+                                "children": [
+                                  {
+                                    "id": "scope-head-title-x",
+                                    "text": "What gets contained",
+                                    "style": "body"
+                                  },
+                                  {
+                                    "id": "scope-head-sub-x",
+                                    "text": "See which commands this page covers — and which need different controls.",
+                                    "style": "caption",
+                                    "color": "muted"
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "scope-chevron-x",
+                                "text": "⌄",
+                                "style": "heading",
+                                "color": "muted"
+                              }
+                            ]
+                          },
+                          {
+                            "id": "scope-body-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "gap": "3",
+                            "visibleWhen": {
+                              "scopeOpen": true
+                            },
+                            "children": [
+                              {
+                                "id": "scope-row-ok-x",
+                                "layout": "row",
+                                "gap": "3",
+                                "align": "flex-start",
+                                "children": [
+                                  {
+                                    "id": "scope-ok-icon-x",
+                                    "text": "✓",
+                                    "style": "body",
+                                    "color": "positive"
+                                  },
+                                  {
+                                    "id": "scope-ok-text-x",
+                                    "text": "Commands the agent runs through the Windows node (system.run) are contained by the settings below.",
+                                    "style": "small"
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "scope-row-warn-x",
+                                "layout": "row",
+                                "gap": "3",
+                                "align": "flex-start",
+                                "children": [
+                                  {
+                                    "id": "scope-warn-icon-x",
+                                    "text": "⚠",
+                                    "style": "body",
+                                    "color": "warning"
+                                  },
+                                  {
+                                    "id": "scope-warn-text-x",
+                                    "text": "Commands the agent runs directly on the gateway aren't. If the gateway is on this PC they may still reach your Windows files, clipboard, and network — check your gateway's configuration.",
+                                    "style": "small",
+                                    "color": "muted"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": "preset-wrap-x",
+                        "layout": "stack",
+                        "direction": "vertical",
+                        "gap": "2",
+                        "padding": "5",
+                        "background": "surface",
+                        "radius": "md",
+                        "border": "line",
+                        "children": [
+                          {
+                            "id": "sec-header-x",
+                            "layout": "row",
+                            "justify": "space-between",
+                            "align": "center",
+                            "children": [
+                              {
+                                "id": "preset-title-x",
+                                "text": "Security level",
+                                "style": "heading"
+                              },
+                              {
+                                "id": "sec-read-locked-x",
+                                "text": "Locked down",
+                                "style": "body",
+                                "color": "positive",
+                                "visibleWhen": {
+                                  "preset": "locked"
+                                }
+                              },
+                              {
+                                "id": "sec-read-balanced-x",
+                                "text": "Recommended",
+                                "style": "body",
+                                "color": "positive",
+                                "visibleWhen": {
+                                  "preset": "balanced"
+                                }
+                              },
+                              {
+                                "id": "sec-read-permissive-x",
+                                "text": "Unprotected",
+                                "style": "body",
+                                "color": "critical",
+                                "visibleWhen": {
+                                  "preset": "permissive"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "id": "preset-sub-x",
+                            "text": "One slider sets every control below. Custom folders stay as you set them.",
+                            "style": "small",
+                            "color": "muted"
+                          },
+                          {
+                            "id": "sec-track-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "children": [
+                              {
+                                "id": "sec-slider-locked-x",
+                                "component": "LevelTicks",
+                                "grow": true,
+                                "props": {
+                                  "active": "l"
+                                },
+                                "visibleWhen": {
+                                  "preset": "locked"
+                                }
+                              },
+                              {
+                                "id": "sec-slider-balanced-x",
+                                "component": "LevelTicks",
+                                "grow": true,
+                                "props": {
+                                  "active": "r"
+                                },
+                                "visibleWhen": {
+                                  "preset": "balanced"
+                                }
+                              },
+                              {
+                                "id": "sec-slider-permissive-x",
+                                "component": "LevelTicks",
+                                "grow": true,
+                                "props": {
+                                  "active": "u"
+                                },
+                                "visibleWhen": {
+                                  "preset": "permissive"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "id": "sec-zones-x",
+                            "layout": "grid",
+                            "columns": 3,
+                            "gap": "3",
+                            "children": [
+                              {
+                                "id": "sec-zone-permissive-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "1",
+                                "padding": "2",
+                                "radius": "sm",
+                                "align": "flex-start",
+                                "on": {
+                                  "tap": {
+                                    "setState": {
+                                      "preset": "permissive"
+                                    }
+                                  }
+                                },
+                                "children": [
+                                  {
+                                    "id": "sec-zonelbl-permissive-on-x",
+                                    "text": "Unprotected",
+                                    "style": "small",
+                                    "color": "accent",
+                                    "visibleWhen": {
+                                      "preset": "permissive"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonelbl-permissive-off-x",
+                                    "text": "Unprotected",
+                                    "style": "small",
+                                    "color": "ink",
+                                    "hiddenWhen": {
+                                      "preset": "permissive"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonedesc-permissive-x",
+                                    "text": "Internet on. Read+write on Documents, Downloads, Desktop. Clipboard read+write.",
+                                    "style": "caption",
+                                    "color": "muted"
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "sec-zone-balanced-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "1",
+                                "padding": "2",
+                                "radius": "sm",
+                                "align": "center",
+                                "on": {
+                                  "tap": {
+                                    "setState": {
+                                      "preset": "balanced"
+                                    }
+                                  }
+                                },
+                                "children": [
+                                  {
+                                    "id": "sec-zonelbl-balanced-on-x",
+                                    "text": "Recommended",
+                                    "style": "small",
+                                    "color": "accent",
+                                    "visibleWhen": {
+                                      "preset": "balanced"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonelbl-balanced-off-x",
+                                    "text": "Recommended",
+                                    "style": "small",
+                                    "color": "ink",
+                                    "hiddenWhen": {
+                                      "preset": "balanced"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonedesc-balanced-x",
+                                    "text": "Internet on. Read-only on Documents, Downloads, Desktop. Clipboard read.",
+                                    "style": "caption",
+                                    "color": "muted"
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "sec-zone-locked-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "1",
+                                "padding": "2",
+                                "radius": "sm",
+                                "align": "flex-end",
+                                "on": {
+                                  "tap": {
+                                    "setState": {
+                                      "preset": "locked"
+                                    }
+                                  }
+                                },
+                                "children": [
+                                  {
+                                    "id": "sec-zonelbl-locked-on-x",
+                                    "text": "Locked down",
+                                    "style": "small",
+                                    "color": "accent",
+                                    "visibleWhen": {
+                                      "preset": "locked"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonelbl-locked-off-x",
+                                    "text": "Locked down",
+                                    "style": "small",
+                                    "color": "ink",
+                                    "hiddenWhen": {
+                                      "preset": "locked"
+                                    }
+                                  },
+                                  {
+                                    "id": "sec-zonedesc-locked-x",
+                                    "text": "No internet, no clipboard, no standard user folders.",
+                                    "style": "caption",
+                                    "color": "muted"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": "sandbox-off-hint-x",
+                        "text": "Turn the sandbox on to configure containment.",
+                        "style": "body",
+                        "color": "muted",
+                        "visibleWhen": {
+                          "sandbox": "off"
+                        }
+                      },
+                      {
+                        "id": "sandbox-controls-x",
+                        "layout": "stack",
+                        "direction": "vertical",
+                        "gap": "5",
+                        "visibleWhen": {
+                          "sandbox": "on"
+                        },
+                        "children": [
+                          {
+                            "id": "files-wrap-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "gap": "3",
+                            "padding": "4",
+                            "background": "surface",
+                            "radius": "md",
+                            "children": [
+                              {
+                                "id": "files-title-x",
+                                "text": "📁 Files",
+                                "style": "body"
+                              },
+                              {
+                                "id": "files-desc-x",
+                                "text": "By default the agent only has a temporary workspace folder it can read and write. Grant access to user folders below. SSH keys, browser profiles, and OpenClaw's own settings are always blocked.",
+                                "style": "small",
+                                "color": "muted"
+                              },
+                              {
+                                "id": "files-grid-x",
+                                "layout": "grid",
+                                "columns": 2,
+                                "gap": "3",
+                                "align": "center",
+                                "children": [
+                                  {
+                                    "id": "files-docs-label-x",
+                                    "text": "Documents",
+                                    "style": "body"
+                                  },
+                                  {
+                                    "id": "files-docs-x",
+                                    "component": "Select",
+                                    "props": {
+                                      "value": "Read only"
+                                    }
+                                  },
+                                  {
+                                    "id": "files-dl-label-x",
+                                    "text": "Downloads",
+                                    "style": "body"
+                                  },
+                                  {
+                                    "id": "files-dl-x",
+                                    "component": "Select",
+                                    "props": {
+                                      "value": "Read only"
+                                    }
+                                  },
+                                  {
+                                    "id": "files-desk-label-x",
+                                    "text": "Desktop",
+                                    "style": "body"
+                                  },
+                                  {
+                                    "id": "files-desk-x",
+                                    "component": "Select",
+                                    "props": {
+                                      "value": "Blocked"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "files-path-note-x",
+                                "text": "Tool directories on your PATH are also granted read-only, so git, node, python, and dotnet stay usable. Drive roots are never granted.",
+                                "style": "caption",
+                                "color": "muted"
+                              },
+                              {
+                                "id": "custom-wrap-x",
+                                "layout": "stack",
+                                "direction": "vertical",
+                                "gap": "2",
+                                "padding": "3",
+                                "background": "paper",
+                                "radius": "sm",
+                                "children": [
+                                  {
+                                    "id": "custom-title-x",
+                                    "text": "Custom folders",
+                                    "style": "body"
+                                  },
+                                  {
+                                    "id": "custom-empty-x",
+                                    "text": "No custom folders added.",
+                                    "style": "small",
+                                    "color": "muted"
+                                  },
+                                  {
+                                    "id": "custom-add-x",
+                                    "component": "Button",
+                                    "props": {
+                                      "children": "Add folder",
+                                      "variant": "secondary"
+                                    },
+                                    "on": {
+                                      "tap": {
+                                        "openModal": "add-folder-x"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "id": "clip-wrap-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "gap": "3",
+                            "padding": "4",
+                            "background": "surface",
+                            "radius": "md",
+                            "children": [
+                              {
+                                "id": "clip-title-x",
+                                "text": "📋 Clipboard",
+                                "style": "body"
+                              },
+                              {
+                                "id": "clip-desc-x",
+                                "text": "Clipboard often contains passwords, tokens, and private text. Read access may leak this to the agent (and over the internet, if enabled).",
+                                "style": "small",
+                                "color": "muted"
+                              },
+                              {
+                                "id": "clip-none-x",
+                                "component": "RadioRow",
+                                "props": {
+                                  "label": "None (default)",
+                                  "ring": "var(--color-accent)",
+                                  "dot": "var(--color-accent)"
+                                }
+                              },
+                              {
+                                "id": "clip-read-x",
+                                "component": "RadioRow",
+                                "props": {
+                                  "label": "Read — agent can see what you copied"
+                                }
+                              },
+                              {
+                                "id": "clip-write-x",
+                                "component": "RadioRow",
+                                "props": {
+                                  "label": "Write — agent can replace your clipboard (cannot read it)"
+                                }
+                              },
+                              {
+                                "id": "clip-both-x",
+                                "component": "RadioRow",
+                                "props": {
+                                  "label": "Read & write"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "id": "net-wrap-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "gap": "3",
+                            "padding": "4",
+                            "background": "surface",
+                            "radius": "md",
+                            "children": [
+                              {
+                                "id": "net-title-x",
+                                "text": "📡 Network",
+                                "style": "body"
+                              },
+                              {
+                                "id": "net-row-x",
+                                "layout": "row",
+                                "justify": "space-between",
+                                "align": "center",
+                                "children": [
+                                  {
+                                    "id": "net-left-x",
+                                    "layout": "stack",
+                                    "direction": "vertical",
+                                    "gap": "1",
+                                    "children": [
+                                      {
+                                        "id": "net-label-x",
+                                        "text": "Allow internet",
+                                        "style": "body"
+                                      },
+                                      {
+                                        "id": "net-cap-on-x",
+                                        "text": "On — agent can connect to public internet endpoints.",
+                                        "style": "small",
+                                        "color": "muted",
+                                        "visibleWhen": {
+                                          "net": "on"
+                                        }
+                                      },
+                                      {
+                                        "id": "net-cap-off-x",
+                                        "text": "Off — agent cannot reach the internet.",
+                                        "style": "small",
+                                        "color": "muted",
+                                        "visibleWhen": {
+                                          "net": "off"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "id": "net-toggle-on-x",
+                                    "component": "Toggle",
+                                    "visibleWhen": {
+                                      "net": "on"
+                                    },
+                                    "on": {
+                                      "tap": {
+                                        "setState": {
+                                          "net": "off"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "id": "net-toggle-off-x",
+                                    "component": "Toggle",
+                                    "props": {
+                                      "trackBg": "transparent",
+                                      "trackBorder": "var(--color-muted)",
+                                      "knobBg": "var(--color-muted)",
+                                      "knobJustify": "flex-start"
+                                    },
+                                    "visibleWhen": {
+                                      "net": "off"
+                                    },
+                                    "on": {
+                                      "tap": {
+                                        "setState": {
+                                          "net": "on"
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "net-note-x",
+                                "text": "If file or clipboard read access is enabled, the agent may send that data over the internet.",
+                                "style": "caption",
+                                "color": "muted"
+                              }
+                            ]
+                          },
+                          {
+                            "id": "lim-wrap-x",
+                            "layout": "stack",
+                            "direction": "vertical",
+                            "gap": "3",
+                            "padding": "4",
+                            "background": "surface",
+                            "radius": "md",
+                            "children": [
+                              {
+                                "id": "lim-title-x",
+                                "text": "⏱ Limits",
+                                "style": "body"
+                              },
+                              {
+                                "id": "lim-slider-x",
+                                "component": "Slider",
+                                "props": {
+                                  "label": "Command timeout",
+                                  "value": "30 sec",
+                                  "fill": "9%"
+                                }
+                              },
+                              {
+                                "id": "lim-out-label-x",
+                                "text": "Maximum captured output (truncates beyond this; does not limit disk, memory, or CPU):",
+                                "style": "small",
+                                "color": "muted"
+                              },
+                              {
+                                "id": "lim-out-x",
+                                "component": "Select",
+                                "props": {
+                                  "value": "4 MiB (default)"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "modals": [
+        {
+          "id": "add-folder-x",
+          "root": {
+            "id": "af-root-x",
+            "layout": "stack",
+            "direction": "vertical",
+            "gap": "3",
+            "padding": "5",
+            "background": "surface",
+            "radius": "lg",
+            "children": [
+              {
+                "id": "af-title-x",
+                "text": "Add a folder",
+                "style": "heading"
+              },
+              {
+                "id": "af-body-x",
+                "text": "Choose a folder to grant the agent access to. Custom grants are added on top of the row rules above; you pick Blocked, Read only, or Read & write per folder.",
+                "style": "body",
+                "color": "muted"
+              },
+              {
+                "id": "af-actions-x",
+                "layout": "row",
+                "gap": "2",
+                "justify": "flex-end",
+                "children": [
+                  {
+                    "id": "af-cancel-x",
+                    "component": "Button",
+                    "props": {
+                      "children": "Cancel",
+                      "variant": "secondary"
+                    },
+                    "on": {
+                      "tap": {
+                        "closeModal": true
+                      }
+                    }
+                  },
+                  {
+                    "id": "af-pick-x",
+                    "component": "Button",
+                    "props": {
+                      "children": "Choose folder…",
+                      "variant": "primary"
+                    },
+                    "on": {
+                      "tap": {
+                        "closeModal": true
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   ],
 
   "flows": [
-    { "id": "sandbox", "name": "Sandbox settings", "start": "sandbox" }
+    { "id": "sandbox", "name": "Sandbox settings", "start": "sandbox" },
+    { "id": "sandbox-riskbar", "name": "Sandbox · Risk bar (experiment)", "start": "sandbox-riskbar" }
   ]
 }

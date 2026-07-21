@@ -459,6 +459,1397 @@
           { "el": "span", "attrs": { "style": "font-size:9px;color:var(--color-muted)" }, "children": ["\u25be"] }
         ]
       }
+    },
+    {
+      "name": "LevelSlider",
+      "note": "The shared containment risk meter — a horizontal track with a tone-colored fill and knob plus three fixed stops (Locked down · Recommended · Unprotected). It's the primary Security-level control's visual and is reused inside the floating ContainmentRiskBar so the inline slider and the scrolled recap read identically. Presentational only: `fill` is the knob position as a percentage and `tone` is a state color token (positive / warning / critical) shared by fill and knob. Selection/interaction is wired on the scene-graph nodes that overlay or accompany it. Reuses the Slider visual language (neutral line track + tone fill + knob) so risk stays calm and native; risk reads by knob position and the labels, never by color alone.",
+      "props": { "fill": "50%", "tone": "positive" },
+      "root": {
+        "el": "div",
+        "attrs": { "style": "display:flex;flex-direction:column;gap:6px;width:100%" },
+        "children": [
+          {
+            "el": "div",
+            "attrs": { "style": "position:relative;height:6px;border-radius:var(--radius-pill);background:var(--color-line)" },
+            "children": [
+              { "el": "div", "attrs": { "style": "position:absolute;left:0;top:0;height:6px;width:{fill};border-radius:var(--radius-pill);background:var(--color-{tone})" } },
+              { "el": "div", "attrs": { "style": "position:absolute;top:-6px;left:{fill};width:18px;height:18px;border-radius:var(--radius-pill);background:var(--color-{tone});border:2px solid var(--color-surface);box-shadow:var(--shadow-sm);box-sizing:border-box;transform:translateX(-9px)" } }
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": { "style": "display:flex;justify-content:space-between;font-family:var(--font-body);font-size:12px;line-height:16px;color:var(--color-muted)" },
+            "children": [
+              { "el": "span", "children": ["Locked down"] },
+              { "el": "span", "children": ["Recommended"] },
+              { "el": "span", "children": ["Unprotected"] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LevelTicks",
+      "note": "A segmented containment risk meter drawn as one continuous, densely-spaced row of thin vertical ticks spanning the full width (Fluent volume/EQ language) that behaves like a slider. Left-to-right the ticks read Unprotected -> Recommended -> Locked down in equal thirds, so moving right increases protection. Presentational only: `active` selects the current third (u = Unprotected / r = Recommended / l = Locked down) via a data attribute the embedded <style> keys off; the selected third AND every third to its left fill in the selected level's tone (Unprotected = critical / red, Recommended = positive / green, Locked down = warning / yellow -- so the meter reads red = too open, green = the recommended sweet spot, yellow = locked so tight it may limit functionality), so the meter reads as a left-anchored fill whose length and tone report the level by position + tone + the label card beneath it, never by color alone. Each tick line carries a ::after grey overlay so hover/preview greys are a TRANSLUCENT WASH layered over the committed colour (e.g. with Locked down selected the whole bar is yellow, and previewing a lower level washes translucent grey over that tone rather than replacing it). Individual tick hover grows the line and raises its overlay. HOVER PREVIEW: the same globally-injected <style> lets the three preset cards BELOW the meter drive it -- hovering a card grows + washes the ticks up to where that setting would land, previewing the extent before commit; wired with a pinned :has() direct-child chain against the prototype DOM (the control container is the .proto-layout whose direct-child path is layout > component > .ltk, and the cards are its tappable grandchildren in Unprotected/Recommended/Locked order). Selection/tap is wired on those scene-graph cards, not inside this component; the same <style> also swaps the prototype's default accent-outline tap hover for just these cards to a calmer Fluent subtle fill (SubtleFillColorSecondary hover / Tertiary pressed). Preview-only technique: ships as a WinUI custom risk meter that observes the granular setting controls and reflects their combined position; bind the tick tones to the ThemeResources and the overlay/subtle fills to the SubtleFill/secondary-text resources rather than these preview hex values.",
+      "props": {
+        "active": "r"
+      },
+      "root": {
+        "el": "div",
+        "class": "ltk",
+        "attrs": {
+          "data-active": "{active}"
+        },
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".ltk{display:flex;width:100%}.ltk-band{display:flex;width:100%;height:40px;align-items:center;gap:0}.ltk-tick{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;height:100%}.ltk-line{position:relative;width:3px;height:16px;border-radius:var(--radius-pill);background:var(--color-line);transition:height 120ms ease-out}.ltk-line::after{content:\"\";position:absolute;inset:0;border-radius:inherit;background:var(--color-muted);opacity:0;transition:opacity 120ms ease-out;pointer-events:none}.ltk-tick:hover .ltk-line{height:26px}.ltk-tick:hover .ltk-line::after{opacity:.38}.ltk[data-active=\"u\"] .s-u .ltk-line{background:var(--color-critical)}.ltk[data-active=\"r\"] .s-u .ltk-line,.ltk[data-active=\"r\"] .s-r .ltk-line{background:var(--color-positive)}.ltk[data-active=\"l\"] .ltk-line{background:var(--color-warning)}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(1):hover) .ltk .s-u .ltk-line{height:24px}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(1):hover) .ltk .s-u .ltk-line::after{opacity:.4}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(2):hover) .ltk .s-u .ltk-line,.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(2):hover) .ltk .s-r .ltk-line{height:24px}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(2):hover) .ltk .s-u .ltk-line::after,.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(2):hover) .ltk .s-r .ltk-line::after{opacity:.4}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(3):hover) .ltk .ltk-line{height:24px}.proto-layout:has(> .proto-layout > .proto-component > .ltk):has(> .proto-layout > .proto-tappable:nth-child(3):hover) .ltk .ltk-line::after{opacity:.4}.proto-layout:has(> .proto-layout > .proto-component > .ltk) > .proto-layout > .proto-tappable{transition:background 120ms ease-out}.proto-layout:has(> .proto-layout > .proto-component > .ltk) > .proto-layout > .proto-tappable:hover{outline:none;background:var(--color-subtleHover)}.proto-layout:has(> .proto-layout > .proto-component > .ltk) > .proto-layout > .proto-tappable:active{background:var(--color-subtlePressed)}.proto-layout:has(> .proto-layout > .proto-component > .ltk){animation:ltk-cardhide linear both;animation-timeline:scroll(nearest);animation-range:140px 300px}@keyframes ltk-cardhide{to{opacity:0;visibility:hidden}}"
+            ]
+          },
+          {
+            "el": "div",
+            "class": "ltk-band",
+            "children": [
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltk-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltk-line"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LevelTicksStatic",
+      "note": "View-only companion to LevelTicks for the floating ContainmentRiskBar recap. Same densely-spaced full-width tick band and the same left-anchored committed fill (Unprotected = critical / red, Recommended = positive / green, Locked down = warning / yellow; selected third plus every third to its left fills in that tone), but PURELY presentational: namespaced under .ltkv (not .ltk) so none of LevelTicks' interactive rules -- tick hover growth, the ::after grey overlay, or the :has() preset-card hover-preview -- apply here. It reflects the current level via the `active` prop (u / r / l) and is never itself hoverable or tappable. Compact height for the recap bar. Ships as a read-only projection of the same WinUI risk meter; bind tick tones to the ThemeResources, not these preview values.",
+      "props": {
+        "active": "r"
+      },
+      "root": {
+        "el": "div",
+        "class": "ltkv",
+        "attrs": {
+          "data-active": "{active}"
+        },
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".ltkv{display:flex;width:100%}.ltkv-band{display:flex;width:100%;height:26px;align-items:center;gap:0}.ltkv-tick{flex:1;display:flex;align-items:center;justify-content:center;height:100%}.ltkv-line{width:3px;height:14px;border-radius:var(--radius-pill);background:var(--color-line)}.ltkv[data-active=\"u\"] .s-u .ltkv-line{background:var(--color-critical)}.ltkv[data-active=\"r\"] .s-u .ltkv-line,.ltkv[data-active=\"r\"] .s-r .ltkv-line{background:var(--color-positive)}.ltkv[data-active=\"l\"] .ltkv-line{background:var(--color-warning)}"
+            ]
+          },
+          {
+            "el": "div",
+            "class": "ltkv-band",
+            "children": [
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-u",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-r",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "class": "ltkv-tick s-l",
+                "children": [
+                  {
+                    "el": "div",
+                    "class": "ltkv-line"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ContainmentRiskBar",
+      "note": "A floating, acrylic recap bar for the Sandbox page — the containment analogue of the Microsoft Store's app bar that stays hidden while the primary control is on screen and slides in from the top once you scroll it away. It lays out as two rows: a header row with the page's status header (shield + \"Node sandbox is on\") and caption on the LEFT and the current level as a toned pill on the RIGHT, then a full-width VIEW-ONLY LevelTicksStatic tick meter as its own row BENEATH (the read-only twin of the page's interactive LevelTicks — same left-anchored tone fill spanning the whole bar, but never hoverable/tappable). Because the recap reflects state, its `active` (u/r/l) and `tone` should agree with the committed level: Unprotected = critical, Recommended = positive, Locked down = warning. The surface is translucent (color-mix over --color-surface) with a backdrop blur so page content is visible, softly blurred, beneath it — the preview stand-in for WinUI's AcrylicBackgroundFillColorDefaultBrush; a 1px --color-line stroke, --radius-lg corners, and --shadow-lg give it the floating-card elevation. `active` is the tick fill level; `tone` is the state color token shared by the pill (and matched by the meter's fill). Placement: drop one instance per state as the FIRST child of the scrolling page with visibleWhen — the embedded <style> makes the prototype's component host `position:sticky` (via :has) but collapses it to height:0 with a negative margin so it reserves NO layout space at rest (the page title sits at the very top); the bar overlays via overflow:visible and a scroll-driven animation (animation-timeline:scroll) keeps it hidden until the main control scrolls out of view, then reveals it pinned at top. Over the SAME scroll range, LevelTicks' <style> fades out the static security-level card, so the floating recap cleanly takes over from the in-page control instead of both showing at once. The same <style> also gives the prototype's scroll regions a Fluent overlay scrollbar (thin, buttonless, transparent until you hover the region, per WinUI ScrollBar) — preview polish only; the shipping app uses the OS scrollbar. Degrades to a translucent card near the top if :has / backdrop-filter / scroll-timeline are unsupported.",
+      "props": {
+        "status": "Node sandbox is on",
+        "caption": "Tracks your Files, Clipboard & Network choices",
+        "level": "Recommended",
+        "active": "r",
+        "fill": "50%",
+        "tone": "positive"
+      },
+      "root": {
+        "el": "div",
+        "class": "ccrb",
+        "attrs": {
+          "style": "display:flex;flex-direction:column;gap:var(--space-3);width:calc(100% + 24px);margin:0 calc(var(--space-3) * -1);box-sizing:border-box;padding:var(--space-3) var(--space-4) calc(var(--space-3) + 64px);border-radius:var(--radius-lg);border:1px solid var(--color-line);background:color-mix(in srgb, var(--color-surface) 92%, transparent);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);box-shadow:var(--shadow-lg)"
+        },
+        "children": [
+          {
+            "el": "style",
+            "children": [
+              ".proto-component:has(> .ccrb){position:sticky;top:var(--space-3);z-index:6;height:0;margin-bottom:calc(var(--space-5) * -1);overflow:visible;display:block;width:100%;align-self:stretch;max-width:none;opacity:0;transform:translateY(-6px);pointer-events:none;animation:ccrb-in linear both;animation-timeline:scroll(nearest);animation-range:140px 300px} .ccrb{width:calc(100% + 24px);margin:0 calc(var(--space-3) * -1)} @keyframes ccrb-in{to{opacity:1;transform:none;pointer-events:auto} } .proto-node.proto-layout::-webkit-scrollbar{width:12px;height:12px} .proto-node.proto-layout::-webkit-scrollbar-track{background:transparent} .proto-node.proto-layout::-webkit-scrollbar-button{display:none;width:0;height:0} .proto-node.proto-layout::-webkit-scrollbar-thumb{background:transparent;border:4px solid transparent;background-clip:padding-box;border-radius:999px;min-height:32px} .proto-node.proto-layout:hover::-webkit-scrollbar-thumb{background:var(--color-muted);background-clip:padding-box} .proto-node.proto-layout::-webkit-scrollbar-thumb:hover{background:var(--color-ink);background-clip:padding-box}"
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": {
+              "style": "display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);width:100%"
+            },
+            "children": [
+              {
+                "el": "div",
+                "attrs": {
+                  "style": "display:flex;align-items:center;gap:var(--space-3);min-width:0"
+                },
+                "children": [
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-size:20px;line-height:1;flex:0 0 auto"
+                    },
+                    "children": [
+                      "🛡"
+                    ]
+                  },
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-family:var(--font-body);font-size:14px;line-height:20px;font-weight:600;color:var(--color-ink);flex:0 0 auto"
+                    },
+                    "children": [
+                      "{status}"
+                    ]
+                  },
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-family:var(--font-body);font-size:12px;line-height:16px;color:var(--color-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0"
+                    },
+                    "children": [
+                      "{caption}"
+                    ]
+                  }
+                ]
+              },
+              {
+                "el": "div",
+                "attrs": {
+                  "style": "display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:1px 10px;border:1px solid var(--color-{tone});border-radius:var(--radius-pill);background:var(--color-surface);box-sizing:border-box"
+                },
+                "children": [
+                  {
+                    "el": "div",
+                    "attrs": {
+                      "style": "width:8px;height:8px;border-radius:var(--radius-pill);background:var(--color-{tone})"
+                    }
+                  },
+                  {
+                    "el": "span",
+                    "attrs": {
+                      "style": "font-family:var(--font-body);font-size:13px;line-height:18px;font-weight:600;color:var(--color-{tone})"
+                    },
+                    "children": [
+                      "{level}"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "el": "div",
+            "attrs": {
+              "style": "width:100%"
+            },
+            "children": [
+              {
+                "component": "LevelTicksStatic",
+                "props": {
+                  "active": "{active}"
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }
