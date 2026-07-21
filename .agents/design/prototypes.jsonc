@@ -18,6 +18,13 @@
 //   • Example (the `sandbox` screen below): app-titlebar is pinned; nav-scroll and
 //     sandbox-content each carry "scroll":true, so the nav list and page content scroll
 //     independently while the titlebar + shell chrome stay put.
+//
+// Windows titlebar (device "winui"): the frame draws a MODERN titlebar — app content
+// extends to the top edge and the system min/max/close buttons float over the top-right
+// corner (WinUI ExtendsContentIntoTitleBar). So a screen's own title-bar row sits on the
+// SAME level as those buttons. Leave room for them: put a fixed-width spacer on the right
+// of that row (see `tb-caption-reserve`, a {layout, width:140} node) so the search/status
+// controls don't slide under the caption buttons.
 {
   "meta": {
     "version": 1,
