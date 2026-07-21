@@ -2914,6 +2914,9 @@ Gebruik een van deze opties:
   <data name="Chat_Compaction_FallbackDetail" xml:space="preserve">
     <value>Eerdere context is samengevat in een controlepunt.</value>
   </data>
+  <data name="Chat_PendingNewSessionTitle" xml:space="preserve">
+    <value>Nieuwe sessie</value>
+  </data>
   <data name="Chat_Status_Running" xml:space="preserve">
     <value>Bezig</value>
   </data>

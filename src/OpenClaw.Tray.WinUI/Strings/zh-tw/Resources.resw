@@ -2913,6 +2913,9 @@
   <data name="Chat_Compaction_FallbackDetail" xml:space="preserve">
     <value>較早的內容已摘要至檢查點。</value>
   </data>
+  <data name="Chat_PendingNewSessionTitle" xml:space="preserve">
+    <value>新工作階段</value>
+  </data>
   <data name="Chat_Status_Running" xml:space="preserve">
     <value>執行中</value>
   </data>

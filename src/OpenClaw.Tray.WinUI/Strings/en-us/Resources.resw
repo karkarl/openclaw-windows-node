@@ -2960,6 +2960,9 @@ Use one of these options:
   <data name="Chat_Compaction_FallbackDetail" xml:space="preserve">
     <value>Earlier context was summarized into a checkpoint.</value>
   </data>
+  <data name="Chat_PendingNewSessionTitle" xml:space="preserve">
+    <value>New session</value>
+  </data>
   <data name="Chat_Status_Running" xml:space="preserve">
     <value>Running</value>
   </data>

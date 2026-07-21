@@ -300,7 +300,7 @@ public sealed class OpenClawChatRoot : Component
                 Id = composeKey,
                 AgentId = snapshot.ComposeTarget.AgentId,
                 Title = _pendingSelectedThreadId is not null
-                    ? "New session"
+                    ? LocalizationHelper.GetString("Chat_PendingNewSessionTitle")
                     : lastState?.ThreadTitle ?? "OpenClaw Windows Tray",
                 Model = lastState?.Model,
                 ModelProvider = lastState?.ModelProvider,
@@ -314,11 +314,18 @@ public sealed class OpenClawChatRoot : Component
         // exists yet so the zero-state still shows; `composeOnlyThread` exists
         // so the composer can be wired up.
         var effectiveThread = selectedThread ?? composeOnlyThread;
+        var connectedRaw = snapshot.ConnectionStatus;
+        var hostConnected = connectedRaw is not null
+            && connectedRaw.StartsWith("Connected", StringComparison.OrdinalIgnoreCase);
 
         // Lazy-load history the first time a real (materialized) thread is
         // selected. Don't fire for the compose-only synthetic thread — it
-        // doesn't exist server-side yet, so chat.history would 404.
-        if (selectedThread is not null && _provider is OpenClawChatDataProvider native)
+        // doesn't exist server-side yet, so chat.history would 404. A
+        // disconnected render must not replace a request canceled by the
+        // connection-generation boundary.
+        if (hostConnected &&
+            selectedThread is not null &&
+            _provider is OpenClawChatDataProvider native)
         {
             var threadId = selectedThread.Id;
             RunFireAndForget(ct => native.LoadHistoryAsync(threadId, force: false, ct));
@@ -347,9 +354,6 @@ public sealed class OpenClawChatRoot : Component
             message.SendState is ChatQueuedMessageSendState.Queued or ChatQueuedMessageSendState.Sending);
 
         var entries = (IReadOnlyList<ChatTimelineItem>)timeline.Entries;
-        var connectedRaw = snapshot.ConnectionStatus;
-        var hostConnected = connectedRaw is not null
-            && connectedRaw.StartsWith("Connected", StringComparison.OrdinalIgnoreCase);
         var connState = (connectedRaw is not null && connectedRaw.StartsWith("Incompatible", StringComparison.OrdinalIgnoreCase))
             ? "incompatible-gateway"
             : hostConnected ? "connected"
