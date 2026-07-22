@@ -19,12 +19,13 @@
 //     sandbox-content each carry "scroll":true, so the nav list and page content scroll
 //     independently while the titlebar + shell chrome stay put.
 //
-// Windows titlebar (device "winui"): the frame draws a MODERN titlebar — app content
+// Windows titlebar (device "winui-modern"): the frame draws a MODERN titlebar — app content
 // extends to the top edge and the system min/max/close buttons float over the top-right
 // corner (WinUI ExtendsContentIntoTitleBar). So a screen's own title-bar row sits on the
 // SAME level as those buttons. Leave room for them: put a fixed-width spacer on the right
 // of that row (see `tb-caption-reserve`, a {layout, width:140} node) so the search/status
-// controls don't slide under the caption buttons.
+// controls don't slide under the caption buttons. (The plain "winui" device keeps the
+// classic caption strip; these screens opt in to the modern titlebar with "winui-modern".)
 {
   "meta": {
     "version": 1,
@@ -43,7 +44,7 @@
     {
       "id": "sandbox",
       "name": "Sandbox · This Computer",
-      "device": "winui",
+      "device": "winui-modern",
       "fit": "screen",
       "root": {
         "id": "sandbox-root",
@@ -451,7 +452,7 @@
     {
       "id": "sandbox-riskbar",
       "name": "Sandbox · Risk bar (experiment)",
-      "device": "winui",
+      "device": "winui-modern",
       "fit": "screen",
       "root": {
         "id": "sandbox-root-x",
