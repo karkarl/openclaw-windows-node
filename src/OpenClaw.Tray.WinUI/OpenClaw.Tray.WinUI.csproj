@@ -72,6 +72,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.12" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(MicrosoftWindowsAppSDKVersion)" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="$(MicrosoftWindowsSdkBuildToolsVersion)" />
     <PackageReference Include="OpenTelemetry" Version="1.16.0" />
@@ -81,7 +82,7 @@
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.3.260402-preview2" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.3.260402-preview2" />
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.0" />
-    <PackageReference Include="System.Drawing.Common" Version="10.0.7" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.9" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="Updatum" Version="1.3.4" />
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
@@ -98,6 +99,8 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <!-- Existing XAML surfaces are not Reactor render trees. Enable these rules as those surfaces migrate. -->
+    <NoWarn>$(NoWarn);REACTOR_A11Y_001;REACTOR_A11Y_002;REACTOR_DIALOG_001;REACTOR_THEME_004</NoWarn>
     <OpenClawRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</OpenClawRepoRoot>
     <OpenClawSetupDefaultConfig>$(OpenClawRepoRoot)src\OpenClaw.SetupEngine\default-config.json</OpenClawSetupDefaultConfig>
     <!-- RID-derived arch for tools/mxc/<arch>/wxc-exec.exe. Falls back to x64
