@@ -41,6 +41,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         var (speakingEntryId, setSpeakingEntryId) = UseState<string?>(null, threadSafe: true);
         var speechOperation = UseRef(0);
         var mounted = UseRef(true);
+        var annotatedScrollBarRef = UseRef(new ElementRef()).Current;
 
         UseEffect((Func<Action>)(() =>
         {
@@ -101,10 +102,32 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             SelectionMode = ItemsViewSelectionMode.None,
             IsItemInvokedEnabled = false,
         };
-        return itemsView
+        // AnnotatedScrollBar labels require absolute content offsets. ItemsView
+        // virtualizes variable-height chat rows without exposing those offsets.
+        // Keep landmark labels unset rather than estimating unrealized rows.
+        return Grid(
+            [GridSize.Star(), GridSize.Auto],
+            [GridSize.Star()],
+            AnnotatedScrollBar()
+                .Ref(annotatedScrollBarRef)
+                .Width(32)
+                .Grid(column: 1)
+                .AutomationName("Chat message navigation"),
+            itemsView
+                .Grid(column: 0)
+                .AutomationName("Chat messages")
+                .Set(nativeItemsView =>
+                {
+                    if (annotatedScrollBarRef.Current is AnnotatedScrollBar scrollBar
+                        && !ReferenceEquals(
+                            nativeItemsView.VerticalScrollController,
+                            scrollBar.ScrollController))
+                    {
+                        nativeItemsView.VerticalScrollController = scrollBar.ScrollController;
+                    }
+                }))
             .HAlign(HorizontalAlignment.Stretch)
-            .VAlign(VerticalAlignment.Stretch)
-            .AutomationName("Chat messages");
+            .VAlign(VerticalAlignment.Stretch);
     }
 
     public static string RowKey(OpenClawChatTimelineProps props, ChatTimelineItem entry) =>
