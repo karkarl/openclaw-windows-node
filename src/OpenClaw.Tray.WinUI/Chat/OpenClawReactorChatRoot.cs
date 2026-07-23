@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using OpenClaw.Chat;
 using OpenClaw.Shared;
 using OpenClawTray.Helpers;
@@ -12,9 +13,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.UI;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace OpenClawTray.Chat;
@@ -524,6 +525,180 @@ public sealed record ReactorChatComposerProps(
 public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
 {
     private static readonly string[] ThinkingLevels = ["off", "minimal", "low", "medium", "high"];
+    private static readonly ConditionalWeakTable<FrameworkElement, ThemeCallbackState> ThemeCallbacks = new();
+    private static readonly global::Windows.UI.ViewManagement.AccessibilitySettings? AccessibilitySettings =
+        CreateAccessibilitySettings();
+
+    private sealed class ThemeCallbackState(Action apply)
+    {
+        public Action Apply { get; set; } = apply;
+        public global::Windows.Foundation.TypedEventHandler<
+            global::Windows.UI.ViewManagement.AccessibilitySettings,
+            object>? HighContrastChanged { get; set; }
+        public bool HighContrastEventUnavailable { get; set; }
+    }
+
+    private static void ApplyTheme(FrameworkElement control, Action apply)
+    {
+        apply();
+        if (ThemeCallbacks.TryGetValue(control, out var state))
+        {
+            state.Apply = apply;
+            EnsureHighContrastCallback(control, state);
+            return;
+        }
+
+        state = new ThemeCallbackState(apply);
+        ThemeCallbacks.Add(control, state);
+        control.ActualThemeChanged += static (sender, _) =>
+        {
+            if (sender is FrameworkElement element
+                && ThemeCallbacks.TryGetValue(element, out var callback))
+                callback.Apply();
+        };
+        control.Loaded += static (sender, _) =>
+        {
+            if (sender is FrameworkElement element
+                && ThemeCallbacks.TryGetValue(element, out var callback))
+            {
+                callback.Apply();
+                EnsureHighContrastCallback(element, callback);
+            }
+        };
+        control.Unloaded += static (sender, _) =>
+        {
+            if (sender is FrameworkElement element
+                && ThemeCallbacks.TryGetValue(element, out var callback)
+                && callback.HighContrastChanged is { } handler
+                && AccessibilitySettings is { } accessibilitySettings)
+            {
+                try
+                {
+                    accessibilitySettings.HighContrastChanged -= handler;
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    // The optional WinRT event source can be unavailable while a view tears down.
+                }
+                callback.HighContrastChanged = null;
+            }
+        };
+        EnsureHighContrastCallback(control, state);
+    }
+
+    private static global::Windows.UI.ViewManagement.AccessibilitySettings? CreateAccessibilitySettings()
+    {
+        try
+        {
+            return new global::Windows.UI.ViewManagement.AccessibilitySettings();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EnsureHighContrastCallback(
+        FrameworkElement control,
+        ThemeCallbackState state)
+    {
+        if (AccessibilitySettings is null
+            || state.HighContrastChanged is not null
+            || state.HighContrastEventUnavailable)
+            return;
+
+        global::Windows.Foundation.TypedEventHandler<
+            global::Windows.UI.ViewManagement.AccessibilitySettings,
+            object> handler = (_, _) =>
+        {
+            control.DispatcherQueue?.TryEnqueue(() =>
+            {
+                if (ThemeCallbacks.TryGetValue(control, out var callback))
+                    callback.Apply();
+            });
+        };
+        try
+        {
+            AccessibilitySettings.HighContrastChanged += handler;
+            state.HighContrastChanged = handler;
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            state.HighContrastEventUnavailable = true;
+            OpenClawTray.Services.Logger.Warn(
+                $"[ReactorChatComposer] High Contrast change notifications are unavailable: {ex.Message}");
+        }
+    }
+
+    private static Brush ResolveThemeBrush(string resourceKey, ElementTheme theme)
+    {
+        if (FindThemedResource(resourceKey, theme) is Brush themed)
+            return themed;
+        if (Application.Current?.Resources.TryGetValue(resourceKey, out var value) == true
+            && value is Brush brush)
+            return brush;
+        return new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+    }
+
+    private static object? FindThemedResource(string resourceKey, ElementTheme theme)
+    {
+        if (Application.Current?.Resources is not { } root)
+            return null;
+
+        var themeNames = IsHighContrast()
+            ? new[] { "HighContrast" }
+            : theme switch
+            {
+                ElementTheme.Dark => ["Dark", "Default"],
+                ElementTheme.Light => ["Light"],
+                _ => Array.Empty<string>(),
+            };
+        return themeNames
+            .Select(themeName => SearchThemeDictionaries(root, resourceKey, themeName, 0))
+            .FirstOrDefault(value => value is not null);
+    }
+
+    private static bool IsHighContrast()
+    {
+        return AccessibilitySettings?.HighContrast ?? false;
+    }
+
+    private static object? SearchThemeDictionaries(
+        ResourceDictionary dictionary,
+        string resourceKey,
+        string themeName,
+        int depth)
+    {
+        if (depth > 6)
+            return null;
+
+        if (dictionary.ThemeDictionaries.TryGetValue(themeName, out var entry)
+            && entry is ResourceDictionary themed
+            && LookupResource(themed, resourceKey) is { } value)
+            return value;
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            if (SearchThemeDictionaries(merged, resourceKey, themeName, depth + 1) is { } found)
+                return found;
+        }
+
+        return null;
+    }
+
+    private static object? LookupResource(ResourceDictionary dictionary, string resourceKey)
+    {
+        if (dictionary.TryGetValue(resourceKey, out var value))
+            return value;
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            if (LookupResource(merged, resourceKey) is { } found)
+                return found;
+        }
+
+        return null;
+    }
 
     public override Element Render()
     {
@@ -630,6 +805,82 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         var actionLabel = props.TurnActive
             ? Localized("Chat_Composer_Tooltip_Stop", "Stop")
             : Localized("Chat_Composer_Tooltip_Send", "Send");
+        var controlCornerRadius = new CornerRadius(4);
+
+        void ApplySubtleButtonStyle(Button button)
+        {
+            var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            button.Background = transparent;
+            button.BorderBrush = transparent;
+            button.BorderThickness = new Thickness(0);
+            button.Resources["ButtonBackground"] = transparent;
+            button.Resources["ButtonBorderBrush"] = transparent;
+            button.Resources["ButtonBorderBrushPointerOver"] = transparent;
+            button.Resources["ButtonBorderBrushPressed"] = transparent;
+            ApplyTheme(button, () =>
+            {
+                button.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", button.ActualTheme);
+                button.Resources["ButtonBackgroundPointerOver"] =
+                    ResolveThemeBrush("SubtleFillColorSecondaryBrush", button.ActualTheme);
+                button.Resources["ButtonBackgroundPressed"] =
+                    ResolveThemeBrush("SubtleFillColorTertiaryBrush", button.ActualTheme);
+            });
+        }
+
+        Element IconButton(string glyph, string automationName, Action onClick, bool enabled = true)
+        {
+            return Button(
+                    TextBlock(glyph).Set(textBlock =>
+                    {
+                        textBlock.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
+                        textBlock.FontSize = 16;
+                    }),
+                    onClick)
+                .AutomationName(automationName)
+                .Set(button =>
+                {
+                    button.Width = 32;
+                    button.Height = 32;
+                    button.MinWidth = 32;
+                    button.MinHeight = 32;
+                    button.Padding = new Thickness(0);
+                    button.CornerRadius = controlCornerRadius;
+                    button.IsEnabled = enabled;
+                    ApplySubtleButtonStyle(button);
+                    ToolTipService.SetToolTip(button, automationName);
+                });
+        }
+
+        Element PickerButton(string label, string automationName, bool enabled, double maxLabelWidth)
+        {
+            return Button(
+                    HStack(
+                        4,
+                        TextBlock(label).Set(textBlock =>
+                        {
+                            textBlock.FontSize = 13;
+                            textBlock.MaxWidth = maxLabelWidth;
+                            textBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+                            textBlock.TextWrapping = TextWrapping.NoWrap;
+                        }),
+                        TextBlock("\uE70D").Set(textBlock =>
+                        {
+                            textBlock.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
+                            textBlock.FontSize = 10;
+                        })),
+                    () => { })
+                .AutomationName(automationName)
+                .Set(button =>
+                {
+                    button.Height = 32;
+                    button.MinHeight = 32;
+                    button.MinWidth = 0;
+                    button.Padding = new Thickness(8, 0, 8, 0);
+                    button.CornerRadius = controlCornerRadius;
+                    button.IsEnabled = enabled;
+                    ApplySubtleButtonStyle(button);
+                });
+        }
 
         var attachmentRows = props.PendingAttachments
             .Select(attachment =>
@@ -649,10 +900,10 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                 (Element)Border(Empty())
                     .Width(2)
                     .Height(2 + (audioLevel * (index % 3 == 1 ? 10 : 7)))
-                    .Background(new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                        Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)))
                     .CornerRadius(1)
-                    .VAlign(VerticalAlignment.Center))
+                    .VAlign(VerticalAlignment.Center)
+                    .Set(border => ApplyTheme(border, () => border.Background =
+                        ResolveThemeBrush("TextFillColorSecondaryBrush", border.ActualTheme))))
             .ToArray();
         Element voiceFeedback = !isRecording
             ? Empty()
@@ -662,13 +913,15 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                         Border(Empty())
                             .Width(6)
                             .Height(6)
-                            .Background(new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                                Color.FromArgb(0xFF, 0xD1, 0x34, 0x38)))
-                            .CornerRadius(3),
-                        TextBlock(voiceFeedbackText).FontSize(11),
+                            .CornerRadius(3)
+                            .Set(border => ApplyTheme(border, () => border.Background =
+                                ResolveThemeBrush("TextFillColorSecondaryBrush", border.ActualTheme))),
+                        TextBlock(voiceFeedbackText)
+                            .FontSize(11)
+                            .Set(textBlock => ApplyTheme(textBlock, () => textBlock.Foreground =
+                                ResolveThemeBrush("TextFillColorSecondaryBrush", textBlock.ActualTheme))),
                         HStack(1, waveformBars)))
                 .Padding(8, 4)
-                .CornerRadius(12)
                 .HAlign(HorizontalAlignment.Left);
         var queuedRows = props.QueuedMessages
             .Select((message, index) =>
@@ -717,139 +970,218 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             })
             .ToArray();
 
+        var input = TextBox(
+                text,
+                SetText,
+                PlaceholderFor(props.ConnectionState))
+            .AutomationId("ChatComposerInput")
+            .AutomationName(PlaceholderFor(props.ConnectionState))
+            .OnKeyDown((sender, args) =>
+            {
+                if (args.Key != global::Windows.System.VirtualKey.Enter)
+                    return;
+
+                args.Handled = true;
+                var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+                    global::Windows.System.VirtualKey.Shift);
+                if (shift.HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)
+                    && sender is Microsoft.UI.Xaml.Controls.TextBox textBox)
+                {
+                    var current = textBox.Text ?? string.Empty;
+                    var start = Math.Clamp(textBox.SelectionStart, 0, current.Length);
+                    var end = Math.Clamp(start + textBox.SelectionLength, start, current.Length);
+                    SetText(current[..start] + "\n" + current[end..]);
+                    textBox.SelectionStart = start + 1;
+                    textBox.SelectionLength = 0;
+                }
+                else
+                {
+                    Send();
+                }
+            })
+            .TextWrapping(TextWrapping.Wrap)
+            .Set(control =>
+            {
+                var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                control.MinHeight = 56;
+                control.MaxHeight = 200;
+                control.FontSize = 14;
+                control.Padding = new Thickness(8);
+                control.IsEnabled = props.ConnectionState == "connected";
+                control.AcceptsReturn = false;
+                control.BorderThickness = new Thickness(0);
+                control.BorderBrush = transparent;
+                control.Background = transparent;
+                control.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
+                control.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+                control.Resources["TextControlBackground"] = transparent;
+                control.Resources["TextControlBackgroundFocused"] = transparent;
+                control.Resources["TextControlBackgroundPointerOver"] = transparent;
+                control.Resources["TextControlBorderBrush"] = transparent;
+                control.Resources["TextControlBorderBrushFocused"] = transparent;
+                control.Resources["TextControlBorderBrushPointerOver"] = transparent;
+                if (!pasteHooked.Current)
+                {
+                    pasteHooked.Current = true;
+                    control.Paste += async (_, args) =>
+                    {
+                        try
+                        {
+                            var attachment = await TryReadImageFromClipboardAsync();
+                            if (attachment is null)
+                                return;
+
+                            args.Handled = true;
+                            props.OnAttachmentPasted(attachment);
+                        }
+                        catch (Exception ex)
+                        {
+                            OpenClawTray.Services.Logger.Debug(
+                                $"Reactor chat composer: clipboard image paste failed: {ex.Message}");
+                        }
+                    };
+                }
+            });
+
+        var sessionPicker = MenuFlyout(
+            PickerButton(
+                props.CurrentThread.Title,
+                $"{Localized("Chat_Composer_Accessibility_Session", "Session")}: {props.CurrentThread.Title}",
+                !props.MessageOptionsDisabled && props.AvailableChannels.Count > 1,
+                props.IsCompact ? 56 : 160),
+            props.AvailableChannels
+                .Select(thread => RadioMenuItem(
+                    thread.Title,
+                    "chat-sessions",
+                    string.Equals(thread.Id, props.CurrentThread.Id, StringComparison.Ordinal),
+                    () => props.OnChannelChanged(thread.Id)))
+                .ToArray());
+
+        var modelPickerLabel = modelIndex == 0
+            ? Localized("Chat_Composer_Reasoning_Default", "Default")
+            : selectableModels[modelIndex - 1].DisplayName;
+        var modelPicker = MenuFlyout(
+            PickerButton(
+                modelPickerLabel,
+                $"{Localized("Chat_Composer_Accessibility_Model", "Model")}: {modelPickerLabel}",
+                !props.MessageOptionsDisabled,
+                props.IsCompact ? 68 : 180),
+            modelNames
+                .Select((modelName, index) => RadioMenuItem(
+                    modelName,
+                    "chat-models",
+                    index == modelIndex,
+                    () =>
+                    {
+                        if (index == 0)
+                            props.OnModelCleared();
+                        else if (index <= selectableModels.Length)
+                            props.OnModelChanged(selectableModels[index - 1].SelectionId);
+                    }))
+                .ToArray());
+
+        var reasoningPicker = MenuFlyout(
+            PickerButton(
+                ThinkingLevels[thinkingIndex],
+                $"{Localized("Chat_Composer_Accessibility_Reasoning", "Reasoning")}: {ThinkingLevels[thinkingIndex]}",
+                !props.MessageOptionsDisabled,
+                props.IsCompact ? 54 : 96),
+            ThinkingLevels
+                .Select((level, index) => RadioMenuItem(
+                    level,
+                    "chat-thinking-level",
+                    index == thinkingIndex,
+                    () => props.OnThinkingLevelChanged(level)))
+                .ToArray());
+
+        var attachButton = IconButton(
+            "\uE723",
+            Localized("Chat_Composer_Tooltip_Attach", "Attach"),
+            () => props.OnAttachClick?.Invoke(),
+            props.OnAttachClick is not null);
+        var voiceButton = IconButton(
+            isRecording
+                ? "\uE15B"
+                : "\uE720",
+            isRecording
+                ? Localized("Chat_Composer_Tooltip_Stop", "Stop")
+                : Localized("Chat_Composer_Tooltip_Voice", "Voice"),
+            () =>
+            {
+                if (isRecording)
+                {
+                    voiceStopOperation.Current = voiceOperation.Current;
+                    voiceCancellation.Current?.Cancel();
+                }
+                else
+                    StartVoiceRecording();
+            },
+            props.OnVoiceRequest is not null);
+        var speakerButton = IconButton(
+            props.IsSpeakerMuted ? "\uE74F" : "\uE767",
+            props.IsSpeakerMuted ? "Unmute" : "Mute",
+            props.OnSpeakerToggle);
+        Element settingsButton = props.IsCompact || props.OnSettingsClick is null
+            ? Empty()
+            : IconButton(
+                "\uE713",
+                Localized("Chat_Composer_Tooltip_Settings", "Settings"),
+                props.OnSettingsClick);
+
+        Element primaryAction = props.TurnActive
+            ? IconButton("\uE71A", actionLabel, props.OnStop)
+            : Button(
+                    TextBlock("\uE724").Set(textBlock =>
+                    {
+                        textBlock.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
+                        textBlock.FontSize = 16;
+                    }),
+                    Send)
+                .AccentButton()
+                .AutomationName(actionLabel)
+                .Set(button =>
+                {
+                    button.Width = 32;
+                    button.Height = 32;
+                    button.MinWidth = 32;
+                    button.MinHeight = 32;
+                    button.Padding = new Thickness(0);
+                    button.CornerRadius = controlCornerRadius;
+                    button.IsEnabled = props.ConnectionState == "connected"
+                        && !isSending
+                        && (!string.IsNullOrWhiteSpace(text) || props.PendingAttachments.Count > 0);
+                    ToolTipService.SetToolTip(button, actionLabel);
+                });
+
+        var leftToolbar = HStack(8, attachButton, sessionPicker, modelPicker, reasoningPicker)
+            .HAlign(HorizontalAlignment.Left)
+            .VAlign(VerticalAlignment.Center);
+        var rightToolbar = HStack(8, voiceButton, speakerButton, settingsButton, primaryAction)
+            .HAlign(HorizontalAlignment.Right)
+            .VAlign(VerticalAlignment.Center);
+        var toolbar = Grid(
+            [GridSize.Star(), GridSize.Auto],
+            [GridSize.Auto],
+            leftToolbar.Grid(row: 0, column: 0),
+            rightToolbar.Grid(row: 0, column: 1));
+
         return Border(
             VStack(
                 8,
                 voiceFeedback,
                 VStack(4, attachmentRows),
                 VStack(4, queuedRows),
-                TextBox(
-                    text,
-                    SetText,
-                    PlaceholderFor(props.ConnectionState))
-                    .AutomationId("ChatComposerInput")
-                    .AutomationName(PlaceholderFor(props.ConnectionState))
-                    .OnKeyDown((sender, args) =>
-                    {
-                        if (args.Key != global::Windows.System.VirtualKey.Enter)
-                            return;
-
-                        args.Handled = true;
-                        var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
-                            global::Windows.System.VirtualKey.Shift);
-                        if (shift.HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)
-                            && sender is Microsoft.UI.Xaml.Controls.TextBox textBox)
-                        {
-                            var current = textBox.Text ?? string.Empty;
-                            var start = Math.Clamp(textBox.SelectionStart, 0, current.Length);
-                            var end = Math.Clamp(start + textBox.SelectionLength, start, current.Length);
-                            SetText(current[..start] + "\n" + current[end..]);
-                            textBox.SelectionStart = start + 1;
-                            textBox.SelectionLength = 0;
-                        }
-                        else
-                        {
-                            Send();
-                        }
-                    })
-                    .TextWrapping(TextWrapping.Wrap)
-                    .Set(control =>
-                    {
-                        control.MinHeight = props.IsCompact ? 48 : 64;
-                        control.MaxHeight = props.IsCompact ? 96 : 160;
-                        control.IsEnabled = props.ConnectionState == "connected";
-                        control.AcceptsReturn = false;
-                        if (!pasteHooked.Current)
-                        {
-                            pasteHooked.Current = true;
-                            control.Paste += async (_, args) =>
-                            {
-                                try
-                                {
-                                    var attachment = await TryReadImageFromClipboardAsync();
-                                    if (attachment is null)
-                                        return;
-
-                                    args.Handled = true;
-                                    props.OnAttachmentPasted(attachment);
-                                }
-                                catch (Exception ex)
-                                {
-                                    OpenClawTray.Services.Logger.Debug(
-                                        $"Reactor chat composer: clipboard image paste failed: {ex.Message}");
-                                }
-                            };
-                        }
-                    }),
-                HStack(
-                    8,
-                    Button(Localized("Chat_Composer_Tooltip_Attach", "Attach"), props.OnAttachClick)
-                        .SubtleButton()
-                        .Set(button => button.IsEnabled = props.OnAttachClick is not null),
-                    MenuFlyout(
-                        Button(props.CurrentThread.Title)
-                            .SubtleButton()
-                            .AutomationName(
-                                $"{Localized("Chat_Composer_Accessibility_Session", "Session")}: {props.CurrentThread.Title}")
-                            .Set(button => button.IsEnabled =
-                                !props.MessageOptionsDisabled && props.AvailableChannels.Count > 1),
-                        props.AvailableChannels
-                            .Select(thread => RadioMenuItem(
-                                thread.Title,
-                                "chat-sessions",
-                                string.Equals(thread.Id, props.CurrentThread.Id, StringComparison.Ordinal),
-                                () => props.OnChannelChanged(thread.Id)))
-                            .ToArray()),
-                    ComboBox(modelNames, modelIndex, index =>
-                    {
-                        if (index == 0)
-                            props.OnModelCleared();
-                        else if (index > 0 && index <= selectableModels.Length)
-                            props.OnModelChanged(selectableModels[index - 1].SelectionId);
-                    })
-                    .Header(Localized("Chat_Composer_Accessibility_Model", "Model"))
-                    .Set(control => control.IsEnabled = !props.MessageOptionsDisabled),
-                    ComboBox(ThinkingLevels, thinkingIndex, index =>
-                    {
-                        if (index >= 0 && index < ThinkingLevels.Length)
-                            props.OnThinkingLevelChanged(ThinkingLevels[index]);
-                    })
-                    .Header(Localized("Chat_Composer_Accessibility_Reasoning", "Reasoning"))
-                    .Set(control => control.IsEnabled = !props.MessageOptionsDisabled),
-                    Button(isRecording
-                            ? Localized("Chat_Composer_Tooltip_Stop", "Stop")
-                            : Localized("Chat_Composer_Tooltip_Voice", "Voice"),
-                        () =>
-                        {
-                            if (isRecording)
-                            {
-                                voiceStopOperation.Current = voiceOperation.Current;
-                                voiceCancellation.Current?.Cancel();
-                            }
-                            else
-                                StartVoiceRecording();
-                        })
-                        .SubtleButton()
-                        .Set(button => button.IsEnabled = props.OnVoiceRequest is not null),
-                    Button(
-                        props.IsSpeakerMuted ? "Speaker off" : "Speaker on",
-                        props.OnSpeakerToggle)
-                        .SubtleButton()
-                        .AutomationName(props.IsSpeakerMuted ? "Unmute" : "Mute"),
-                    Button(actionLabel, props.TurnActive ? props.OnStop : Send)
-                        .AccentButton()
-                        .Set(button => button.IsEnabled = props.TurnActive || (
-                            props.ConnectionState == "connected"
-                            && !isSending
-                            && (!string.IsNullOrWhiteSpace(text) || props.PendingAttachments.Count > 0)))))
-            .Padding(12))
-            .Background(new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                Color.FromArgb(0x18, 0x80, 0x80, 0x80)))
-            .BorderBrush(new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                Color.FromArgb(0x40, 0x80, 0x80, 0x80)))
+                input,
+                toolbar)
+            .Padding(8))
             .BorderThickness(1)
             .CornerRadius(8)
             .Margin(12)
+            .Set(border => ApplyTheme(border, () =>
+            {
+                border.Background = ResolveThemeBrush("ControlFillColorDefaultBrush", border.ActualTheme);
+                border.BorderBrush = ResolveThemeBrush("ControlStrokeColorDefaultBrush", border.ActualTheme);
+            }))
             .HAlign(HorizontalAlignment.Stretch);
     }
 
