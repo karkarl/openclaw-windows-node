@@ -724,15 +724,51 @@
                         }
                       },
                       {
-                        "id": "riskbar-live",
-                        "component": "ContainmentRiskBarLive",
+                        "id": "riskbar-live-permissive",
+                        "component": "ContainmentRiskBar",
                         "width": "100%",
                         "visibleWhen": {
-                          "sandbox": "on"
+                          "sandbox": "on",
+                          "preset": "permissive"
                         },
                         "props": {
                           "status": "Node sandbox is on",
-                          "caption": "Tracks your Files, Clipboard & Network choices"
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Unprotected",
+                          "active": "u",
+                          "tone": "critical"
+                        }
+                      },
+                      {
+                        "id": "riskbar-live-balanced",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "on",
+                          "preset": "balanced"
+                        },
+                        "props": {
+                          "status": "Node sandbox is on",
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Recommended",
+                          "active": "r",
+                          "tone": "positive"
+                        }
+                      },
+                      {
+                        "id": "riskbar-live-locked",
+                        "component": "ContainmentRiskBar",
+                        "width": "100%",
+                        "visibleWhen": {
+                          "sandbox": "on",
+                          "preset": "locked"
+                        },
+                        "props": {
+                          "status": "Node sandbox is on",
+                          "caption": "Tracks your Files, Clipboard & Network choices",
+                          "level": "Locked down",
+                          "active": "l",
+                          "tone": "warning"
                         }
                       },
                       {
@@ -930,8 +966,37 @@
                                 "style": "heading"
                               },
                               {
-                                "id": "sec-read-x",
-                                "component": "LevelReadout"
+                                "id": "sec-read-permissive-x",
+                                "component": "Badge",
+                                "visibleWhen": {
+                                  "preset": "permissive"
+                                },
+                                "props": {
+                                  "children": "Unprotected",
+                                  "tone": "critical"
+                                }
+                              },
+                              {
+                                "id": "sec-read-balanced-x",
+                                "component": "Badge",
+                                "visibleWhen": {
+                                  "preset": "balanced"
+                                },
+                                "props": {
+                                  "children": "Recommended",
+                                  "tone": "positive"
+                                }
+                              },
+                              {
+                                "id": "sec-read-locked-x",
+                                "component": "Badge",
+                                "visibleWhen": {
+                                  "preset": "locked"
+                                },
+                                "props": {
+                                  "children": "Locked down",
+                                  "tone": "warning"
+                                }
                               }
                             ]
                           },
@@ -947,11 +1012,36 @@
                             "direction": "vertical",
                             "children": [
                               {
-                                "id": "sec-meter-x",
-                                "component": "ContainmentMeter",
+                                "id": "sec-meter-permissive-x",
+                                "component": "LevelTicksStatic",
                                 "grow": true,
+                                "visibleWhen": {
+                                  "preset": "permissive"
+                                },
                                 "props": {
-                                  "h": "40px"
+                                  "active": "u"
+                                }
+                              },
+                              {
+                                "id": "sec-meter-balanced-x",
+                                "component": "LevelTicksStatic",
+                                "grow": true,
+                                "visibleWhen": {
+                                  "preset": "balanced"
+                                },
+                                "props": {
+                                  "active": "r"
+                                }
+                              },
+                              {
+                                "id": "sec-meter-locked-x",
+                                "component": "LevelTicksStatic",
+                                "grow": true,
+                                "visibleWhen": {
+                                  "preset": "locked"
+                                },
+                                "props": {
+                                  "active": "l"
                                 }
                               }
                             ]
