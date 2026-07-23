@@ -138,7 +138,7 @@ public sealed partial class SettingsPage : Page
         {
             if (_loading || CurrentApp.Settings == null) return;
             Persist(s => s.ShowChatToolCalls = ShowToolCallsToggle.IsOn);
-            OpenClawTray.Chat.OpenClawChatRoot.SetToolCallsVisible(ShowToolCallsToggle.IsOn);
+            OpenClawTray.Chat.OpenClawReactorChatRoot.SetToolCallsVisible(ShowToolCallsToggle.IsOn);
         };
     }
 

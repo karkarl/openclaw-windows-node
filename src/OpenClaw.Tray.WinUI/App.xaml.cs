@@ -588,7 +588,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         _settings = new SettingsManager();
         // Seed chat tool-call visibility from persisted settings so the timeline
         // honors the Settings > Chat "Show tool calls and usage" toggle on launch.
-        OpenClawTray.Chat.OpenClawChatRoot.SetToolCallsVisible(_settings.ShowChatToolCalls);
+        OpenClawTray.Chat.OpenClawReactorChatRoot.SetToolCallsVisible(_settings.ShowChatToolCalls);
         _previousSettingsSnapshot = _settings.ToSettingsData().ToConnectionSnapshot();
         _openTelemetryConnection = new OpenTelemetryEndpointConnection();
         await _openTelemetryConnection.ApplyAsync(
@@ -599,7 +599,7 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             new AppLogger(),
             _dispatcherQueue is null
                 ? null
-                : OpenClawTray.Chat.FunctionalChatHostExtensions.AsPost(_dispatcherQueue));
+                : OpenClawTray.Chat.ReactorChatHostExtensions.AsPost(_dispatcherQueue));
         DiagnosticsJsonlService.Configure(DataPath);
 
         // Central observable model + gateway event handler.
