@@ -1,6 +1,7 @@
 using Microsoft.UI;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Reactor.Markdown;
 using Microsoft.UI.Text;
@@ -13,6 +14,7 @@ using OpenClaw.Chat;
 using OpenClawTray.Helpers;
 using Windows.UI;
 using static Microsoft.UI.Reactor.Factories;
+using WinUIAnnotatedScrollBar = Microsoft.UI.Xaml.Controls.AnnotatedScrollBar;
 
 namespace OpenClawTray.Chat;
 
@@ -27,7 +29,13 @@ public sealed record ReactorChatTimelineProps(
     ReactorChatTimelineMode Mode,
     OpenClawChatTimelineProps Timeline,
     Action<string>? OnSuggestionPicked = null,
-    bool SuggestionsDisabled = false);
+    bool SuggestionsDisabled = false,
+    ReactorChatIdentity? AssistantIdentity = null);
+
+public sealed record ReactorChatIdentity(
+    string? DisplayName = null,
+    string? Avatar = null,
+    string? Emoji = null);
 
 /// <summary>
 /// Reactor-owned production timeline. Reactor's keyed ItemsView handles row
@@ -39,9 +47,10 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
     {
         var props = Props;
         var (speakingEntryId, setSpeakingEntryId) = UseState<string?>(null, threadSafe: true);
+        var (hoveredEntryId, setHoveredEntryId) = UseState<string?>(null, threadSafe: true);
         var speechOperation = UseRef(0);
         var mounted = UseRef(true);
-        var annotatedScrollBarRef = UseRef(new ElementRef()).Current;
+        var annotatedScrollBarRef = this.UseElementRef<WinUIAnnotatedScrollBar>();
 
         UseEffect((Func<Action>)(() =>
         {
@@ -88,44 +97,72 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         }
 
         var rows = BuildRows(props);
+        void SetEntryHovered(string entryId, bool isHovered)
+        {
+            if (isHovered)
+            {
+                if (!string.Equals(hoveredEntryId, entryId, StringComparison.Ordinal))
+                    setHoveredEntryId(entryId);
+            }
+            else if (string.Equals(hoveredEntryId, entryId, StringComparison.Ordinal))
+            {
+                setHoveredEntryId(null);
+            }
+        }
 
         var itemsView = ItemsView(
             rows,
             static row => row.Key,
-            (row, _) => ItemContainer(BuildRow(row, speakingEntryId, ToggleSpeechAsync))
-                .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+            (row, _) => ItemContainer(
+                    Border(BuildRow(
+                            row,
+                            speakingEntryId,
+                            hoveredEntryId,
+                            ToggleSpeechAsync,
+                            SetEntryHovered))
+                        .Background(Theme.Ref("SubtleFillColorTransparentBrush"))
+                        .OnPointerEntered((_, _) => SetEntryHovered(row.Entry?.Id ?? row.Key, true))
+                        .OnPointerExited((_, _) => SetEntryHovered(row.Entry?.Id ?? row.Key, false))
+                        .HAlign(HorizontalAlignment.Stretch))
+                .Resources(resources => resources
+                    .Set("ItemContainerPointerOverBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerPointerOverBorderBrush", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerPressedBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerPressedBorderBrush", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectionVisualBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectedBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectionVisualPointerOverBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectionVisualPressedBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectedPointerOverBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectedPressedBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                    .Set("ItemContainerSelectedInnerBorderBrush", Theme.Ref("SubtleFillColorTransparentBrush")))
+                .Set(itemContainer =>
+                {
+                    itemContainer.IsSelected = false;
+                    itemContainer.IsTabStop = false;
+                    itemContainer.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                })
                 .HAlign(HorizontalAlignment.Stretch)
-                .IsTabStop(false)
                 .WithKey(row.Key)) with
         {
             LayoutKind = ItemsViewLayoutKind.StackLayout,
             SelectionMode = ItemsViewSelectionMode.None,
             IsItemInvokedEnabled = false,
         };
-        // AnnotatedScrollBar labels require absolute content offsets. ItemsView
-        // virtualizes variable-height chat rows without exposing those offsets.
-        // Keep landmark labels unset rather than estimating unrealized rows.
         return Grid(
             [GridSize.Star(), GridSize.Auto],
             [GridSize.Star()],
+            itemsView
+                .BindVerticalScrollController(annotatedScrollBarRef)
+                .Grid(column: 0)
+                .AutomationName("Chat messages")
+                .HAlign(HorizontalAlignment.Stretch)
+                .VAlign(VerticalAlignment.Stretch),
             AnnotatedScrollBar()
                 .Ref(annotatedScrollBarRef)
                 .Width(32)
                 .Grid(column: 1)
-                .AutomationName("Chat message navigation"),
-            itemsView
-                .Grid(column: 0)
-                .AutomationName("Chat messages")
-                .Set(nativeItemsView =>
-                {
-                    if (annotatedScrollBarRef.Current is AnnotatedScrollBar scrollBar
-                        && !ReferenceEquals(
-                            nativeItemsView.VerticalScrollController,
-                            scrollBar.ScrollController))
-                    {
-                        nativeItemsView.VerticalScrollController = scrollBar.ScrollController;
-                    }
-                }))
+                .AutomationName("Chat message navigation"))
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Stretch);
     }
@@ -149,6 +186,12 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             rows.Add(ReactorTimelineRow.LoadEarlier(props));
 
         var orderedEntries = OrderEntriesForPresentation(props.Timeline.Entries);
+        var assistantRunPositions = ChatTimelineAssistantRuns.Describe(orderedEntries);
+        var assistantRunsByEntryId = new Dictionary<string, ChatAssistantRunPosition>(
+            orderedEntries.Count,
+            StringComparer.Ordinal);
+        for (var index = 0; index < orderedEntries.Count; index++)
+            assistantRunsByEntryId[orderedEntries[index].Id] = assistantRunPositions[index];
         var latestAssistantEntryId = orderedEntries
             .LastOrDefault(static entry => entry.Kind == ChatTimelineItemKind.Assistant)
             ?.Id;
@@ -161,7 +204,8 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             rows.Add(ReactorTimelineRow.FromEntry(
                 props,
                 entry,
-                string.Equals(entry.Id, latestAssistantEntryId, StringComparison.Ordinal)));
+                string.Equals(entry.Id, latestAssistantEntryId, StringComparison.Ordinal),
+                assistantRunsByEntryId.TryGetValue(entry.Id, out var position) ? position : default));
         }
 
         if (props.Timeline.ShowThinkingIndicator)
@@ -238,13 +282,21 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
     private static Element BuildRow(
         ReactorTimelineRow row,
         string? speakingEntryId,
-        Func<ChatTimelineItem, Task> toggleSpeechAsync) => row.Kind switch
+        string? hoveredEntryId,
+        Func<ChatTimelineItem, Task> toggleSpeechAsync,
+        Action<string, bool> setEntryHovered) => row.Kind switch
     {
         ReactorTimelineRowKind.Loading => BuildLoading(),
         ReactorTimelineRowKind.Empty => BuildEmpty(row),
         ReactorTimelineRowKind.LoadEarlier => BuildLoadEarlier(row),
         ReactorTimelineRowKind.Thinking => BuildThinking(row),
-        _ when row.Entry is { } entry => BuildEntry(row, entry, speakingEntryId, toggleSpeechAsync),
+        _ when row.Entry is { } entry => BuildEntry(
+            row,
+            entry,
+            speakingEntryId,
+            hoveredEntryId,
+            toggleSpeechAsync,
+            setEntryHovered),
         _ => Empty(),
     };
 
@@ -334,14 +386,22 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         ReactorTimelineRow row,
         ChatTimelineItem entry,
         string? speakingEntryId,
-        Func<ChatTimelineItem, Task> toggleSpeechAsync) => entry.Kind switch
+        string? hoveredEntryId,
+        Func<ChatTimelineItem, Task> toggleSpeechAsync,
+        Action<string, bool> setEntryHovered) => entry.Kind switch
     {
-        ChatTimelineItemKind.User => BuildUser(row, entry),
+        ChatTimelineItemKind.User => BuildUser(
+            row,
+            entry,
+            string.Equals(hoveredEntryId, entry.Id, StringComparison.Ordinal),
+            setEntryHovered),
         ChatTimelineItemKind.Assistant => BuildAssistant(
             row,
             entry,
             string.Equals(speakingEntryId, entry.Id, StringComparison.Ordinal),
-            toggleSpeechAsync),
+            string.Equals(hoveredEntryId, entry.Id, StringComparison.Ordinal),
+            toggleSpeechAsync,
+            setEntryHovered),
         ChatTimelineItemKind.ToolCall => BuildTool(row, entry),
         ChatTimelineItemKind.Reasoning => BuildReasoning(entry),
         ChatTimelineItemKind.PermissionRequest => BuildPermission(row, entry),
@@ -349,7 +409,11 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         _ => BuildStatus(entry),
     };
 
-    private static Element BuildUser(ReactorTimelineRow row, ChatTimelineItem entry)
+    private static Element BuildUser(
+        ReactorTimelineRow row,
+        ChatTimelineItem entry,
+        bool isHovered,
+        Action<string, bool> setEntryHovered)
     {
         var (messageText, attachments) = ParseAttachments(entry.Text);
         var content = attachments.Select(BuildAttachment).ToList();
@@ -375,7 +439,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         return VStack(
                 bubble,
                 Footer(row, entry, HorizontalAlignment.Right),
-                CopyAction(entry.Text))
+                CopyAction(entry.Text, isHovered, setEntryHovered, entry.Id))
             .Margin(72, 4, 20, 4)
             .HAlign(HorizontalAlignment.Stretch)
             .AutomationName(entry.Text ?? string.Empty);
@@ -385,7 +449,9 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         ReactorTimelineRow row,
         ChatTimelineItem entry,
         bool isSpeaking,
-        Func<ChatTimelineItem, Task> toggleSpeechAsync)
+        bool isHovered,
+        Func<ChatTimelineItem, Task> toggleSpeechAsync,
+        Action<string, bool> setEntryHovered)
     {
         var message = BuildSafeMarkdown(entry.Text);
 
@@ -402,12 +468,55 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             .MaxWidth(720)
             .HAlign(HorizontalAlignment.Left);
 
-        return VStack(
-                bubble,
-                BuildAssistantFooter(row, entry, isSpeaking, toggleSpeechAsync))
-            .Margin(52, 4, 72, 4)
+        return Grid(
+                [GridSize.Auto, GridSize.Star()],
+                [GridSize.Auto],
+                BuildAssistantAvatarSlot(row)
+                    .Grid(column: 0)
+                    .VAlign(VerticalAlignment.Top),
+                VStack(
+                        4,
+                        bubble,
+                        BuildAssistantFooter(
+                            row,
+                            entry,
+                            isSpeaking,
+                            isHovered,
+                            toggleSpeechAsync,
+                            setEntryHovered,
+                            includeMetadata: row.IsAssistantRunEnd))
+                    .HAlign(HorizontalAlignment.Stretch)
+                    .Grid(column: 1))
+            .Margin(20, row.IsAssistantRunStart ? 6 : 1, 72, row.IsAssistantRunEnd ? 6 : 1)
             .HAlign(HorizontalAlignment.Stretch)
             .AutomationName(entry.Text ?? string.Empty);
+    }
+
+    private static Element BuildAssistantAvatarSlot(ReactorTimelineRow row)
+    {
+        if (!row.IsAssistantRunStart)
+            return Border(Empty())
+                .Size(36, 36)
+                .Margin(0, 0, 8, 0)
+                .VAlign(VerticalAlignment.Top);
+
+        var identity = row.Props.AssistantIdentity;
+        var glyph = !string.IsNullOrWhiteSpace(identity?.Avatar)
+            ? identity.Avatar
+            : identity?.Emoji;
+        Element content = !string.IsNullOrWhiteSpace(glyph)
+            ? Text(glyph, 16, FontWeights.SemiBold, "TextFillColorSecondaryBrush").Center()
+            : Image("ms-appx:///Assets/Square44x44Logo.targetsize-256_altform-unplated.png").Size(36, 36);
+
+        return Border(content)
+            .Size(36, 36)
+            .CornerRadius(18)
+            .Background(BrushFor("CardBackgroundFillColorDefaultBrush", Color.FromArgb(0x24, 0x80, 0x80, 0x80)))
+            .BorderBrush(BrushFor("ControlStrokeColorDefaultBrush", Color.FromArgb(0x40, 0x80, 0x80, 0x80)))
+            .BorderThickness(1)
+            .Margin(0, 0, 8, 0)
+            .VAlign(VerticalAlignment.Top)
+            .AutomationName(identity?.DisplayName ?? "Assistant");
     }
 
     private static Element BuildSafeMarkdown(string? text)
@@ -437,24 +546,29 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         ReactorTimelineRow row,
         ChatTimelineItem entry,
         bool isSpeaking,
-        Func<ChatTimelineItem, Task> toggleSpeechAsync)
+        bool isHovered,
+        Func<ChatTimelineItem, Task> toggleSpeechAsync,
+        Action<string, bool> setEntryHovered,
+        bool includeMetadata)
     {
-        var children = new List<Element>
-        {
-            Footer(row, entry, HorizontalAlignment.Left),
-            CopyAction(entry.Text),
-        };
+        var children = new List<Element>();
+        if (includeMetadata)
+            children.Add(Footer(row, entry, HorizontalAlignment.Left));
+
+        children.Add(CopyAction(entry.Text, isHovered, setEntryHovered, entry.Id));
 
         if (row.Props.Timeline.OnReadAloud is not null || row.Props.Timeline.OnStopSpeaking is not null)
         {
             var label = isSpeaking
                 ? LocalizedOrDefault("Chat_Assistant_Action_Stop", "Stop")
                 : LocalizedOrDefault("Chat_Assistant_Action_ReadAloud", "Read aloud");
-            children.Add(Button(label, () => _ = toggleSpeechAsync(entry))
-                .Padding(6, 2)
-                .MinWidth(0)
-                .AutomationName(label)
-                .ToolTip(label));
+            children.Add(CompactIconAction(
+                isSpeaking ? "\uE71A" : "\uE767",
+                label,
+                () => _ = toggleSpeechAsync(entry),
+                isHovered,
+                () => setEntryHovered(entry.Id, true),
+                () => setEntryHovered(entry.Id, false)));
         }
 
         return HStack(8, children.ToArray())
@@ -462,14 +576,58 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             .HAlign(HorizontalAlignment.Left);
     }
 
-    private static Element CopyAction(string? text)
+    private static Element CopyAction(
+        string? text,
+        bool isVisible,
+        Action<string, bool> setEntryHovered,
+        string entryId)
     {
         var label = LocalizedOrDefault("Chat_Assistant_Action_Copy", "Copy");
-        return Button(label, () => ClipboardHelper.CopyText(text ?? string.Empty, flush: true))
-            .Padding(6, 2)
-            .MinWidth(0)
+        return CompactIconAction(
+            "\uE8C8",
+            label,
+            () => ClipboardHelper.CopyText(text ?? string.Empty, flush: true),
+            isVisible,
+            () => setEntryHovered(entryId, true),
+            () => setEntryHovered(entryId, false));
+    }
+
+    private static Element CompactIconAction(
+        string glyph,
+        string label,
+        Action onClick,
+        bool isVisible,
+        Action onGotFocus,
+        Action onLostFocus)
+    {
+        return Button(
+                TextBlock(glyph)
+                    .FontSize(12)
+                    .Set(text => text.FontFamily = FluentIconCatalog.SymbolThemeFontFamily)
+                    .Foreground(Theme.SecondaryText),
+                onClick)
+            .Width(20)
+            .Height(20)
+            .MinWidth(20)
+            .MinHeight(20)
+            .Padding(0)
+            .Resources(resources => resources
+                .Set("ButtonBackground", Theme.Ref("SubtleFillColorTransparentBrush"))
+                .Set("ButtonBackgroundPointerOver", Theme.SubtleFill)
+                .Set("ButtonBackgroundPressed", Theme.ControlFillTertiary)
+                .Set("ButtonBorderBrush", Theme.Ref("SubtleFillColorTransparentBrush"))
+                .Set("ButtonBorderBrushPointerOver", Theme.Ref("SubtleFillColorTransparentBrush"))
+                .Set("ButtonBorderBrushPressed", Theme.Ref("SubtleFillColorTransparentBrush")))
             .AutomationName(label)
-            .ToolTip(label);
+            .ToolTip(label)
+            .OnGotFocus((_, _) => onGotFocus())
+            .OnLostFocus((_, _) => onLostFocus())
+            .Set(button =>
+            {
+                button.Opacity = isVisible ? 1 : 0;
+                button.IsHitTestVisible = isVisible;
+                button.IsTabStop = true;
+            });
     }
 
     private static (string Message, IReadOnlyList<ChatAttachmentPreview> Attachments) ParseAttachments(string? text)
@@ -866,18 +1024,23 @@ internal sealed record ReactorTimelineRow(
     ReactorTimelineRowKind Kind,
     ReactorChatTimelineProps Props,
     ChatTimelineItem? Entry,
-    bool IsLatestAssistant = false)
+    bool IsLatestAssistant = false,
+    bool IsAssistantRunStart = false,
+    bool IsAssistantRunEnd = false)
 {
     public static ReactorTimelineRow FromEntry(
         ReactorChatTimelineProps props,
         ChatTimelineItem entry,
-        bool isLatestAssistant) =>
+        bool isLatestAssistant,
+        ChatAssistantRunPosition assistantRunPosition) =>
         new(
             ReactorChatTimeline.RowKey(props.Timeline, entry),
             ReactorTimelineRowKind.Entry,
             props,
             entry,
-            isLatestAssistant);
+            isLatestAssistant,
+            assistantRunPosition.IsStart,
+            assistantRunPosition.IsEnd);
 
     public static ReactorTimelineRow Thinking(ReactorChatTimelineProps props) =>
         new(
@@ -913,4 +1076,26 @@ internal enum ReactorTimelineRowKind
     LoadEarlier,
     Loading,
     Empty,
+}
+
+internal readonly record struct ChatAssistantRunPosition(bool IsStart, bool IsEnd);
+
+internal static class ChatTimelineAssistantRuns
+{
+    public static IReadOnlyList<ChatAssistantRunPosition> Describe(
+        IReadOnlyList<ChatTimelineItem> entries)
+    {
+        var positions = new ChatAssistantRunPosition[entries.Count];
+        for (var index = 0; index < entries.Count; index++)
+        {
+            if (entries[index].Kind != ChatTimelineItemKind.Assistant)
+                continue;
+
+            var isStart = index == 0 || entries[index - 1].Kind != ChatTimelineItemKind.Assistant;
+            var isEnd = index == entries.Count - 1 || entries[index + 1].Kind != ChatTimelineItemKind.Assistant;
+            positions[index] = new ChatAssistantRunPosition(isStart, isEnd);
+        }
+
+        return positions;
+    }
 }
