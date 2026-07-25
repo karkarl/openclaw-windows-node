@@ -193,7 +193,14 @@ file sealed class InitialTailPositioner : IDisposable
     private bool HasUsableScrollView() =>
         _itemsView.ScrollView is WinUIScrollView { IsLoaded: true };
 
-    private void OnUnloaded(object sender, RoutedEventArgs args) => Dispose();
+    private void OnUnloaded(object sender, RoutedEventArgs args)
+    {
+        // ChatPage keeps the mounted Reactor host across temporary unload/reload
+        // cycles. Preserve the pending initial-tail request so OnLoaded can
+        // position the reused ItemsView when it returns to the visual tree.
+        _requestVersion++;
+        DetachLayoutUpdated();
+    }
 
     private void DetachLayoutUpdated()
     {
