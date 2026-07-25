@@ -30,7 +30,8 @@ public sealed record ReactorChatTimelineProps(
     OpenClawChatTimelineProps Timeline,
     Action<string>? OnSuggestionPicked = null,
     bool SuggestionsDisabled = false,
-    ReactorChatIdentity? AssistantIdentity = null);
+    ReactorChatIdentity? AssistantIdentity = null,
+    long HistoryRevision = 0);
 
 public sealed record ReactorChatIdentity(
     string? DisplayName = null,
@@ -97,6 +98,8 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         }
 
         var rows = BuildRows(props);
+        var initialTailRequestKey =
+            $"{props.Timeline.SessionId ?? "none"}|{props.Timeline.TimelineGeneration}|{props.HistoryRevision}";
         void SetEntryHovered(string entryId, bool isHovered)
         {
             if (isHovered)
@@ -153,7 +156,10 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             [GridSize.Star(), GridSize.Auto],
             [GridSize.Star()],
             itemsView
-                .BindVerticalScrollController(annotatedScrollBarRef)
+                .BindVerticalScrollController(
+                    annotatedScrollBarRef,
+                    rows.Count - 1,
+                    initialTailRequestKey)
                 .Grid(column: 0)
                 .AutomationName("Chat messages")
                 .HAlign(HorizontalAlignment.Stretch)

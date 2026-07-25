@@ -26,7 +26,10 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("ItemContainerSelectedPressedBackground", timeline);
         Assert.Contains("ItemContainerSelectionVisualPointerOverBackground", timeline);
         Assert.Contains("AnnotatedScrollBar()", timeline);
-        Assert.Contains(".BindVerticalScrollController(annotatedScrollBarRef)", timeline);
+        Assert.Contains(".BindVerticalScrollController(", timeline);
+        Assert.Contains("annotatedScrollBarRef,", timeline);
+        Assert.Contains("rows.Count - 1", timeline);
+        Assert.Contains("initialTailRequestKey", timeline);
         Assert.DoesNotContain("ItemsRepeater(", timeline);
         Assert.DoesNotContain("ScrollView(", timeline);
     }
@@ -44,6 +47,73 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("context.BindFor(itemsView, element).Reference", binding);
         Assert.Contains("VerticalScrollController = scrollBar?.ScrollController", binding);
         Assert.DoesNotContain(".Current", binding);
+    }
+
+    [Fact]
+    public void ReactorTimeline_QueuesInitialTailAfterLoadedLayoutAndCleansUp()
+    {
+        var binding = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "ReactorItemsViewScrollController.cs"));
+
+        Assert.Contains("_itemsView.Loaded += OnLoaded", binding);
+        Assert.Contains("_itemsView.LayoutUpdated += OnLayoutUpdated", binding);
+        Assert.Contains("_itemsView.DispatcherQueue.TryEnqueue", binding);
+        Assert.Contains("_itemsView.StartBringItemIntoView(", binding);
+        Assert.Contains("VerticalAlignmentRatio = 1.0", binding);
+        Assert.Contains("_hasValidTailRequest = tailIndex >= 0", binding);
+        Assert.Contains("_itemsView.Unloaded += OnUnloaded", binding);
+        Assert.Contains("_itemsView.Loaded -= OnLoaded", binding);
+        Assert.Contains("_itemsView.LayoutUpdated -= OnLayoutUpdated", binding);
+        Assert.DoesNotContain("ChangeView", binding);
+        Assert.DoesNotContain("UpdateLayout", binding);
+        Assert.DoesNotContain("VerticalAnchorRatio", binding);
+    }
+
+    [Fact]
+    public void ReactorTimeline_RequeuesOnlyForCompletedHistoryReplacement()
+    {
+        var provider = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "OpenClawChatDataProvider.cs"));
+        var root = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "OpenClawReactorChatRoot.cs"));
+        var timeline = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "ReactorChatTimeline.cs"));
+
+        Assert.Contains("_historyRevisions[threadId] = GetHistoryRevisionLocked(threadId) + 1", provider);
+        Assert.Contains("HistoryRevisions: historyRevisionsCopy", provider);
+        Assert.Contains("snapshot.HistoryRevisions", root);
+        Assert.Contains("HistoryRevision: historyRevision", root);
+        Assert.Contains("props.HistoryRevision", timeline);
+        Assert.DoesNotContain("|{props.Mode}", timeline);
+    }
+
+    [Fact]
+    public void ReactorComposer_OffsetsPickerChevronRightAndDown()
+    {
+        var root = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "OpenClawReactorChatRoot.cs"));
+
+        Assert.Contains("textBlock.Margin = new Thickness(2, 6, 0, 0)", root);
     }
 
     [Fact]

@@ -179,6 +179,10 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
             && snapshot.TimelineGenerations?.TryGetValue(effectiveThread.Id, out var generation) == true
                 ? generation
                 : 0L;
+        var historyRevision = effectiveThread is not null
+            && snapshot.HistoryRevisions?.TryGetValue(effectiveThread.Id, out var revision) == true
+                ? revision
+                : 0L;
         var entryMetadata = effectiveThread is not null && props.Provider is OpenClawChatDataProvider metadataProvider
             ? metadataProvider.GetEntryMetadata(effectiveThread.Id)
             : null;
@@ -267,7 +271,8 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
             mode,
             timelineProps,
             onSuggestionPicked,
-            firstSendInFlight));
+            firstSendInFlight,
+            HistoryRevision: historyRevision));
         var composerElement = effectiveThread is null
             ? Empty()
             : Component<ReactorChatComposer, ReactorChatComposerProps>(new(
@@ -867,6 +872,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                         {
                             textBlock.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
                             textBlock.FontSize = 10;
+                            textBlock.Margin = new Thickness(2, 6, 0, 0);
                         })),
                     () => { })
                 .AutomationName(automationName)
@@ -1165,15 +1171,17 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             leftToolbar.Grid(row: 0, column: 0),
             rightToolbar.Grid(row: 0, column: 1));
 
+        var composerChildren = new List<Element>();
+        if (isRecording)
+            composerChildren.Add(voiceFeedback);
+        composerChildren.Add(VStack(4, attachmentRows));
+        composerChildren.Add(VStack(4, queuedRows));
+        composerChildren.Add(input);
+        composerChildren.Add(toolbar);
+
         return Border(
-            VStack(
-                8,
-                voiceFeedback,
-                VStack(4, attachmentRows),
-                VStack(4, queuedRows),
-                input,
-                toolbar)
-            .Padding(8))
+            VStack(8, composerChildren.ToArray())
+            .Padding(8, 0, 8, 8))
             .BorderThickness(1)
             .CornerRadius(8)
             .Margin(12)
