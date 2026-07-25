@@ -1031,13 +1031,24 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                     pasteHooked.Current = true;
                     control.Paste += async (_, args) =>
                     {
+                        var clipboardContent = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                        if (clipboardContent is null
+                            || !clipboardContent.Contains(
+                                global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Bitmap))
+                        {
+                            return;
+                        }
+
+                        // Paste is a synchronous routed event. Suppress the default text paste
+                        // before awaiting bitmap extraction so a multi-format clipboard cannot
+                        // insert text alongside the image attachment.
+                        args.Handled = true;
                         try
                         {
-                            var attachment = await TryReadImageFromClipboardAsync();
+                            var attachment = await TryReadImageFromClipboardAsync(clipboardContent);
                             if (attachment is null)
                                 return;
 
-                            args.Handled = true;
                             props.OnAttachmentPasted(attachment);
                         }
                         catch (Exception ex)
@@ -1257,20 +1268,14 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         }
     }
 
-    private static async Task<ChatAttachment?> TryReadImageFromClipboardAsync()
+    private static async Task<ChatAttachment?> TryReadImageFromClipboardAsync(
+        global::Windows.ApplicationModel.DataTransfer.DataPackageView content)
     {
-        var content = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-        if (content is null
-            || !content.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Bitmap))
-        {
-            return null;
-        }
-
         var streamRef = await content.GetBitmapAsync();
         using var input = await streamRef.OpenReadAsync();
         var decoder = await global::Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(input);
-        var bitmap = await decoder.GetSoftwareBitmapAsync();
-        var output = new global::Windows.Storage.Streams.InMemoryRandomAccessStream();
+        using var bitmap = await decoder.GetSoftwareBitmapAsync();
+        using var output = new global::Windows.Storage.Streams.InMemoryRandomAccessStream();
         var encoder = await global::Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(
             global::Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,
             output);

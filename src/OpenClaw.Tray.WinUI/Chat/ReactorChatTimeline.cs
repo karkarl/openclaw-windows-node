@@ -99,7 +99,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
 
         var rows = BuildRows(props);
         var initialTailRequestKey =
-            $"{props.Timeline.SessionId ?? "none"}|{props.Timeline.TimelineGeneration}|{props.HistoryRevision}";
+            $"{props.Timeline.SessionId ?? "none"}|{props.Timeline.TimelineGeneration}|{props.HistoryRevision}|{props.Timeline.ScrollToBottomToken}";
         void SetEntryHovered(string entryId, bool isHovered)
         {
             if (isHovered)
