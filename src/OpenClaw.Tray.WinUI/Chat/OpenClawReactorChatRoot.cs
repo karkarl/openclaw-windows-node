@@ -321,6 +321,9 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
                 attachment => UpdatePendingAttachments(pendingAttachmentsRef.Current.Concat(new[] { attachment }).ToArray()),
                 attachment => UpdatePendingAttachments(RemoveAttachment(pendingAttachmentsRef.Current, attachment)),
                 queuedMessageId => RunFireAndForget(ct => props.Provider.CancelQueuedMessageAsync(effectiveThread.Id, queuedMessageId, ct)),
+                snapshot.AvailableCommands,
+                snapshot.CommandsSupported,
+                () => RunFireAndForget(ct => props.Provider.EnsureCommandCatalogAsync(ct)),
                 props.IsCompact));
 
         return Grid(
@@ -525,6 +528,9 @@ public sealed record ReactorChatComposerProps(
     Action<ChatAttachment> OnAttachmentPasted,
     Action<ChatAttachment> OnAttachmentRemoved,
     Action<string> OnQueuedMessageCancel,
+    IReadOnlyList<GatewayCommand>? AvailableCommands,
+    bool CommandsSupported,
+    Action? OnCommandsRequested,
     bool IsCompact);
 
 public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
@@ -711,6 +717,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         var (text, setText) = UseState(string.Empty, threadSafe: true);
         var (isSending, setIsSending) = UseState(false, threadSafe: true);
         var (isRecording, setIsRecording) = UseState(false, threadSafe: true);
+        var (slashMenuState, setSlashMenuState) = UseState(ReactorSlashMenuState.Closed, threadSafe: true);
         var inputRevision = UseRef(0);
         var sendInFlight = UseRef(false);
         var voiceCancellation = UseRef<CancellationTokenSource?>(null);
@@ -718,8 +725,18 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         var voiceStopOperation = UseRef(0);
         var pasteHooked = UseRef(false);
         var inputText = UseRef(text);
+        var inputControl = UseRef<TextBox?>(null);
+        var slashPopup = UseRef<Microsoft.UI.Xaml.Controls.Primitives.Popup?>(null);
+        var slashPopupContentRef = UseRef<(string Key, FrameworkElement? Content)>((string.Empty, null));
+        var awaitingCatalog = UseRef(false);
         var mounted = UseRef(true);
         inputText.Current = text;
+        var slashDisplay = ReactorSlashCommandController.Evaluate(
+            text,
+            slashMenuState,
+            props.ConnectionState == "connected" && !isRecording,
+            props.CommandsSupported,
+            props.AvailableCommands);
         UseEffect((Func<Action>)(() => () =>
         {
             mounted.Current = false;
@@ -727,7 +744,23 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             voiceCancellation.Current?.Dispose();
             voiceCancellation.Current = null;
             voiceOperation.Current++;
+            CloseSlashPopup(slashPopup);
         }), Array.Empty<object>());
+        UseEffect((Func<Action>)(() =>
+        {
+            if (ReactorSlashCommandController.ShouldRequestCatalogOnOpen(awaitingCatalog.Current, slashDisplay))
+                props.OnCommandsRequested?.Invoke();
+            awaitingCatalog.Current = slashDisplay.ShouldRequestCatalog;
+            return static () => { };
+        }), slashDisplay.ShouldRequestCatalog);
+        UseEffect((Func<Action>)(() =>
+        {
+            setSlashMenuState(ReactorSlashCommandController.ReconcileState(
+                inputText.Current,
+                props.AvailableCommands,
+                slashMenuState));
+            return static () => { };
+        }), props.AvailableCommands);
 
         void StartVoiceRecording()
         {
@@ -760,6 +793,10 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             inputRevision.Current++;
             inputText.Current = value;
             setText(value);
+            setSlashMenuState(ReactorSlashCommandController.ReconcileState(
+                value,
+                props.AvailableCommands,
+                slashMenuState));
         }
 
         void AppendVoiceTranscript(string transcript)
@@ -773,6 +810,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             var message = text.Trim();
             if ((message.Length == 0 && props.PendingAttachments.Count == 0)
                 || sendInFlight.Current
+                || slashDisplay.IsLoading
                 || props.ConnectionState != "connected")
                 return;
 
@@ -976,6 +1014,90 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             })
             .ToArray();
 
+        void DismissSlashMenu() => setSlashMenuState(ReactorSlashMenuState.Closed);
+
+        void CommitSlashText(string value, ReactorSlashMenuState nextState)
+        {
+            inputRevision.Current++;
+            inputText.Current = value;
+            setText(value);
+            setSlashMenuState(nextState);
+            inputControl.Current?.DispatcherQueue?.TryEnqueue(() =>
+            {
+                if (inputControl.Current is not { } textBox)
+                    return;
+
+                textBox.Focus(FocusState.Programmatic);
+                var caret = textBox.Text?.Length ?? 0;
+                textBox.SelectionStart = caret;
+                textBox.SelectionLength = 0;
+            });
+        }
+
+        var slashPopupVisible = slashDisplay.IsVisible
+            && (slashDisplay.IsLoading
+                || (slashDisplay.IsArgsMode && slashDisplay.ArgCommand is not null)
+                || slashDisplay.Commands.Count > 0);
+        var popupCatalogKey = props.AvailableCommands is null
+            ? "missing"
+            : RuntimeHelpers.GetHashCode(props.AvailableCommands).ToString(CultureInfo.InvariantCulture);
+        var popupArgumentCommandKey = slashDisplay.ArgCommand?.Name
+            ?? slashDisplay.ArgCommand?.DisplayName()
+            ?? string.Empty;
+        var popupStateKey = string.Join(
+            "|",
+            slashPopupVisible,
+            slashDisplay.IsLoading,
+            slashDisplay.IsArgsMode,
+            popupArgumentCommandKey,
+            slashDisplay.Query,
+            slashDisplay.SelectedIndex,
+            slashDisplay.SelectableCount,
+            popupCatalogKey);
+        FrameworkElement? slashPopupContent;
+        if (!slashPopupVisible)
+        {
+            slashPopupContentRef.Current = (string.Empty, null);
+            slashPopupContent = null;
+        }
+        else if (slashPopupContentRef.Current.Key == popupStateKey)
+        {
+            slashPopupContent = slashPopupContentRef.Current.Content;
+        }
+        else if (slashDisplay.IsLoading)
+        {
+            slashPopupContent = BuildSlashHintPopup(
+                Localized("Chat_Composer_Slash_Loading", "Loading commands..."));
+            slashPopupContentRef.Current = (popupStateKey, slashPopupContent);
+        }
+        else if (slashDisplay.IsArgsMode && slashDisplay.ArgCommand is { } argCommand)
+        {
+            slashPopupContent = BuildSlashArgPopup(
+                argCommand,
+                slashDisplay.ArgChoices,
+                slashDisplay.SelectedIndex,
+                choice => CommitSlashText(
+                    argCommand.BuildArgInsertionText(choice.Value),
+                    ReactorSlashMenuState.Closed));
+            slashPopupContentRef.Current = (popupStateKey, slashPopupContent);
+        }
+        else
+        {
+            slashPopupContent = BuildSlashPopup(
+                slashDisplay.Groups,
+                slashDisplay.SelectedIndex,
+                slashDisplay.Query,
+                command =>
+                {
+                    CommitSlashText(
+                        command.FirstArgChoices().Count > 0 ? command.DisplayName() + " " : command.BuildInsertionText(),
+                        command.FirstArgChoices().Count > 0
+                            ? new ReactorSlashMenuState(true, string.Empty, 0, true)
+                            : ReactorSlashMenuState.Closed);
+                });
+            slashPopupContentRef.Current = (popupStateKey, slashPopupContent);
+        }
+
         var input = TextBox(
                 text,
                 SetText,
@@ -984,6 +1106,61 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
             .AutomationName(PlaceholderFor(props.ConnectionState))
             .OnKeyDown((sender, args) =>
             {
+                if (slashDisplay.IsVisible)
+                {
+                    switch (args.Key)
+                    {
+                        case global::Windows.System.VirtualKey.Down when slashDisplay.HasSelection:
+                            args.Handled = true;
+                            setSlashMenuState(ReactorSlashCommandController.MoveSelection(
+                                slashMenuState,
+                                slashDisplay,
+                                1));
+                            return;
+
+                        case global::Windows.System.VirtualKey.Up when slashDisplay.HasSelection:
+                            args.Handled = true;
+                            setSlashMenuState(ReactorSlashCommandController.MoveSelection(
+                                slashMenuState,
+                                slashDisplay,
+                                -1));
+                            return;
+
+                        case global::Windows.System.VirtualKey.Enter:
+                        case global::Windows.System.VirtualKey.Tab:
+                            if (slashDisplay.HasSelection)
+                            {
+                                args.Handled = true;
+                                var commit = ReactorSlashCommandController.CommitSelection(slashDisplay);
+                                if (commit.Accepted)
+                                    CommitSlashText(commit.Text, commit.NextState);
+                                return;
+                            }
+
+                            if (slashDisplay.IsLoading)
+                            {
+                                args.Handled = true;
+                                if (args.Key == global::Windows.System.VirtualKey.Tab)
+                                    DismissSlashMenu();
+                                return;
+                            }
+                             break;
+
+                        case global::Windows.System.VirtualKey.Escape:
+                            args.Handled = true;
+                            DismissSlashMenu();
+                            return;
+                    }
+
+                    if (slashDisplay.IsLoading
+                        && (args.Key == global::Windows.System.VirtualKey.Up
+                            || args.Key == global::Windows.System.VirtualKey.Down))
+                    {
+                        args.Handled = true;
+                        return;
+                    }
+                }
+
                 if (args.Key != global::Windows.System.VirtualKey.Enter)
                     return;
 
@@ -999,15 +1176,15 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                     SetText(current[..start] + "\n" + current[end..]);
                     textBox.SelectionStart = start + 1;
                     textBox.SelectionLength = 0;
+                    return;
                 }
-                else
-                {
-                    Send();
-                }
+
+                Send();
             })
             .TextWrapping(TextWrapping.Wrap)
             .Set(control =>
             {
+                inputControl.Current = control;
                 var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
                 control.MinHeight = 56;
                 control.MaxHeight = 200;
@@ -1059,6 +1236,14 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                     };
                 }
             });
+        UseEffect((Func<Action>)(() =>
+        {
+            if (inputControl.Current is { } anchor)
+                DriveSlashPopup(slashPopup, anchor, slashPopupContent, slashPopupVisible);
+            else
+                CloseSlashPopup(slashPopup);
+            return static () => { };
+        }), popupStateKey);
 
         var sessionPicker = MenuFlyout(
             PickerButton(
@@ -1166,6 +1351,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                     button.CornerRadius = controlCornerRadius;
                     button.IsEnabled = props.ConnectionState == "connected"
                         && !isSending
+                        && !slashDisplay.IsLoading
                         && (!string.IsNullOrWhiteSpace(text) || props.PendingAttachments.Count > 0);
                     ToolTipService.SetToolTip(button, actionLabel);
                 });
@@ -1202,6 +1388,432 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                 border.BorderBrush = ResolveThemeBrush("ControlStrokeColorDefaultBrush", border.ActualTheme);
             }))
             .HAlign(HorizontalAlignment.Stretch);
+    }
+
+    private static void CloseSlashPopup(Ref<Microsoft.UI.Xaml.Controls.Primitives.Popup?> popupRef)
+    {
+        if (popupRef.Current is not { } popup)
+            return;
+
+        popup.IsOpen = false;
+        popup.Child = null;
+        popup.PlacementTarget = null;
+    }
+
+    private static void DriveSlashPopup(
+        Ref<Microsoft.UI.Xaml.Controls.Primitives.Popup?> popupRef,
+        TextBox anchor,
+        FrameworkElement? content,
+        bool visible)
+    {
+        var popup = popupRef.Current;
+        if (popup is null)
+        {
+            popup = new Microsoft.UI.Xaml.Controls.Primitives.Popup
+            {
+                IsLightDismissEnabled = false,
+                ShouldConstrainToRootBounds = true,
+            };
+            popupRef.Current = popup;
+        }
+
+        if (!visible || content is null || anchor.XamlRoot is null)
+        {
+            CloseSlashPopup(popupRef);
+            return;
+        }
+
+        content.Width = Math.Max(280, anchor.ActualWidth > 0 ? anchor.ActualWidth : 360);
+        popup.XamlRoot = anchor.XamlRoot;
+        popup.PlacementTarget = anchor;
+        popup.DesiredPlacement = Microsoft.UI.Xaml.Controls.Primitives.PopupPlacementMode.Top;
+        popup.Child = content;
+        popup.IsOpen = true;
+    }
+
+    private static Border BuildSlashHintPopup(string text)
+    {
+        var label = new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            Margin = new Thickness(8, 6, 8, 6),
+        };
+        ApplyTheme(label, () => label.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", label.ActualTheme));
+        return SlashShell(label);
+    }
+
+    private static Border BuildSlashPopup(
+        IReadOnlyList<CommandCategoryGroup> groups,
+        int selectedIndex,
+        string query,
+        Action<GatewayCommand> onPick)
+    {
+        var list = new StackPanel { Orientation = Orientation.Vertical };
+        var index = 0;
+        foreach (var group in groups)
+        {
+            list.Children.Add(SlashCategoryHeader(CommandCategories.Label(group.Category)));
+            foreach (var command in group.Commands)
+            {
+                list.Children.Add(SlashRow(command, index == selectedIndex, query, onPick));
+                index++;
+            }
+        }
+
+        return SlashShell(new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = 280,
+            Content = list,
+        });
+    }
+
+    private static TextBlock SlashCategoryHeader(string text)
+    {
+        var header = new TextBlock
+        {
+            Text = (text ?? string.Empty).ToUpperInvariant(),
+            FontSize = 11,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            CharacterSpacing = 60,
+            Margin = new Thickness(8, 8, 8, 2),
+        };
+        ApplyTheme(header, () => header.Foreground = ResolveThemeBrush("TextFillColorTertiaryBrush", header.ActualTheme));
+        return header;
+    }
+
+    private static Border BuildSlashArgPopup(
+        GatewayCommand command,
+        IReadOnlyList<GatewayCommandArgChoice> choices,
+        int selectedIndex,
+        Action<GatewayCommandArgChoice> onPick)
+    {
+        var list = new StackPanel { Orientation = Orientation.Vertical };
+        var argDescription = command.Args?.FirstOrDefault()?.Description;
+        var headerText = !string.IsNullOrWhiteSpace(argDescription)
+            ? $"{command.DisplayName()}  {argDescription}"
+            : !string.IsNullOrWhiteSpace(command.Description)
+                ? $"{command.DisplayName()}  {command.Description}"
+                : command.DisplayName();
+        var header = new TextBlock
+        {
+            Text = headerText,
+            FontSize = 11,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1,
+            Margin = new Thickness(8, 6, 8, 2),
+        };
+        ApplyTheme(header, () => header.Foreground = ResolveThemeBrush("TextFillColorTertiaryBrush", header.ActualTheme));
+        list.Children.Add(header);
+        for (var index = 0; index < choices.Count; index++)
+            list.Children.Add(SlashArgRow(command, choices[index], index == selectedIndex, onPick));
+
+        return SlashShell(new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = 280,
+            Content = list,
+        });
+    }
+
+    private static Button SlashArgRow(
+        GatewayCommand command,
+        GatewayCommandArgChoice choice,
+        bool selected,
+        Action<GatewayCommandArgChoice> onPick)
+    {
+        var label = string.IsNullOrWhiteSpace(choice.Label) ? choice.Value : choice.Label;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var title = new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ApplyTheme(title, () => title.Foreground = ResolveThemeBrush("TextFillColorPrimaryBrush", title.ActualTheme));
+        row.Children.Add(title);
+
+        var subtitle = new TextBlock
+        {
+            Text = $"{command.DisplayName()} {choice.Value}",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1,
+        };
+        ApplyTheme(subtitle, () => subtitle.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", subtitle.ActualTheme));
+        row.Children.Add(subtitle);
+
+        var button = new Button
+        {
+            Content = row,
+            Padding = new Thickness(8, 7, 8, 7),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(0),
+        };
+        ApplyTheme(button, () =>
+        {
+            button.Background = selected
+                ? ResolveThemeBrush("SubtleFillColorSecondaryBrush", button.ActualTheme)
+                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            button.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            button,
+            $"Choose {label} for {command.DisplayName()}");
+        button.Click += (_, _) => onPick(choice);
+        if (selected)
+        {
+            button.Loaded += (_, _) => button.StartBringIntoView(
+                new BringIntoViewOptions { AnimationDesired = false });
+        }
+
+        return button;
+    }
+
+    private static Border SlashShell(UIElement child)
+    {
+        var shell = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(4),
+            Child = child,
+            Shadow = new ThemeShadow(),
+            Translation = new System.Numerics.Vector3(0, 0, 32),
+        };
+        ApplyTheme(shell, () =>
+        {
+            shell.Background = ResolvePopupBackgroundBrush(shell.ActualTheme);
+            shell.BorderBrush = ResolveThemeBrush("SurfaceStrokeColorDefaultBrush", shell.ActualTheme);
+        });
+        return shell;
+    }
+
+    private static Brush ResolvePopupBackgroundBrush(ElementTheme theme)
+    {
+        var overlay = FindThemedResource("TextControlBackground", theme) as SolidColorBrush
+            ?? Application.Current?.Resources["TextControlBackground"] as SolidColorBrush;
+        var baseBrush = FindThemedResource("SolidBackgroundFillColorBaseBrush", theme) as SolidColorBrush
+            ?? Application.Current?.Resources["SolidBackgroundFillColorBaseBrush"] as SolidColorBrush;
+        if (overlay is null || baseBrush is null)
+            return ResolveThemeBrush("SolidBackgroundFillColorBaseBrush", theme);
+
+        var alpha = overlay.Color.A / 255.0;
+        static byte Mix(byte background, byte foreground, double alpha) =>
+            (byte)Math.Round(background * (1 - alpha) + foreground * alpha);
+
+        return new SolidColorBrush(global::Windows.UI.Color.FromArgb(
+            255,
+            Mix(baseBrush.Color.R, overlay.Color.R, alpha),
+            Mix(baseBrush.Color.G, overlay.Color.G, alpha),
+            Mix(baseBrush.Color.B, overlay.Color.B, alpha)));
+    }
+
+    private static Button SlashRow(
+        GatewayCommand command,
+        bool selected,
+        string query,
+        Action<GatewayCommand> onPick)
+    {
+        var mono = new FontFamily("Consolas");
+        var grid = new Microsoft.UI.Xaml.Controls.Grid
+        {
+            ColumnSpacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new FontIcon
+        {
+            FontFamily = (FontFamily)Application.Current.Resources["SymbolThemeFontFamily"],
+            Glyph = SlashGlyph(command),
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ApplyTheme(icon, () => icon.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", icon.ActualTheme));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+            icon,
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        Microsoft.UI.Xaml.Controls.Grid.SetColumn(icon, 0);
+        grid.Children.Add(icon);
+
+        var name = new TextBlock
+        {
+            Text = command.DisplayName(),
+            FontSize = 13,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ApplyTheme(name, () => name.Foreground = ResolveThemeBrush("TextFillColorPrimaryBrush", name.ActualTheme));
+        Microsoft.UI.Xaml.Controls.Grid.SetColumn(name, 1);
+        grid.Children.Add(name);
+        ApplyQueryHighlight(name, query);
+
+        var args = command.ArgTemplate();
+        if (!string.IsNullOrWhiteSpace(args))
+        {
+            var argBlock = new TextBlock
+            {
+                Text = args,
+                FontSize = 12,
+                FontFamily = mono,
+                Opacity = 0.75,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ApplyTheme(argBlock, () => argBlock.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", argBlock.ActualTheme));
+            Microsoft.UI.Xaml.Controls.Grid.SetColumn(argBlock, 2);
+            grid.Children.Add(argBlock);
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.Description))
+        {
+            var description = new TextBlock
+            {
+                Text = command.Description!,
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                TextAlignment = TextAlignment.Right,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxLines = 1,
+            };
+            ApplyTheme(description, () => description.Foreground = ResolveThemeBrush("TextFillColorSecondaryBrush", description.ActualTheme));
+            Microsoft.UI.Xaml.Controls.Grid.SetColumn(description, 3);
+            grid.Children.Add(description);
+            ApplyQueryHighlight(description, query);
+        }
+
+        var options = command.OptionCount();
+        if (options > 0)
+        {
+            var badge = SlashBadge($"{options} options");
+            Microsoft.UI.Xaml.Controls.Grid.SetColumn(badge, 4);
+            grid.Children.Add(badge);
+        }
+
+        var button = new Button
+        {
+            Content = grid,
+            Padding = new Thickness(8, 7, 8, 7),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(0),
+        };
+        ApplyTheme(button, () =>
+        {
+            button.Background = selected
+                ? ResolveThemeBrush("SubtleFillColorSecondaryBrush", button.ActualTheme)
+                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            button.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, $"Insert {command.DisplayName()}");
+        button.Click += (_, _) => onPick(command);
+        if (selected)
+        {
+            button.Loaded += (_, _) => button.StartBringIntoView(
+                new BringIntoViewOptions { AnimationDesired = false });
+        }
+        return button;
+    }
+
+    private static Border SlashBadge(string text)
+    {
+        var label = new TextBlock
+        {
+            Text = text,
+            FontSize = 10,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        };
+        var badge = new Border
+        {
+            Padding = new Thickness(6, 1, 6, 1),
+            CornerRadius = new CornerRadius(4),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = label,
+        };
+        ApplyTheme(badge, () =>
+        {
+            var accent = ResolveThemeBrush("AccentFillColorDefaultBrush", badge.ActualTheme);
+            badge.Background = accent is SolidColorBrush solid
+                ? new SolidColorBrush(solid.Color) { Opacity = 0.14 }
+                : accent;
+        });
+        ApplyTheme(label, () => label.Foreground = ResolveThemeBrush("AccentFillColorDefaultBrush", label.ActualTheme));
+        return badge;
+    }
+
+    private static void ApplyQueryHighlight(TextBlock textBlock, string? query)
+    {
+        textBlock.TextHighlighters.Clear();
+        var text = textBlock.Text ?? string.Empty;
+        var normalized = (query ?? string.Empty).Trim().TrimStart('/').Trim();
+        if (normalized.Length == 0 || text.Length < normalized.Length)
+            return;
+
+        var accent = Application.Current.Resources["AccentFillColorDefaultBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Microsoft.UI.Colors.SteelBlue);
+        var accentColor = accent.Color;
+        var highlighter = new Microsoft.UI.Xaml.Documents.TextHighlighter
+        {
+            Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(31, accentColor.R, accentColor.G, accentColor.B)),
+            Foreground = Application.Current.Resources["TextFillColorPrimaryBrush"] as Brush
+                ?? new SolidColorBrush(Microsoft.UI.Colors.White),
+        };
+
+        for (var index = 0; index <= text.Length - normalized.Length;)
+        {
+            var found = text.IndexOf(normalized, index, StringComparison.OrdinalIgnoreCase);
+            if (found < 0)
+                break;
+            highlighter.Ranges.Add(new Microsoft.UI.Xaml.Documents.TextRange
+            {
+                StartIndex = found,
+                Length = normalized.Length,
+            });
+            index = found + normalized.Length;
+        }
+
+        if (highlighter.Ranges.Count > 0)
+            textBlock.TextHighlighters.Add(highlighter);
+    }
+
+    private static string SlashGlyph(GatewayCommand command)
+    {
+        var name = (command.NativeName ?? command.DisplayName()).Trim().TrimStart('/').ToLowerInvariant()
+            .Replace(':', '_')
+            .Replace('.', '_')
+            .Replace('-', '_');
+        return name switch
+        {
+            "help" or "commands" => "\uE82D",
+            "status" or "usage" => "\uE9D9",
+            "export" or "export_session" => "\uE896",
+            "skill" or "fast" => "\uE945",
+            "model" or "models" or "think" => "\uE713",
+            "new" => "\uE710",
+            "reset" or "redirect" => "\uE72C",
+            "compact" => "\uE9F3",
+            "stop" => "\uE71A",
+            "clear" => "\uE74D",
+            "agents" => "\uE7F4",
+            "subagents" => "\uE8B7",
+            "steer" => "\uE724",
+            "tts" => "\uE767",
+            _ => "\uE756",
+        };
     }
 
     private static async Task SendAsync(
