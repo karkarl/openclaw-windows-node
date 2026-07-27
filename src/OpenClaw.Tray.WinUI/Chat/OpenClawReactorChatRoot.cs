@@ -365,7 +365,7 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
 
     private static IReadOnlyList<ChatThread> VisibleChannels(ChatThread[] threads, ChatThread effectiveThread)
     {
-        var visible = SessionVisibilityFilter.VisibleChatPickerThreads(threads)
+        var visible = SessionVisibilityFilter.VisibleChatPickerThreads(threads, effectiveThread.Id)
             .Where(thread => !string.IsNullOrWhiteSpace(thread.Title)
                 && thread.IsVisibleInSessionPicker(effectiveThread.Id))
             .ToList();

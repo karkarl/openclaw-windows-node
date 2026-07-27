@@ -530,8 +530,11 @@ public sealed class OpenClawChatRoot : Component
         // Session list for the composer dropdown — grouped by the Gateway's
         // agent presentation metadata. Background sessions stay hidden unless
         // the user explicitly navigated to one, in which case it remains usable.
-        // Exclude ended sessions (completed/failed/killed/timeout) from the picker.
-        var channelGroups = SessionVisibilityFilter.VisibleChatPickerThreads(snapshot.Threads)
+        // Keep sessions with conversation activity regardless of lifecycle state.
+        // Empty gateway placeholders stay hidden unless explicitly selected.
+        var channelGroups = SessionVisibilityFilter.VisibleChatPickerThreads(
+                snapshot.Threads,
+                effectiveThread?.Id)
             .Where(t => !string.IsNullOrEmpty(t.Title)
                      && t.IsVisibleInSessionPicker(effectiveThread?.Id))
             .GroupBy(t => string.IsNullOrWhiteSpace(t.AgentId) ? "other" : t.AgentId!)
@@ -549,9 +552,8 @@ public sealed class OpenClawChatRoot : Component
         //
         // Keep routing ids opaque here too. The provider carries the Gateway's
         // agent identity separately, including for compose-only threads.
-        // Don't inject ended sessions into the synthetic group.
         if (effectiveThread is not null
-            && SessionVisibilityFilter.IsVisibleInChatPicker(effectiveThread)
+            && SessionVisibilityFilter.IsVisibleInChatPicker(effectiveThread, effectiveThread.Id)
             && !ChannelGroupsContain(channelGroups, effectiveThread.Id))
         {
             var agentId = string.IsNullOrWhiteSpace(effectiveThread.AgentId) ? "main" : effectiveThread.AgentId!;
