@@ -7,6 +7,20 @@ namespace OpenClaw.Tray.Tests;
 public class ReactorSlashCommandControllerTests
 {
     [Fact]
+    public void CatalogRefresh_DoesNotReopenMenuDismissedForCurrentInput()
+    {
+        Assert.False(ReactorSlashCommandController.ShouldReconcileAfterCatalogRefresh(
+            inputRevision: 4,
+            dismissedInputRevision: 4));
+        Assert.True(ReactorSlashCommandController.ShouldReconcileAfterCatalogRefresh(
+            inputRevision: 5,
+            dismissedInputRevision: 4));
+        Assert.True(ReactorSlashCommandController.ShouldReconcileAfterCatalogRefresh(
+            inputRevision: 4,
+            dismissedInputRevision: null));
+    }
+
+    [Fact]
     public void Evaluate_RecognizesLeadingSlashAndStaticFirstArgumentMode()
     {
         var commands = SampleCommands();

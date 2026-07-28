@@ -67,6 +67,11 @@ internal static class ReactorSlashCommandController
             : current;
     }
 
+    public static bool ShouldReconcileAfterCatalogRefresh(
+        int inputRevision,
+        int? dismissedInputRevision) =>
+        dismissedInputRevision != inputRevision;
+
     public static ReactorSlashDisplayState Evaluate(
         string? text,
         ReactorSlashMenuState state,

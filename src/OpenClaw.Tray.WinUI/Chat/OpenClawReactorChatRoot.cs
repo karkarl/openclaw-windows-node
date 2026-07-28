@@ -775,6 +775,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         var slashPopup = UseRef<Microsoft.UI.Xaml.Controls.Primitives.Popup?>(null);
         var slashPopupContentRef = UseRef<(string Key, FrameworkElement? Content)>((string.Empty, null));
         var awaitingCatalog = UseRef(false);
+        var dismissedSlashInputRevision = UseRef<int?>(null);
         var mounted = UseRef(true);
         inputText.Current = text;
         var slashDisplay = ReactorSlashCommandController.Evaluate(
@@ -801,10 +802,15 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         }), slashDisplay.ShouldRequestCatalog);
         UseEffect((Func<Action>)(() =>
         {
-            setSlashMenuState(ReactorSlashCommandController.ReconcileState(
-                inputText.Current,
-                props.AvailableCommands,
-                slashMenuState));
+            if (ReactorSlashCommandController.ShouldReconcileAfterCatalogRefresh(
+                    inputRevision.Current,
+                    dismissedSlashInputRevision.Current))
+            {
+                setSlashMenuState(ReactorSlashCommandController.ReconcileState(
+                    inputText.Current,
+                    props.AvailableCommands,
+                    slashMenuState));
+            }
             return static () => { };
         }), props.AvailableCommands);
 
@@ -837,6 +843,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         void SetText(string value)
         {
             inputRevision.Current++;
+            dismissedSlashInputRevision.Current = null;
             inputText.Current = value;
             setText(value);
             setSlashMenuState(ReactorSlashCommandController.ReconcileState(
@@ -1085,7 +1092,11 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                     Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite))
                 .AutomationName(queuedCountText);
 
-        void DismissSlashMenu() => setSlashMenuState(ReactorSlashMenuState.Closed);
+        void DismissSlashMenu()
+        {
+            dismissedSlashInputRevision.Current = inputRevision.Current;
+            setSlashMenuState(ReactorSlashMenuState.Closed);
+        }
 
         void CommitSlashText(string value, ReactorSlashMenuState nextState)
         {
