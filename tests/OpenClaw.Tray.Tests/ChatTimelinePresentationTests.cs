@@ -104,7 +104,7 @@ public sealed class ChatTimelinePresentationTests
     }
 
     [Fact]
-    public void ReactorComposer_OffsetsPickerChevronRightAndDown()
+    public void ReactorComposer_OffsetsPickerChevronRightAndUp()
     {
         var root = File.ReadAllText(Path.Combine(
             TestRepositoryPaths.GetRepositoryRoot(),
@@ -113,7 +113,7 @@ public sealed class ChatTimelinePresentationTests
             "Chat",
             "OpenClawReactorChatRoot.cs"));
 
-        Assert.Contains("textBlock.Margin = new Thickness(2, 6, 0, 0)", root);
+        Assert.Contains("textBlock.Margin = new Thickness(2, 4, 0, 0)", root);
     }
 
     [Fact]

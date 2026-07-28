@@ -3482,6 +3482,12 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     private void OnSettingsSaved(object? sender, EventArgs e)
     {
+        if (_settings is not null)
+        {
+            OpenClawTray.Chat.OpenClawReactorChatRoot.SetToolCallsVisible(
+                _settings.ShowChatToolCalls);
+        }
+
         var currentSnapshot = _settings?.ToSettingsData()?.ToConnectionSnapshot();
         var impact = SettingsChangeClassifier.Classify(_previousSettingsSnapshot, currentSnapshot);
         _previousSettingsSnapshot = currentSnapshot;
@@ -4526,9 +4532,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
 
     /// <summary>
     /// Sets speaker mute from any surface (chat window, chat page, voice settings) and persists it.
-    /// This public path is NOT store-self-write-suppressed, so an open Settings page still reflects
-    /// a mute toggled elsewhere. The Settings-page-originated call goes through the explicit
-    /// <see cref="IAppCommands.SetChatSpeakerMuted"/> below, which suppresses its own echo.
     /// </summary>
     public void SetChatSpeakerMuted(bool muted)
     {
@@ -4542,26 +4545,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
         // Broadcast to all subscribers
         SpeakerMuteChanged?.Invoke(muted);
     }
-
-    /// <summary>
-    /// Settings-page-originated mute: wraps the shared write in a store self-write so it does not
-    /// echo an external-change reload back to the Settings view model that triggered it.
-    /// </summary>
-    void IAppCommands.SetChatSpeakerMuted(bool muted)
-    {
-        using (SettingsStore?.BeginSelfWrite())
-        {
-            SetChatSpeakerMuted(muted);
-        }
-    }
-
-    /// <summary>
-    /// Pushes tool-call visibility into the live chat timeline. Forwards to the shared
-    /// static writer so a WinUI-free settings view model can drive it through IAppCommands
-    /// without referencing the chat UI directly.
-    /// </summary>
-    public void SetChatToolCallsVisible(bool visible) =>
-        OpenClawTray.Chat.OpenClawReactorChatRoot.SetToolCallsVisible(visible);
 
     private static void SendDeepLinkToRunningInstance(string uri)
     {

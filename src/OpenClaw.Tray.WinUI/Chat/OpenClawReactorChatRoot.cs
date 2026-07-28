@@ -48,6 +48,9 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
 
     public static void SetToolCallsVisible(bool visible)
     {
+        if (s_showToolCalls == visible)
+            return;
+
         if (!visible && s_showToolCalls)
             s_toolCallsCollapseVersion++;
 
@@ -910,7 +913,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                         {
                             textBlock.FontFamily = FluentIconCatalog.SymbolThemeFontFamily;
                             textBlock.FontSize = 10;
-                            textBlock.Margin = new Thickness(2, 6, 0, 0);
+                            textBlock.Margin = new Thickness(2, 4, 0, 0);
                         })),
                     () => { })
                 .AutomationName(automationName)
@@ -1371,14 +1374,16 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         var composerChildren = new List<Element>();
         if (isRecording)
             composerChildren.Add(voiceFeedback);
-        composerChildren.Add(VStack(4, attachmentRows));
-        composerChildren.Add(VStack(4, queuedRows));
+        if (attachmentRows.Length > 0)
+            composerChildren.Add(VStack(4, attachmentRows));
+        if (queuedRows.Length > 0)
+            composerChildren.Add(VStack(4, queuedRows));
         composerChildren.Add(input);
         composerChildren.Add(toolbar);
 
         return Border(
             VStack(8, composerChildren.ToArray())
-            .Padding(8, 0, 8, 8))
+            .Padding(8, 2, 8, 8))
             .BorderThickness(1)
             .CornerRadius(8)
             .Margin(12)

@@ -444,8 +444,14 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
 
         return VStack(
                 bubble,
-                Footer(row, entry, HorizontalAlignment.Right),
-                CopyAction(entry.Text, isHovered, setEntryHovered, entry.Id))
+                HStack(
+                        8,
+                        row.Props.Timeline.ShowToolCalls
+                            ? UserMetadata(row, entry, isHovered)
+                            : Empty(),
+                        CopyAction(entry.Text, isHovered, setEntryHovered, entry.Id))
+                    .Margin(16, 2, 4, 0)
+                    .HAlign(HorizontalAlignment.Right))
             .Margin(72, 4, 20, 4)
             .HAlign(HorizontalAlignment.Stretch)
             .AutomationName(entry.Text ?? string.Empty);
@@ -490,7 +496,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
                             isHovered,
                             toggleSpeechAsync,
                             setEntryHovered,
-                            includeMetadata: row.IsAssistantRunEnd))
+                            includeMetadata: row.IsAssistantRunEnd && row.Props.Timeline.ShowToolCalls))
                     .HAlign(HorizontalAlignment.Stretch)
                     .Grid(column: 1))
             .Margin(20, row.IsAssistantRunStart ? 6 : 1, 72, row.IsAssistantRunEnd ? 6 : 1)
@@ -559,7 +565,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
     {
         var children = new List<Element>();
         if (includeMetadata)
-            children.Add(Footer(row, entry, HorizontalAlignment.Left));
+            children.Add(HoverMetadata(Footer(row, entry, HorizontalAlignment.Left), isHovered));
 
         children.Add(CopyAction(entry.Text, isHovered, setEntryHovered, entry.Id));
 
@@ -578,7 +584,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         }
 
         return HStack(8, children.ToArray())
-            .Margin(16, 2, 16, 0)
+            .Margin(4, 2, 16, 0)
             .HAlign(HorizontalAlignment.Left);
     }
 
@@ -961,6 +967,39 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
                 "TextFillColorSecondaryBrush")
             .Margin(16, 2, 16, 0)
             .HAlign(horizontalAlignment);
+    }
+
+    private static Element UserMetadata(
+        ReactorTimelineRow row,
+        ChatTimelineItem entry,
+        bool isHovered)
+    {
+        ChatEntryMetadata? metadata = null;
+        if (row.Props.Timeline.EntryMetadata?.TryGetValue(entry.Id, out var resolvedMetadata) == true)
+            metadata = resolvedMetadata;
+
+        var timestamp = metadata?.Timestamp?.ToLocalTime().ToString("h:mm tt");
+        var model = metadata?.Model ?? row.Props.Timeline.DefaultModel;
+
+        return HoverMetadata(
+            Text(
+                string.Join(
+                    " · ",
+                    new[] { timestamp, model }.Where(static value => !string.IsNullOrWhiteSpace(value))),
+                11,
+                FontWeights.Normal,
+                "TextFillColorSecondaryBrush"),
+            isHovered);
+    }
+
+    private static Element HoverMetadata(Element child, bool isHovered)
+    {
+        return Border(child)
+            .Set(border =>
+            {
+                border.Opacity = isHovered ? 1 : 0;
+                border.IsHitTestVisible = false;
+            });
     }
 
     private static TextBlockElement Text(

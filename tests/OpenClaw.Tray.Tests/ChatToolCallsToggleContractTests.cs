@@ -24,9 +24,8 @@ public sealed class ChatToolCallsToggleContractTests
         Assert.Contains("s_showToolCalls = visible", root);
         Assert.DoesNotContain("OnShowToolCallsChanged", root);
 
-        // Settings drives it: the settings view model persists the setting and pushes it into
-        // the live timeline through IAppCommands, which App forwards to the static writer.
-        Assert.Contains("SetChatToolCallsVisible", settingsVm);
+        // Settings persists the preference and App applies every settings save to the
+        // live timeline through the static writer.
         Assert.Contains("ShowChatToolCalls", settingsVm);
         Assert.Contains("OpenClawTray.Chat.OpenClawReactorChatRoot.SetToolCallsVisible", app);
 
@@ -36,6 +35,8 @@ public sealed class ChatToolCallsToggleContractTests
         // Timeline still consumes the props from the root.
         Assert.Contains("props.Timeline.ShowToolCalls", timeline);
         Assert.Contains("ToolCallsCollapseVersion", timeline);
+        Assert.Contains("row.Props.Timeline.ShowToolCalls", timeline);
+        Assert.Contains("row.IsAssistantRunEnd && row.Props.Timeline.ShowToolCalls", timeline);
     }
 
     [Fact]
