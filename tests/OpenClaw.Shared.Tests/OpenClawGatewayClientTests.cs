@@ -1097,7 +1097,7 @@ public class OpenClawGatewayClientTests
             "sessionKey": "main",
             "message": {
               "role": "assistant",
-              "content": "  NO_REPLY\n",
+              "content": "  no_reply\n",
               "timestamp": 1781631280633
             },
             "state": "final"
@@ -1124,7 +1124,7 @@ public class OpenClawGatewayClientTests
             "sessionKey": "main",
             "message": {
               "role": "user",
-              "content": "NO_REPLY",
+              "content": "no_reply",
               "timestamp": 1781631280633
             },
             "state": "final"
@@ -1134,7 +1134,7 @@ public class OpenClawGatewayClientTests
 
         Assert.NotNull(received);
         Assert.Equal("user", received!.Role);
-        Assert.Equal("NO_REPLY", received.Text);
+        Assert.Equal("no_reply", received.Text);
     }
 
     [Fact]
@@ -1146,7 +1146,7 @@ public class OpenClawGatewayClientTests
         {
           "messages": [
             { "role": "user", "content": "before", "timestamp": 1 },
-            { "role": "assistant", "content": "NO_REPLY", "timestamp": 2 },
+            { "role": "assistant", "content": "no_reply", "timestamp": 2 },
             { "role": "assistant", "content": "visible reply", "timestamp": 3 }
           ]
         }
