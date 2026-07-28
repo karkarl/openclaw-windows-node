@@ -211,8 +211,51 @@ public sealed class OpenClawReactorChatRoot : Component<OpenClawReactorChatRootP
         var showThinking = timeline.TurnActive && !currentTurnHasAssistant;
         var isEmptyConversation = entries.Count == 0 && !showThinking && timeline.PendingPermission is null;
         var isComposeOnly = effectiveThread is not null && selectedMaterializedThread is null;
+        var hasRealThreads = snapshot.Threads.Length > 0;
+        var welcomeEligible = isEmptyConversation
+            && isGatewayConnected
+            && (
+                (isComposeOnly && !hasRealThreads)
+                || (!isComposeOnly && timeline.HistoryLoaded));
+        var welcomeEligibilityKey = welcomeEligible
+            ? $"{effectiveThread?.Id}|{isComposeOnly}|{timeline.HistoryLoaded}|{hasRealThreads}"
+            : null;
+        var welcomeEligibilityKeyRef = UseRef<string?>(welcomeEligibilityKey);
+        welcomeEligibilityKeyRef.Current = welcomeEligibilityKey;
+        var (settledWelcomeKey, setSettledWelcomeKey) = UseState<string?>(null, threadSafe: true);
+        UseEffect((Func<Action>)(() =>
+        {
+            if (welcomeEligibilityKey is null)
+            {
+                setSettledWelcomeKey(null);
+                return static () => { };
+            }
+
+            var cancelled = false;
+            var expectedKey = welcomeEligibilityKey;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(800);
+                if (!cancelled
+                    && string.Equals(
+                        welcomeEligibilityKeyRef.Current,
+                        expectedKey,
+                        StringComparison.Ordinal))
+                {
+                    setSettledWelcomeKey(expectedKey);
+                }
+            });
+            return () => cancelled = true;
+        }),
+            welcomeEligibilityKey);
+
+        var emptyConversationIsAuthoritative = welcomeEligibilityKey is not null
+            && string.Equals(
+                settledWelcomeKey,
+                welcomeEligibilityKey,
+                StringComparison.Ordinal);
         var mode = effectiveThread is null
-                   || (isEmptyConversation && !isComposeOnly && !timeline.HistoryLoaded)
+                   || (isEmptyConversation && !emptyConversationIsAuthoritative)
             ? ReactorChatTimelineMode.Loading
             : isEmptyConversation
                 ? ReactorChatTimelineMode.Empty

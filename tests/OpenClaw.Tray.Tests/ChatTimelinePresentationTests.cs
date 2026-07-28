@@ -117,6 +117,28 @@ public sealed class ChatTimelinePresentationTests
     }
 
     [Fact]
+    public void ReactorRoot_SettlesWelcomeEligibilityBeforeShowingEmptyState()
+    {
+        var root = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "OpenClawReactorChatRoot.cs"));
+
+        Assert.Contains("var welcomeEligible = isEmptyConversation", root);
+        Assert.Contains("var welcomeEligibilityKey =", root);
+        Assert.Contains("var welcomeEligibilityKeyRef = UseRef<string?>", root);
+        Assert.Contains("var (settledWelcomeKey, setSettledWelcomeKey) = UseState<string?>", root);
+        Assert.Contains("await Task.Delay(800)", root);
+        Assert.Contains("welcomeEligibilityKeyRef.Current", root);
+        Assert.Contains("settledWelcomeKey,", root);
+        Assert.Contains("welcomeEligibilityKey,", root);
+        Assert.Contains("var emptyConversationIsAuthoritative = welcomeEligibilityKey is not null", root);
+        Assert.Contains("isEmptyConversation && !emptyConversationIsAuthoritative", root);
+    }
+
+    [Fact]
     public void ReactorTimeline_GroupsAssistantRunsInPresentationOrder()
     {
         var timeline = File.ReadAllText(Path.Combine(
