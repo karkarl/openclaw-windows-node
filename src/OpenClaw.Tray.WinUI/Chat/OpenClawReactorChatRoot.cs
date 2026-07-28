@@ -1059,6 +1059,31 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
                         message.Text));
             })
             .ToArray();
+        var queuedCountText = string.Format(
+            CultureInfo.CurrentCulture,
+            Localized("Chat_Composer_QueuedCountFormat", "{0} queued messages"),
+            queuedRows.Length);
+        Element queuedPanel = queuedRows.Length == 0
+            ? Empty()
+            : Border(
+                    VStack(
+                        8,
+                        TextBlock(queuedCountText)
+                            .FontSize(13)
+                            .Set(textBlock => textBlock.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold),
+                        ScrollView(VStack(4, queuedRows))
+                            .MaxHeight(props.IsCompact ? 144 : 220)
+                            .Set(scrollView =>
+                            {
+                                scrollView.VerticalScrollBarVisibility = ScrollingScrollBarVisibility.Auto;
+                                scrollView.HorizontalScrollBarVisibility = ScrollingScrollBarVisibility.Hidden;
+                                scrollView.HorizontalScrollMode = ScrollingScrollMode.Disabled;
+                                scrollView.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                            })))
+                .Set(border => Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(
+                    border,
+                    Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite))
+                .AutomationName(queuedCountText);
 
         void DismissSlashMenu() => setSlashMenuState(ReactorSlashMenuState.Closed);
 
@@ -1420,7 +1445,7 @@ public sealed class ReactorChatComposer : Component<ReactorChatComposerProps>
         if (attachmentRows.Length > 0)
             composerChildren.Add(VStack(4, attachmentRows));
         if (queuedRows.Length > 0)
-            composerChildren.Add(VStack(4, queuedRows));
+            composerChildren.Add(queuedPanel);
         composerChildren.Add(input);
         composerChildren.Add(toolbar);
 

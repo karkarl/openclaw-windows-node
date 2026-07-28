@@ -117,6 +117,21 @@ public sealed class ChatTimelinePresentationTests
     }
 
     [Fact]
+    public void ReactorComposer_BoundsAndAnnouncesQueuedMessages()
+    {
+        var root = File.ReadAllText(Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Chat",
+            "OpenClawReactorChatRoot.cs"));
+
+        Assert.Contains("ScrollView(VStack(4, queuedRows))", root);
+        Assert.Contains(".MaxHeight(props.IsCompact ? 144 : 220)", root);
+        Assert.Contains("AutomationLiveSetting.Polite", root);
+    }
+
+    [Fact]
     public void ReactorRoot_SettlesWelcomeEligibilityBeforeShowingEmptyState()
     {
         var root = File.ReadAllText(Path.Combine(
