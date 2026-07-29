@@ -99,8 +99,6 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <!-- Existing XAML surfaces are not Reactor render trees. Enable these rules as those surfaces migrate. -->
-    <NoWarn>$(NoWarn);REACTOR_A11Y_001;REACTOR_A11Y_002;REACTOR_DIALOG_001;REACTOR_THEME_004</NoWarn>
     <OpenClawRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</OpenClawRepoRoot>
     <OpenClawSetupDefaultConfig>$(OpenClawRepoRoot)src\OpenClaw.SetupEngine\default-config.json</OpenClawSetupDefaultConfig>
     <!-- RID-derived arch for tools/mxc/<arch>/wxc-exec.exe. Falls back to x64

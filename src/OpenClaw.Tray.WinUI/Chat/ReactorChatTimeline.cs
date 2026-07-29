@@ -333,6 +333,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         {
             Image("ms-appx:///Assets/Square44x44Logo.targetsize-256_altform-unplated.png")
                 .Size(64, 64)
+                .AutomationName("OpenClaw")
                 .HAlign(HorizontalAlignment.Center),
             Text(
                     LocalizedOrDefault("Chat_ZeroState_WelcomeTitle", "Welcome to OpenClaw"),
@@ -518,7 +519,9 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             : identity?.Emoji;
         Element content = !string.IsNullOrWhiteSpace(glyph)
             ? Text(glyph, 16, FontWeights.SemiBold, "TextFillColorSecondaryBrush").Center()
-            : Image("ms-appx:///Assets/Square44x44Logo.targetsize-256_altform-unplated.png").Size(36, 36);
+            : Image("ms-appx:///Assets/Square44x44Logo.targetsize-256_altform-unplated.png")
+                .Size(36, 36)
+                .AutomationName(identity?.DisplayName ?? "Assistant");
 
         return Border(content)
             .Size(36, 36)
@@ -706,7 +709,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         var glyphBackground = Border(glyph)
             .Size(32, 32)
             .CornerRadius(6)
-            .Background(new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)));
+            .Background(Theme.Ref("SubtleFillColorSecondaryBrush"));
         var name = Text(
                 attachment.Name,
                 13,
@@ -724,8 +727,8 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
             .Padding(8, 6, 12, 6)
             .CornerRadius(6)
             .BorderThickness(1)
-            .BorderBrush(new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)))
-            .Background(new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)))
+            .BorderBrush(Theme.Ref("ControlStrokeColorDefaultBrush"))
+            .Background(Theme.Ref("SubtleFillColorSecondaryBrush"))
             .AutomationName(attachment.Name);
     }
 
