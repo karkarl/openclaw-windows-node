@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using System.Runtime.CompilerServices;
@@ -16,21 +17,17 @@ file sealed record ItemsViewVerticalScrollControllerElement(
     int InitialTailIndex,
     string InitialTailRequestKey) : Element
 {
-    static ItemsViewVerticalScrollControllerElement()
-    {
+    static ItemsViewVerticalScrollControllerElement() =>
         ControlRegistry.RegisterDecorator<ItemsViewVerticalScrollControllerElement>(
             static () => new ItemsViewVerticalScrollControllerHandler());
-    }
 }
 
 file sealed class ItemsViewVerticalScrollControllerHandler
     : IDecoratorElementHandler<ItemsViewVerticalScrollControllerElement>
 {
-    private static readonly ConditionalWeakTable<WinUIItemsView, InitialTailPositioner> InitialTailPositioners = new();
+    private static readonly ConditionalWeakTable<WinUIItemsView, InitialTailPositioner> Positioners = new();
 
-    public UIElement Mount(
-        MountContext context,
-        ItemsViewVerticalScrollControllerElement element)
+    public UIElement Mount(MountContext context, ItemsViewVerticalScrollControllerElement element)
     {
         var control = context.MountChild(element.Child);
         if (control is not WinUIItemsView itemsView)
@@ -38,16 +35,11 @@ file sealed class ItemsViewVerticalScrollControllerHandler
 
         context.BindFor(itemsView, element).Reference(
             get: static value => value.ScrollBarRef,
-            set: static (control, scrollBar) =>
-                ((WinUIItemsView)control).VerticalScrollController = scrollBar?.ScrollController);
-
-        if (InitialTailPositioners.TryGetValue(itemsView, out var existingInitialTailPositioner))
-            existingInitialTailPositioner.Dispose();
-        InitialTailPositioners.Remove(itemsView);
-        var initialTailPositioner = new InitialTailPositioner(itemsView);
-        InitialTailPositioners.Add(itemsView, initialTailPositioner);
-        initialTailPositioner.Request(element.InitialTailIndex, element.InitialTailRequestKey);
-
+            set: static (value, scrollBar) =>
+                ((WinUIItemsView)value).VerticalScrollController = scrollBar?.ScrollController);
+        var positioner = new InitialTailPositioner(itemsView);
+        Positioners.Add(itemsView, positioner);
+        positioner.Request(element.InitialTailIndex, element.InitialTailRequestKey);
         return itemsView;
     }
 
@@ -60,173 +52,133 @@ file sealed class ItemsViewVerticalScrollControllerHandler
         var updated = context.ReconcileChild(oldElement.Child, newElement.Child, control);
         if (updated is not WinUIItemsView itemsView)
             throw new InvalidOperationException("ItemsView scroll controller binding requires an ItemsView child.");
-
-        if (!string.Equals(
-                oldElement.InitialTailRequestKey,
-                newElement.InitialTailRequestKey,
-                StringComparison.Ordinal)
-            && InitialTailPositioners.TryGetValue(itemsView, out var initialTailPositioner))
-        {
-            initialTailPositioner.Request(newElement.InitialTailIndex, newElement.InitialTailRequestKey);
-        }
-
+        if (!string.Equals(oldElement.InitialTailRequestKey, newElement.InitialTailRequestKey, StringComparison.Ordinal)
+            && Positioners.TryGetValue(itemsView, out var positioner))
+            positioner.Request(newElement.InitialTailIndex, newElement.InitialTailRequestKey);
         return itemsView;
     }
 
-    public V1UnmountDisposition Unmount(
-        UnmountContext context,
-        ItemsViewVerticalScrollControllerElement? element,
-        UIElement control)
+    public V1UnmountDisposition Unmount(UnmountContext context, ItemsViewVerticalScrollControllerElement? element, UIElement control)
     {
-        if (control is WinUIItemsView itemsView
-            && InitialTailPositioners.TryGetValue(itemsView, out var initialTailPositioner))
+        if (control is WinUIItemsView itemsView && Positioners.TryGetValue(itemsView, out var positioner))
         {
-            InitialTailPositioners.Remove(itemsView);
-            initialTailPositioner.Dispose();
+            Positioners.Remove(itemsView);
+            positioner.Dispose();
         }
-
         return V1UnmountDisposition.ContinueDefaultTraversal;
     }
 }
 
 file sealed class InitialTailPositioner : IDisposable
 {
-    private readonly WinUIItemsView _itemsView;
+    private readonly WinUIItemsView itemsView;
     private string? _requestKey;
     private int _tailIndex;
-    private int _requestVersion;
-    private bool _hasValidTailRequest;
+    private int _version;
+    private bool _valid;
     private bool _awaitingLayout;
     private WinUIScrollView? _awaitingScrollView;
     private bool _disposed;
 
     public InitialTailPositioner(WinUIItemsView itemsView)
     {
-        _itemsView = itemsView;
-        _itemsView.Loaded += OnLoaded;
-        _itemsView.Unloaded += OnUnloaded;
+        this.itemsView = itemsView;
+        itemsView.Loaded += OnLoaded;
+        itemsView.Unloaded += OnUnloaded;
     }
 
     public void Request(int tailIndex, string requestKey)
     {
         if (_disposed || string.Equals(_requestKey, requestKey, StringComparison.Ordinal))
-        {
             return;
-        }
-
         _requestKey = requestKey;
-        _requestVersion++;
-        DetachLayoutUpdated();
-        _hasValidTailRequest = tailIndex >= 0;
-        if (!_hasValidTailRequest)
-            return;
-
+        _version++;
+        DetachLayout();
+        _valid = tailIndex >= 0;
+        if (!_valid) return;
         _tailIndex = tailIndex;
-        if (_itemsView.IsLoaded)
-            AwaitCompletedLayout();
+        if (itemsView.IsLoaded) AwaitLayout();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
-        if (_hasValidTailRequest)
-            AwaitCompletedLayout();
+        if (_valid) AwaitLayout();
     }
 
-    private void AwaitCompletedLayout()
+    private void AwaitLayout()
     {
-        if (_disposed || !_hasValidTailRequest || !_itemsView.IsLoaded || _awaitingLayout)
-            return;
-
-        if (_itemsView.ScrollView is { IsLoaded: false } scrollView)
+        if (_disposed || !_valid || !itemsView.IsLoaded || _awaitingLayout) return;
+        if (itemsView.ScrollView is { IsLoaded: false } scrollView)
         {
             _awaitingScrollView = scrollView;
             scrollView.Loaded += OnScrollViewLoaded;
             return;
         }
-
         _awaitingLayout = true;
-        _itemsView.LayoutUpdated += OnLayoutUpdated;
+        itemsView.LayoutUpdated += OnLayoutUpdated;
     }
 
     private void OnScrollViewLoaded(object sender, RoutedEventArgs args)
     {
-        if (sender is WinUIScrollView scrollView)
-            scrollView.Loaded -= OnScrollViewLoaded;
+        if (sender is WinUIScrollView scrollView) scrollView.Loaded -= OnScrollViewLoaded;
         _awaitingScrollView = null;
-        AwaitCompletedLayout();
+        AwaitLayout();
     }
 
     private void OnLayoutUpdated(object? sender, object args)
     {
-        DetachLayoutUpdated();
-        if (!HasUsableScrollView())
+        DetachLayout();
+        if (itemsView.ScrollView is not { IsLoaded: true })
         {
-            AwaitCompletedLayout();
+            AwaitLayout();
             return;
         }
-
-        var requestVersion = _requestVersion;
-        var tailIndex = _tailIndex;
-        _itemsView.DispatcherQueue.TryEnqueue(() =>
+        var version = _version;
+        var index = _tailIndex;
+        itemsView.DispatcherQueue.TryEnqueue(() =>
         {
-            if (_disposed
-                || !_hasValidTailRequest
-                || !_itemsView.IsLoaded
-                || !HasUsableScrollView()
-                || requestVersion != _requestVersion)
+            if (_disposed || !_valid || !itemsView.IsLoaded || version != _version
+                || itemsView.ScrollView is not { IsLoaded: true })
             {
-                if (!_disposed && _hasValidTailRequest)
-                    AwaitCompletedLayout();
+                if (!_disposed && _valid) AwaitLayout();
                 return;
             }
-
-            _itemsView.StartBringItemIntoView(
-                tailIndex,
-                new BringIntoViewOptions
-                {
-                    AnimationDesired = false,
-                    VerticalAlignmentRatio = 1.0,
-                });
+            itemsView.StartBringItemIntoView(index, new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                VerticalAlignmentRatio = 1.0,
+            });
         });
     }
 
-    private bool HasUsableScrollView() =>
-        _itemsView.ScrollView is WinUIScrollView { IsLoaded: true };
-
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
-        // ChatPage keeps the mounted Reactor host across temporary unload/reload
-        // cycles. Preserve the pending initial-tail request so OnLoaded can
-        // position the reused ItemsView when it returns to the visual tree.
-        _requestVersion++;
-        DetachLayoutUpdated();
+        _version++;
+        DetachLayout();
     }
 
-    private void DetachLayoutUpdated()
+    private void DetachLayout()
     {
         if (_awaitingScrollView is { } scrollView)
         {
             scrollView.Loaded -= OnScrollViewLoaded;
             _awaitingScrollView = null;
         }
-
-        if (!_awaitingLayout)
-            return;
-
-        _itemsView.LayoutUpdated -= OnLayoutUpdated;
-        _awaitingLayout = false;
+        if (_awaitingLayout)
+        {
+            itemsView.LayoutUpdated -= OnLayoutUpdated;
+            _awaitingLayout = false;
+        }
     }
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
-
+        if (_disposed) return;
         _disposed = true;
-        _requestVersion++;
-        DetachLayoutUpdated();
-        _itemsView.Loaded -= OnLoaded;
-        _itemsView.Unloaded -= OnUnloaded;
+        _version++;
+        DetachLayout();
+        itemsView.Loaded -= OnLoaded;
+        itemsView.Unloaded -= OnUnloaded;
     }
 }
 
@@ -237,9 +189,5 @@ internal static class ItemsViewScrollControllerExtensions
         ElementRef<WinUIAnnotatedScrollBar> scrollBarRef,
         int initialTailIndex,
         string initialTailRequestKey) =>
-        new ItemsViewVerticalScrollControllerElement(
-            itemsView,
-            scrollBarRef,
-            initialTailIndex,
-            initialTailRequestKey);
+        new ItemsViewVerticalScrollControllerElement(itemsView, scrollBarRef, initialTailIndex, initialTailRequestKey);
 }

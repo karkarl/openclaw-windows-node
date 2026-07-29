@@ -1112,6 +1112,7 @@ internal sealed record ReactorTimelineRow(
 
     public static ReactorTimelineRow Empty(ReactorChatTimelineProps props) =>
         new("timeline:empty", ReactorTimelineRowKind.Empty, props, null);
+
 }
 
 internal enum ReactorTimelineRowKind
