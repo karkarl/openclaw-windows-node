@@ -55,6 +55,8 @@ file sealed class ItemsViewVerticalScrollControllerHandler
         if (!string.Equals(oldElement.InitialTailRequestKey, newElement.InitialTailRequestKey, StringComparison.Ordinal)
             && Positioners.TryGetValue(itemsView, out var positioner))
             positioner.Request(newElement.InitialTailIndex, newElement.InitialTailRequestKey);
+        else if (Positioners.TryGetValue(itemsView, out var existingPositioner))
+            existingPositioner.UpdateTailIndex(newElement.InitialTailIndex);
         return itemsView;
     }
 
@@ -78,6 +80,8 @@ file sealed class InitialTailPositioner : IDisposable
     private bool _valid;
     private bool _awaitingLayout;
     private WinUIScrollView? _awaitingScrollView;
+    private WinUIScrollView? _scrollView;
+    private bool _following;
     private bool _disposed;
 
     public InitialTailPositioner(WinUIItemsView itemsView)
@@ -97,7 +101,13 @@ file sealed class InitialTailPositioner : IDisposable
         _valid = tailIndex >= 0;
         if (!_valid) return;
         _tailIndex = tailIndex;
+        SetFollowing(true);
         if (itemsView.IsLoaded) AwaitLayout();
+    }
+
+    public void UpdateTailIndex(int tailIndex)
+    {
+        _tailIndex = tailIndex;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)
@@ -148,7 +158,47 @@ file sealed class InitialTailPositioner : IDisposable
                 AnimationDesired = false,
                 VerticalAlignmentRatio = 1.0,
             });
+            AttachScrollView();
+            ApplyFollowAnchor();
         });
+    }
+
+    private void AttachScrollView()
+    {
+        if (ReferenceEquals(_scrollView, itemsView.ScrollView))
+            return;
+
+        if (_scrollView is not null)
+            _scrollView.ViewChanged -= OnViewChanged;
+        _scrollView = itemsView.ScrollView;
+        if (_scrollView is not null)
+            _scrollView.ViewChanged += OnViewChanged;
+    }
+
+    private void OnViewChanged(WinUIScrollView sender, object args)
+    {
+        if (_tailIndex < 0
+            || !itemsView.TryGetItemIndex(0.5, 1.0, out var bottomIndex))
+        {
+            return;
+        }
+
+        SetFollowing(bottomIndex >= _tailIndex);
+    }
+
+    private void SetFollowing(bool following)
+    {
+        if (_following == following)
+            return;
+
+        _following = following;
+        ApplyFollowAnchor();
+    }
+
+    private void ApplyFollowAnchor()
+    {
+        if (itemsView.ScrollView is { IsLoaded: true } scrollView)
+            scrollView.VerticalAnchorRatio = _following ? 1.0 : double.NaN;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
@@ -177,6 +227,9 @@ file sealed class InitialTailPositioner : IDisposable
         _disposed = true;
         _version++;
         DetachLayout();
+        if (_scrollView is not null)
+            _scrollView.ViewChanged -= OnViewChanged;
+        _scrollView = null;
         itemsView.Loaded -= OnLoaded;
         itemsView.Unloaded -= OnUnloaded;
     }
