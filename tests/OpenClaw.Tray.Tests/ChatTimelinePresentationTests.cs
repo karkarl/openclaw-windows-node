@@ -59,18 +59,18 @@ public sealed class ChatTimelinePresentationTests
             "Chat",
             "ReactorItemsViewScrollController.cs"));
 
-        Assert.Contains("_itemsView.Loaded += OnLoaded", binding);
-        Assert.Contains("_itemsView.LayoutUpdated += OnLayoutUpdated", binding);
-        Assert.Contains("_itemsView.DispatcherQueue.TryEnqueue", binding);
-        Assert.Contains("_itemsView.StartBringItemIntoView(", binding);
+        Assert.Contains("itemsView.Loaded += OnLoaded", binding);
+        Assert.Contains("itemsView.LayoutUpdated += OnLayoutUpdated", binding);
+        Assert.Contains("itemsView.DispatcherQueue.TryEnqueue", binding);
+        Assert.Contains("itemsView.StartBringItemIntoView(", binding);
         Assert.Contains("VerticalAlignmentRatio = 1.0", binding);
-        Assert.Contains("_hasValidTailRequest = tailIndex >= 0", binding);
-        Assert.Contains("_itemsView.Unloaded += OnUnloaded", binding);
-        Assert.Contains("_itemsView.Loaded -= OnLoaded", binding);
-        Assert.Contains("_itemsView.LayoutUpdated -= OnLayoutUpdated", binding);
+        Assert.Contains("_valid = tailIndex >= 0", binding);
+        Assert.Contains("itemsView.Unloaded += OnUnloaded", binding);
+        Assert.Contains("itemsView.Loaded -= OnLoaded", binding);
+        Assert.Contains("itemsView.LayoutUpdated -= OnLayoutUpdated", binding);
         Assert.DoesNotContain("ChangeView", binding);
         Assert.DoesNotContain("UpdateLayout", binding);
-        Assert.DoesNotContain("VerticalAnchorRatio", binding);
+        Assert.Contains("scrollView.VerticalAnchorRatio = _following ? 1.0 : double.NaN", binding);
     }
 
     [Fact]
