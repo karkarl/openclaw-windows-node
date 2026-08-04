@@ -1346,7 +1346,7 @@ public sealed partial class ConnectionPage : Page
             {
                 Glyph = stateGlyph,
                 FontSize = 10,
-                Style = (Style)Resources[textStyleKey],
+                Style = (Style)Resources[iconStyleKey],
                 VerticalAlignment = VerticalAlignment.Center,
                 IsTextScaleFactorEnabled = false,
             };

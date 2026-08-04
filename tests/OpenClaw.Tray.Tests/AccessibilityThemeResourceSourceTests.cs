@@ -29,6 +29,12 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("NavView.Resources[\"Agents_Icon\"]", hub);
         Assert.DoesNotContain("<IconSourceElement", hubXaml);
         Assert.DoesNotContain("FontIconSource", hubXaml);
+        var stateIconBlock = connection[
+            connection.IndexOf("if (stateGlyph != null)", StringComparison.Ordinal)
+            ..connection.IndexOf("content.Children.Add(stateIcon)", connection.IndexOf(
+                "if (stateGlyph != null)", StringComparison.Ordinal), StringComparison.Ordinal)];
+        Assert.Contains("Style = (Style)Resources[iconStyleKey]", stateIconBlock);
+        Assert.DoesNotContain("Style = (Style)Resources[textStyleKey]", stateIconBlock);
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", resources);
         Assert.Contains("SystemColorWindowColor", resources);
         Assert.Contains("ChatUserBubbleSelectionHighlightBrush", resources);
