@@ -385,25 +385,25 @@
                 <ResourceDictionary>
                 <ResourceDictionary.ThemeDictionaries>
                     <ResourceDictionary x:Key="Default">
-                        <ImageIconSource x:Key="Chat_IconSource" ImageSource="{StaticResource Chat_Icon}"/>
-                        <ImageIconSource x:Key="Connection_IconSource" ImageSource="{StaticResource Connection_Icon}"/>
-                        <ImageIconSource x:Key="Sessions_IconSource" ImageSource="{StaticResource Sessions_Icon}"/>
-                        <ImageIconSource x:Key="Skills_IconSource" ImageSource="{StaticResource Skills_Icon}"/>
-                        <ImageIconSource x:Key="Channels_IconSource" ImageSource="{StaticResource Channels_Icon}"/>
-                        <ImageIconSource x:Key="Instances_IconSource" ImageSource="{StaticResource Instances_Icon}"/>
-                        <ImageIconSource x:Key="Advanced_IconSource" ImageSource="{StaticResource Advanced_Icon}"/>
-                        <ImageIconSource x:Key="AgentEvents_IconSource" ImageSource="{StaticResource AgentEvents_Icon}"/>
-                        <ImageIconSource x:Key="Agents_IconSource" ImageSource="{StaticResource Agents_Icon}"/>
-                        <ImageIconSource x:Key="Bindings_IconSource" ImageSource="{StaticResource Bindings_Icon}"/>
-                        <ImageIconSource x:Key="Config_IconSource" ImageSource="{StaticResource Config_Icon}"/>
-                        <ImageIconSource x:Key="Usage_IconSource" ImageSource="{StaticResource Usage_Icon}"/>
-                        <ImageIconSource x:Key="Cron_IconSource" ImageSource="{StaticResource Cron_Icon}"/>
-                        <ImageIconSource x:Key="Voice_IconSource" ImageSource="{StaticResource Voice_Icon}"/>
-                        <ImageIconSource x:Key="Settings_IconSource" ImageSource="{StaticResource Settings_Icon}"/>
-                        <ImageIconSource x:Key="Permissions_IconSource" ImageSource="{StaticResource Permissions_Icon}"/>
-                        <ImageIconSource x:Key="Sandbox_IconSource" ImageSource="{StaticResource Sandbox_Icon}"/>
-                        <ImageIconSource x:Key="Activity_IconSource" ImageSource="{StaticResource Activity_Icon}"/>
-                        <ImageIconSource x:Key="Debug_IconSource" ImageSource="{StaticResource Debug_Icon}"/>
+                        <ImageIconSource x:Key="Chat_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Chat.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Connection_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Connection.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Sessions_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Sessions.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Skills_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Skills.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Channels_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Channels.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Instances_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Instances.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Advanced_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Advanced.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="AgentEvents_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/AgentEvents.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Agents_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Agents.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Bindings_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Bindings.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Config_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Config.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Usage_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Usage.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Cron_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Cron.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Voice_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Voice.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Settings_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Settings.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Permissions_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Permissions.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Sandbox_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Sandbox.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Activity_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Activity.svg"/></ImageIconSource.ImageSource></ImageIconSource>
+                        <ImageIconSource x:Key="Debug_IconSource"><ImageIconSource.ImageSource><SvgImageSource UriSource="ms-appx:///Assets/SidebarIcons/Debug.svg"/></ImageIconSource.ImageSource></ImageIconSource>
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="HighContrast">
                         <SymbolIconSource x:Key="Chat_IconSource" Symbol="Message"/>
@@ -435,31 +435,6 @@
                      as the WinUI default once rows are bigger. -->
                 <Thickness x:Key="NavigationViewItemSeparatorMargin">0,2,0,2</Thickness>
 
-                <!-- Shared SvgImageSource resources for colorful sidebar icons.
-                     Defined once so each NavigationViewItem references the same decoded SVG
-                     (avoids per-instance parse cost; also makes the XAML→ImageSource path
-                     explicit instead of relying on implicit URI→SvgImageSource conversion).
-                     The dynamic agent-list code (HubWindow.xaml.cs) also looks up the
-                     "Agents_Icon" key from this dictionary. -->
-                <SvgImageSource x:Key="Chat_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Chat.svg"/>
-                <SvgImageSource x:Key="Connection_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Connection.svg"/>
-                <SvgImageSource x:Key="Sessions_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Sessions.svg"/>
-                <SvgImageSource x:Key="Skills_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Skills.svg"/>
-                <SvgImageSource x:Key="Channels_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Channels.svg"/>
-                <SvgImageSource x:Key="Instances_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Instances.svg"/>
-                <SvgImageSource x:Key="Advanced_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Advanced.svg"/>
-                <SvgImageSource x:Key="AgentEvents_Icon" UriSource="ms-appx:///Assets/SidebarIcons/AgentEvents.svg"/>
-                <SvgImageSource x:Key="Agents_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Agents.svg"/>
-                <SvgImageSource x:Key="Bindings_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Bindings.svg"/>
-                <SvgImageSource x:Key="Config_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Config.svg"/>
-                <SvgImageSource x:Key="Usage_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Usage.svg"/>
-                <SvgImageSource x:Key="Cron_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Cron.svg"/>
-                <SvgImageSource x:Key="Voice_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Voice.svg"/>
-                <SvgImageSource x:Key="Settings_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Settings.svg"/>
-                <SvgImageSource x:Key="Permissions_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Permissions.svg"/>
-                <SvgImageSource x:Key="Sandbox_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Sandbox.svg"/>
-                <SvgImageSource x:Key="Activity_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Activity.svg"/>
-                <SvgImageSource x:Key="Debug_Icon" UriSource="ms-appx:///Assets/SidebarIcons/Debug.svg"/>
                 <Style x:Key="AgentNavigationIconStyle" TargetType="IconSourceElement">
                     <Setter Property="IconSource" Value="{ThemeResource Agents_IconSource}"/>
                 </Style>

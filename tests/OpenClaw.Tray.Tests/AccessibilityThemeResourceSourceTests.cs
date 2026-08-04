@@ -30,6 +30,13 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", hubXaml);
         Assert.Contains("SymbolIconSource x:Key=\"Chat_IconSource\"", hubXaml);
         Assert.DoesNotContain("FontIconSource", hubXaml);
+        var chatIconSource = hubXaml[
+            hubXaml.IndexOf("<ImageIconSource x:Key=\"Chat_IconSource\"", StringComparison.Ordinal)
+            ..hubXaml.IndexOf("</ImageIconSource>", hubXaml.IndexOf(
+                "<ImageIconSource x:Key=\"Chat_IconSource\"", StringComparison.Ordinal), StringComparison.Ordinal)];
+        Assert.Contains("ImageIconSource.ImageSource", chatIconSource);
+        Assert.Contains("SvgImageSource UriSource=\"ms-appx:///Assets/SidebarIcons/Chat.svg\"", chatIconSource);
+        Assert.DoesNotContain("StaticResource", chatIconSource);
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", resources);
         Assert.Contains("SystemColorWindowColor", resources);
         Assert.Contains("ChatUserBubbleSelectionHighlightBrush", resources);
