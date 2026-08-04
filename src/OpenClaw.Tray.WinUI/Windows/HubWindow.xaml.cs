@@ -98,7 +98,6 @@ public sealed partial class HubWindow : WindowEx
         InitializeComponent();
         Title = AppIdentity.DisplayName;
         RefreshDiagnosticsNavVisibility();
-        ApplyHighContrastFallbackIfNeeded();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         Closed += (s, e) =>
@@ -1394,99 +1393,11 @@ public sealed partial class HubWindow : WindowEx
         }
     }
 
-    #region High Contrast icon fallback
-
-    // Maps NavigationViewItem.Tag -> Segoe Fluent Icons glyph used as fallback
-    // when Windows High Contrast is active. FontIcon uses the system foreground
-    // brush so it auto-adapts to every HC variant (HC Black/White/#1/#2); our
-    // multi-color SVGs don't, so we swap them out at construction. This mirrors
-    // the original gray Segoe Fluent Icons that were here before the colorful
-    // refresh — same glyphs as those Windows users learned in earlier builds.
-    private static readonly Dictionary<string, string> s_highContrastGlyphFallback = new()
-    {
-        { "chat",        "\uE8BD" },
-        { "connection",  "\uE839" },
-        { "sessions",    "\uE8F2" },
-        { "skills",      "\uE945" },
-        { "channels",    "\uEC05" },
-        { "instances",   "\uE977" },
-        { "agentevents", "\uE943" },
-        { "bindings",    "\uE8AD" },
-        { "config",      "\uE90F" },
-        { "usage",       "\uE9D9" },
-        { "cron",        "\uE787" },
-        { "voice",       "\uE720" },
-        { "settings",    "\uE713" },
-        { "permissions", "\uEA18" },
-        { "sandbox",     "\uE72E" },
-        { "activity",    "\uEA95" },
-        { "notifications", "\uE7F4" },
-        { "debug",       "\uEBE8" },
-    };
-
-    // Glyphs for the two parent NavigationViewItems that don't carry a Tag
-    // ("Advanced" group and "Agents" group). These also feed the dynamic agent
-    // items added at runtime.
-    private const string AdvancedGroupGlyph = "\uE950";
-    private const string AgentsGroupGlyph = "\uE99A";
-
-    private bool _isHighContrast;
-
-    private void ApplyHighContrastFallbackIfNeeded()
-    {
-        try
-        {
-            var settings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
-            _isHighContrast = settings.HighContrast;
-        }
-        catch
-        {
-            _isHighContrast = false;
-            return;
-        }
-        if (!_isHighContrast) return;
-        SwapToFontIcons(NavView.MenuItems);
-        SwapToFontIcons(NavView.FooterMenuItems);
-    }
-
-    private void SwapToFontIcons(IList<object> items)
-    {
-        foreach (var obj in items)
-        {
-            if (obj is not NavigationViewItem item) continue;
-            item.Icon = ResolveHighContrastIcon(item);
-            if (item.MenuItems.Count > 0)
-                SwapToFontIcons(item.MenuItems);
-        }
-    }
-
-    private IconElement ResolveHighContrastIcon(NavigationViewItem item)
-    {
-        if (item.Tag is string tag)
-        {
-            if (s_highContrastGlyphFallback.TryGetValue(tag, out var glyph))
-                return new FontIcon { Glyph = glyph };
-            if (tag.StartsWith("agent:", StringComparison.Ordinal))
-                return new FontIcon { Glyph = AgentsGroupGlyph };
-        }
-        if (item == AgentsNavItem)
-            return new FontIcon { Glyph = AgentsGroupGlyph };
-        if (item.Content is string content && content.Equals("Advanced", StringComparison.OrdinalIgnoreCase))
-            return new FontIcon { Glyph = AdvancedGroupGlyph };
-        // Fall back to whatever the XAML provided (keeps the colorful icon
-        // rather than blanking it out for unmapped items).
-        return item.Icon ?? new FontIcon { Glyph = "\uE700" };
-    }
-
     private IconElement BuildAgentItemIcon()
     {
-        if (_isHighContrast)
-            return new FontIcon { Glyph = AgentsGroupGlyph };
-        return new ImageIcon
+        return new IconSourceElement
         {
-            Source = (Microsoft.UI.Xaml.Media.ImageSource)NavView.Resources["Agents_Icon"]
+            Style = (Style)NavView.Resources["AgentNavigationIconStyle"]
         };
     }
-
-    #endregion
 }
