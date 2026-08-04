@@ -30,6 +30,7 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("annotatedScrollBarRef,", timeline);
         Assert.Contains("rows.Count - 1", timeline);
         Assert.Contains("initialTailRequestKey", timeline);
+        Assert.Contains("var displayedTailKey = rows.Count > 0 ? rows[^1].Key : null", timeline);
         Assert.DoesNotContain("ItemsRepeater(", timeline);
         Assert.DoesNotContain("ScrollView(", timeline);
     }
@@ -50,7 +51,7 @@ public sealed class ChatTimelinePresentationTests
     }
 
     [Fact]
-    public void ReactorTimeline_ThrottlesStreamingAssistantTailWithoutPersistentAnchoring()
+    public void ReactorTimeline_UsesStableBottomAnchoringAndDiscreteTailRequests()
     {
         var binding = File.ReadAllText(Path.Combine(
             TestRepositoryPaths.GetRepositoryRoot(),
@@ -64,12 +65,11 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("itemsView.DispatcherQueue.TryEnqueue", binding);
         Assert.Contains("itemsView.StartBringItemIntoView(", binding);
         Assert.Contains("VerticalAlignmentRatio = 1.0", binding);
-        Assert.Contains("var changed = _tailIndex != tailIndex", binding);
-        Assert.Contains("IsStreamingTailUpdate(previousStreamingTail, currentStreamingTail)", binding);
-        Assert.Contains("RequestStreamingTailFollow(currentStreamingTail!)", binding);
-        Assert.Contains("StreamingTailFollowIntervalMs = 125", binding);
-        Assert.Contains("OnStreamingTailFollowTick", binding);
-        Assert.Contains("StopStreamingTailFollow()", binding);
+        Assert.Contains("!string.Equals(_displayedTailKey, displayedTailKey, StringComparison.Ordinal)", binding);
+        Assert.Contains("_following = IsNearBottom(sender)", binding);
+        Assert.Contains("displayedTailKey is not null", binding);
+        Assert.Contains("_scrollView.VerticalAnchorRatio = 1.0", binding);
+        Assert.Contains("_scrollView.VerticalAnchorRatio = double.NaN", binding);
         Assert.Contains("if (_tailRequestQueued)", binding);
         Assert.Contains("_valid = tailIndex >= 0", binding);
         Assert.Contains("itemsView.Unloaded += OnUnloaded", binding);
@@ -77,10 +77,20 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("itemsView.LayoutUpdated -= OnLayoutUpdated", binding);
         Assert.DoesNotContain("ChangeView", binding);
         Assert.DoesNotContain("UpdateLayout", binding);
-        Assert.DoesNotContain("VerticalAnchorRatio =", binding);
         Assert.DoesNotContain("TailSettle", binding);
         Assert.DoesNotContain("ScrollTo(", binding);
         Assert.DoesNotContain("ScrollCompleted", binding);
+        Assert.DoesNotContain("DispatcherTimer", binding);
+        Assert.DoesNotContain("TextLength != current.TextLength", binding);
+        Assert.DoesNotContain("ReactorStreamingTailState", binding);
+        Assert.DoesNotContain("QueueBottomAnchoringUpdate", binding);
+        Assert.DoesNotContain("ApplyBottomAnchoring", binding);
+
+        var viewChangedStart = binding.IndexOf("private void OnViewChanged", StringComparison.Ordinal);
+        var tailRequestStart = binding.IndexOf("private void QueueTailRequest", viewChangedStart, StringComparison.Ordinal);
+        var viewChanged = binding[viewChangedStart..tailRequestStart];
+        Assert.DoesNotContain("VerticalAnchorRatio", viewChanged);
+        Assert.DoesNotContain("StartBringItemIntoView", viewChanged);
     }
 
     [Fact]

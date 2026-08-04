@@ -38,11 +38,6 @@ public sealed record ReactorChatIdentity(
     string? Avatar = null,
     string? Emoji = null);
 
-internal sealed record ReactorStreamingTailState(
-    string EntryId,
-    int TextLength,
-    bool IsStreaming);
-
 /// <summary>
 /// Reactor-owned production timeline. Reactor's keyed ItemsView handles row
 /// reconciliation, container realization, scrolling, and virtualization.
@@ -105,7 +100,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
         var rows = BuildRows(props);
         var initialTailRequestKey =
             $"{props.Timeline.SessionId ?? "none"}|{props.Timeline.TimelineGeneration}|{props.HistoryRevision}|{props.Timeline.ScrollToBottomToken}";
-        var streamingTailState = GetStreamingTailState(props.Timeline.Entries);
+        var displayedTailKey = rows.Count > 0 ? rows[^1].Key : null;
         void SetEntryHovered(string entryId, bool isHovered)
         {
             if (isHovered)
@@ -166,7 +161,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
                     annotatedScrollBarRef,
                     rows.Count - 1,
                     initialTailRequestKey,
-                    streamingTailState)
+                    displayedTailKey)
                 .Grid(column: 0)
                 .AutomationName("Chat messages")
                 .HAlign(HorizontalAlignment.Stretch)
@@ -185,15 +180,6 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
 
     public static string SyntheticRowKey(OpenClawChatTimelineProps props, string id, ChatTimelineItemKind kind) =>
         $"thread:{props.SessionId ?? "none"}|generation:{props.TimelineGeneration}|kind:{kind}|synthetic:{id}";
-
-    private static ReactorStreamingTailState? GetStreamingTailState(
-        IReadOnlyList<ChatTimelineItem> entries)
-    {
-        if (entries.LastOrDefault() is not { Kind: ChatTimelineItemKind.Assistant } entry)
-            return null;
-
-        return new ReactorStreamingTailState(entry.Id, entry.Text.Length, entry.IsStreaming);
-    }
 
     private static IReadOnlyList<ReactorTimelineRow> BuildRows(ReactorChatTimelineProps props)
     {
