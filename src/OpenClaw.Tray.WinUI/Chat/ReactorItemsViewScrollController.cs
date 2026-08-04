@@ -1,12 +1,12 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
-using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using System.Runtime.CompilerServices;
 using WinUIAnnotatedScrollBar = Microsoft.UI.Xaml.Controls.AnnotatedScrollBar;
 using WinUIItemsView = Microsoft.UI.Xaml.Controls.ItemsView;
+using WinUIScrollingInteractionState = Microsoft.UI.Xaml.Controls.ScrollingInteractionState;
 using WinUIScrollView = Microsoft.UI.Xaml.Controls.ScrollView;
 
 namespace OpenClawTray.Chat;
@@ -15,7 +15,8 @@ file sealed record ItemsViewVerticalScrollControllerElement(
     Element Child,
     ElementRef<WinUIAnnotatedScrollBar> ScrollBarRef,
     int InitialTailIndex,
-    string InitialTailRequestKey) : Element
+    string InitialTailRequestKey,
+    ReactorStreamingTailState? StreamingTailState) : Element
 {
     static ItemsViewVerticalScrollControllerElement() =>
         ControlRegistry.RegisterDecorator<ItemsViewVerticalScrollControllerElement>(
@@ -56,7 +57,10 @@ file sealed class ItemsViewVerticalScrollControllerHandler
             && Positioners.TryGetValue(itemsView, out var positioner))
             positioner.Request(newElement.InitialTailIndex, newElement.InitialTailRequestKey);
         else if (Positioners.TryGetValue(itemsView, out var existingPositioner))
-            existingPositioner.UpdateTailIndex(newElement.InitialTailIndex);
+            existingPositioner.UpdateTailIndex(
+                newElement.InitialTailIndex,
+                oldElement.StreamingTailState,
+                newElement.StreamingTailState);
         return itemsView;
     }
 
@@ -73,6 +77,9 @@ file sealed class ItemsViewVerticalScrollControllerHandler
 
 file sealed class InitialTailPositioner : IDisposable
 {
+    private const double FollowThreshold = 60;
+    private const int StreamingTailFollowIntervalMs = 125;
+
     private readonly WinUIItemsView itemsView;
     private string? _requestKey;
     private int _tailIndex;
@@ -81,7 +88,12 @@ file sealed class InitialTailPositioner : IDisposable
     private bool _awaitingLayout;
     private WinUIScrollView? _awaitingScrollView;
     private WinUIScrollView? _scrollView;
+    private DispatcherTimer? _streamingTailFollowTimer;
+    private ReactorStreamingTailState? _pendingStreamingTail;
     private bool _following;
+    private bool _tailRequestQueued;
+    private bool _streamingTailFollowPending;
+    private bool _userInteractionObserved;
     private bool _disposed;
 
     public InitialTailPositioner(WinUIItemsView itemsView)
@@ -95,42 +107,66 @@ file sealed class InitialTailPositioner : IDisposable
     {
         if (_disposed || string.Equals(_requestKey, requestKey, StringComparison.Ordinal))
             return;
+
         _requestKey = requestKey;
         _version++;
         DetachLayout();
+        StopStreamingTailFollow();
         _valid = tailIndex >= 0;
-        if (!_valid) return;
+        if (!_valid)
+            return;
+
         _tailIndex = tailIndex;
-        SetFollowing(true);
-        if (itemsView.IsLoaded) AwaitLayout();
+        _following = true;
+        if (itemsView.IsLoaded)
+            AwaitLayout();
     }
 
-    public void UpdateTailIndex(int tailIndex)
+    public void UpdateTailIndex(
+        int tailIndex,
+        ReactorStreamingTailState? previousStreamingTail,
+        ReactorStreamingTailState? currentStreamingTail)
     {
+        var changed = _tailIndex != tailIndex;
         _tailIndex = tailIndex;
+        if (changed && _following && tailIndex >= 0 && itemsView.IsLoaded)
+        {
+            StopStreamingTailFollow();
+            QueueTailRequest(_version);
+            return;
+        }
+
+        if (_following && IsStreamingTailUpdate(previousStreamingTail, currentStreamingTail))
+            RequestStreamingTailFollow(currentStreamingTail!);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
-        if (_valid) AwaitLayout();
+        if (_valid)
+            AwaitLayout();
     }
 
     private void AwaitLayout()
     {
-        if (_disposed || !_valid || !itemsView.IsLoaded || _awaitingLayout) return;
+        if (_disposed || !_valid || !itemsView.IsLoaded || _awaitingLayout)
+            return;
+
         if (itemsView.ScrollView is { IsLoaded: false } scrollView)
         {
             _awaitingScrollView = scrollView;
             scrollView.Loaded += OnScrollViewLoaded;
             return;
         }
+
         _awaitingLayout = true;
         itemsView.LayoutUpdated += OnLayoutUpdated;
     }
 
     private void OnScrollViewLoaded(object sender, RoutedEventArgs args)
     {
-        if (sender is WinUIScrollView scrollView) scrollView.Loaded -= OnScrollViewLoaded;
+        if (sender is WinUIScrollView scrollView)
+            scrollView.Loaded -= OnScrollViewLoaded;
+
         _awaitingScrollView = null;
         AwaitLayout();
     }
@@ -143,6 +179,7 @@ file sealed class InitialTailPositioner : IDisposable
             AwaitLayout();
             return;
         }
+
         var version = _version;
         var index = _tailIndex;
         itemsView.DispatcherQueue.TryEnqueue(() =>
@@ -150,61 +187,142 @@ file sealed class InitialTailPositioner : IDisposable
             if (_disposed || !_valid || !itemsView.IsLoaded || version != _version
                 || itemsView.ScrollView is not { IsLoaded: true })
             {
-                if (!_disposed && _valid) AwaitLayout();
+                if (!_disposed && _valid)
+                    AwaitLayout();
                 return;
             }
-            itemsView.StartBringItemIntoView(index, new BringIntoViewOptions
-            {
-                AnimationDesired = false,
-                VerticalAlignmentRatio = 1.0,
-            });
+
             AttachScrollView();
-            ApplyFollowAnchor();
+            StartTailRequest(index);
         });
     }
 
     private void AttachScrollView()
     {
-        if (ReferenceEquals(_scrollView, itemsView.ScrollView))
+        var nextScrollView = itemsView.ScrollView;
+        if (ReferenceEquals(_scrollView, nextScrollView))
             return;
 
-        if (_scrollView is not null)
-            _scrollView.ViewChanged -= OnViewChanged;
-        _scrollView = itemsView.ScrollView;
+        DetachScrollView();
+        _scrollView = nextScrollView;
         if (_scrollView is not null)
             _scrollView.ViewChanged += OnViewChanged;
     }
 
     private void OnViewChanged(WinUIScrollView sender, object args)
     {
-        if (_tailIndex < 0
-            || !itemsView.TryGetItemIndex(0.5, 1.0, out var bottomIndex))
+        if (sender.State == WinUIScrollingInteractionState.Interaction)
         {
+            _following = false;
+            _userInteractionObserved = true;
+            StopStreamingTailFollow();
             return;
         }
 
-        SetFollowing(bottomIndex >= _tailIndex);
+        if (_userInteractionObserved)
+        {
+            _userInteractionObserved = false;
+            _following = IsNearBottom(sender);
+        }
     }
 
-    private void SetFollowing(bool following)
+    private void QueueTailRequest(int version)
     {
-        if (_following == following)
+        if (_tailRequestQueued)
             return;
 
-        _following = following;
-        ApplyFollowAnchor();
+        _tailRequestQueued = true;
+        if (!itemsView.DispatcherQueue.TryEnqueue(() =>
+        {
+            _tailRequestQueued = false;
+            if (_disposed || !_valid || !itemsView.IsLoaded || version != _version || !_following)
+            {
+                return;
+            }
+
+            StartTailRequest(_tailIndex);
+        }))
+        {
+            _tailRequestQueued = false;
+            _following = false;
+        }
     }
 
-    private void ApplyFollowAnchor()
+    private void StartTailRequest(int index)
     {
-        if (itemsView.ScrollView is { IsLoaded: true } scrollView)
-            scrollView.VerticalAnchorRatio = _following ? 1.0 : double.NaN;
+        if (itemsView.ScrollView is not { IsLoaded: true })
+            return;
+
+        _following = true;
+        itemsView.StartBringItemIntoView(index, new BringIntoViewOptions
+        {
+            AnimationDesired = false,
+            VerticalAlignmentRatio = 1.0,
+        });
     }
+
+    private void RequestStreamingTailFollow(ReactorStreamingTailState streamingTail)
+    {
+        _pendingStreamingTail = streamingTail;
+        _streamingTailFollowPending = true;
+        _streamingTailFollowTimer ??= CreateStreamingTailFollowTimer();
+        if (!_streamingTailFollowTimer.IsEnabled)
+            _streamingTailFollowTimer.Start();
+    }
+
+    private DispatcherTimer CreateStreamingTailFollowTimer()
+    {
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(StreamingTailFollowIntervalMs),
+        };
+        timer.Tick += OnStreamingTailFollowTick;
+        return timer;
+    }
+
+    private void OnStreamingTailFollowTick(object? sender, object args)
+    {
+        _streamingTailFollowTimer?.Stop();
+        if (_disposed
+            || !_valid
+            || !_following
+            || !_streamingTailFollowPending
+            || !itemsView.IsLoaded
+            || _scrollView is not { IsLoaded: true, State: not WinUIScrollingInteractionState.Interaction })
+        {
+            StopStreamingTailFollow();
+            return;
+        }
+
+        _streamingTailFollowPending = false;
+        var streamingTail = _pendingStreamingTail;
+        _pendingStreamingTail = null;
+        StartTailRequest(_tailIndex);
+        if (streamingTail is { IsStreaming: true } && _following)
+            return;
+
+        StopStreamingTailFollow();
+    }
+
+    private static bool IsNearBottom(WinUIScrollView scrollView) =>
+        scrollView.ScrollableHeight - scrollView.VerticalOffset <= FollowThreshold;
+
+    private static bool IsStreamingTailUpdate(
+        ReactorStreamingTailState? previous,
+        ReactorStreamingTailState? current) =>
+        previous is not null
+        && current is not null
+        && string.Equals(previous.EntryId, current.EntryId, StringComparison.Ordinal)
+        && ((current.IsStreaming
+             && (!previous.IsStreaming || previous.TextLength != current.TextLength))
+            || (previous.IsStreaming && !current.IsStreaming));
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _version++;
         DetachLayout();
+        StopStreamingTailFollow();
+        DetachScrollView();
     }
 
     private void DetachLayout()
@@ -214,6 +332,7 @@ file sealed class InitialTailPositioner : IDisposable
             scrollView.Loaded -= OnScrollViewLoaded;
             _awaitingScrollView = null;
         }
+
         if (_awaitingLayout)
         {
             itemsView.LayoutUpdated -= OnLayoutUpdated;
@@ -221,15 +340,36 @@ file sealed class InitialTailPositioner : IDisposable
         }
     }
 
+    private void DetachScrollView()
+    {
+        if (_scrollView is not null)
+            _scrollView.ViewChanged -= OnViewChanged;
+
+        _scrollView = null;
+    }
+
+    private void StopStreamingTailFollow()
+    {
+        _streamingTailFollowTimer?.Stop();
+        _pendingStreamingTail = null;
+        _streamingTailFollowPending = false;
+    }
+
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
+
         _disposed = true;
         _version++;
         DetachLayout();
-        if (_scrollView is not null)
-            _scrollView.ViewChanged -= OnViewChanged;
-        _scrollView = null;
+        StopStreamingTailFollow();
+        if (_streamingTailFollowTimer is not null)
+        {
+            _streamingTailFollowTimer.Tick -= OnStreamingTailFollowTick;
+            _streamingTailFollowTimer = null;
+        }
+        DetachScrollView();
         itemsView.Loaded -= OnLoaded;
         itemsView.Unloaded -= OnUnloaded;
     }
@@ -241,6 +381,12 @@ internal static class ItemsViewScrollControllerExtensions
         this ItemsViewElement<T> itemsView,
         ElementRef<WinUIAnnotatedScrollBar> scrollBarRef,
         int initialTailIndex,
-        string initialTailRequestKey) =>
-        new ItemsViewVerticalScrollControllerElement(itemsView, scrollBarRef, initialTailIndex, initialTailRequestKey);
+        string initialTailRequestKey,
+        ReactorStreamingTailState? streamingTailState) =>
+        new ItemsViewVerticalScrollControllerElement(
+            itemsView,
+            scrollBarRef,
+            initialTailIndex,
+            initialTailRequestKey,
+            streamingTailState);
 }
