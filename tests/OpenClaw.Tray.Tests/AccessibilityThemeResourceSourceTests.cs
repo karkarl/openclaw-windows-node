@@ -24,19 +24,11 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("ChatUserBubbleSelectionStyle", timeline);
         Assert.Contains("ChatToolCardBorderStyle", timeline);
         Assert.Contains("ConnectionCapabilityPillSuccessBrush", connectionXaml);
-        Assert.Contains("IconSource=\"{ThemeResource Chat_IconSource}\"", hubXaml);
-        Assert.Contains("AgentNavigationIconStyle", hub);
-        Assert.Contains("IconSource\" Value=\"{ThemeResource Agents_IconSource}\"", hubXaml);
-        Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", hubXaml);
-        Assert.Contains("SymbolIconSource x:Key=\"Chat_IconSource\"", hubXaml);
+        Assert.Contains("ImageIcon Source=\"{StaticResource Chat_Icon}\"", hubXaml);
+        Assert.Contains("new ImageIcon", hub);
+        Assert.Contains("NavView.Resources[\"Agents_Icon\"]", hub);
+        Assert.DoesNotContain("<IconSourceElement", hubXaml);
         Assert.DoesNotContain("FontIconSource", hubXaml);
-        var chatIconSource = hubXaml[
-            hubXaml.IndexOf("<ImageIconSource x:Key=\"Chat_IconSource\"", StringComparison.Ordinal)
-            ..hubXaml.IndexOf("</ImageIconSource>", hubXaml.IndexOf(
-                "<ImageIconSource x:Key=\"Chat_IconSource\"", StringComparison.Ordinal), StringComparison.Ordinal)];
-        Assert.Contains("ImageIconSource.ImageSource", chatIconSource);
-        Assert.Contains("SvgImageSource UriSource=\"ms-appx:///Assets/SidebarIcons/Chat.svg\"", chatIconSource);
-        Assert.DoesNotContain("StaticResource", chatIconSource);
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", resources);
         Assert.Contains("SystemColorWindowColor", resources);
         Assert.Contains("ChatUserBubbleSelectionHighlightBrush", resources);

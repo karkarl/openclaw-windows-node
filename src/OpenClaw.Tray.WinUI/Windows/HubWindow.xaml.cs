@@ -1395,9 +1395,9 @@ public sealed partial class HubWindow : WindowEx
 
     private IconElement BuildAgentItemIcon()
     {
-        return new IconSourceElement
+        return new ImageIcon
         {
-            Style = (Style)NavView.Resources["AgentNavigationIconStyle"]
+            Source = (ImageSource)NavView.Resources["Agents_Icon"]
         };
     }
 }
