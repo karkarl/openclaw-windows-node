@@ -165,6 +165,25 @@ public sealed class ChatTimelinePresentationTests
     }
 
     [Fact]
+    public void ReactorComposer_LocalizesSettingsTooltipInEveryLocale()
+    {
+        var stringsDirectory = Path.Combine(
+            TestRepositoryPaths.GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Strings");
+
+        foreach (var resourceFile in Directory.EnumerateFiles(
+                     stringsDirectory,
+                     "Resources.resw",
+                     SearchOption.AllDirectories))
+        {
+            var resources = File.ReadAllText(resourceFile);
+            Assert.Contains("Chat_Composer_Tooltip_Settings", resources);
+        }
+    }
+
+    [Fact]
     public void ReactorRoot_SettlesWelcomeEligibilityBeforeShowingEmptyState()
     {
         var root = File.ReadAllText(Path.Combine(

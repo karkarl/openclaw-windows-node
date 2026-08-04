@@ -28,7 +28,8 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("AgentNavigationIconStyle", hub);
         Assert.Contains("IconSource\" Value=\"{ThemeResource Agents_IconSource}\"", hubXaml);
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", hubXaml);
-        Assert.Contains("FontIconSource x:Key=\"Chat_IconSource\"", hubXaml);
+        Assert.Contains("SymbolIconSource x:Key=\"Chat_IconSource\"", hubXaml);
+        Assert.DoesNotContain("FontIconSource", hubXaml);
         Assert.Contains("<ResourceDictionary x:Key=\"HighContrast\">", resources);
         Assert.Contains("SystemColorWindowColor", resources);
         Assert.Contains("ChatUserBubbleSelectionHighlightBrush", resources);

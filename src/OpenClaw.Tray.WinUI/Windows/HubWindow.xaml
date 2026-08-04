@@ -406,25 +406,25 @@
                         <ImageIconSource x:Key="Debug_IconSource" ImageSource="{StaticResource Debug_Icon}"/>
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="HighContrast">
-                        <FontIconSource x:Key="Chat_IconSource" Glyph="&#xE8BD;"/>
-                        <FontIconSource x:Key="Connection_IconSource" Glyph="&#xE839;"/>
-                        <FontIconSource x:Key="Sessions_IconSource" Glyph="&#xE8F2;"/>
-                        <FontIconSource x:Key="Skills_IconSource" Glyph="&#xE945;"/>
-                        <FontIconSource x:Key="Channels_IconSource" Glyph="&#xEC05;"/>
-                        <FontIconSource x:Key="Instances_IconSource" Glyph="&#xE977;"/>
-                        <FontIconSource x:Key="Advanced_IconSource" Glyph="&#xE950;"/>
-                        <FontIconSource x:Key="AgentEvents_IconSource" Glyph="&#xE943;"/>
-                        <FontIconSource x:Key="Agents_IconSource" Glyph="&#xE99A;"/>
-                        <FontIconSource x:Key="Bindings_IconSource" Glyph="&#xE8AD;"/>
-                        <FontIconSource x:Key="Config_IconSource" Glyph="&#xE90F;"/>
-                        <FontIconSource x:Key="Usage_IconSource" Glyph="&#xE9D9;"/>
-                        <FontIconSource x:Key="Cron_IconSource" Glyph="&#xE787;"/>
-                        <FontIconSource x:Key="Voice_IconSource" Glyph="&#xE720;"/>
-                        <FontIconSource x:Key="Settings_IconSource" Glyph="&#xE713;"/>
-                        <FontIconSource x:Key="Permissions_IconSource" Glyph="&#xEA18;"/>
-                        <FontIconSource x:Key="Sandbox_IconSource" Glyph="&#xE72E;"/>
-                        <FontIconSource x:Key="Activity_IconSource" Glyph="&#xEA95;"/>
-                        <FontIconSource x:Key="Debug_IconSource" Glyph="&#xEBE8;"/>
+                        <SymbolIconSource x:Key="Chat_IconSource" Symbol="Message"/>
+                        <SymbolIconSource x:Key="Connection_IconSource" Symbol="Remote"/>
+                        <SymbolIconSource x:Key="Sessions_IconSource" Symbol="Switch"/>
+                        <SymbolIconSource x:Key="Skills_IconSource" Symbol="Library"/>
+                        <SymbolIconSource x:Key="Channels_IconSource" Symbol="Audio"/>
+                        <SymbolIconSource x:Key="Instances_IconSource" Symbol="OtherUser"/>
+                        <SymbolIconSource x:Key="Advanced_IconSource" Symbol="More"/>
+                        <SymbolIconSource x:Key="AgentEvents_IconSource" Symbol="List"/>
+                        <SymbolIconSource x:Key="Agents_IconSource" Symbol="People"/>
+                        <SymbolIconSource x:Key="Bindings_IconSource" Symbol="Link"/>
+                        <SymbolIconSource x:Key="Config_IconSource" Symbol="Edit"/>
+                        <SymbolIconSource x:Key="Usage_IconSource" Symbol="View"/>
+                        <SymbolIconSource x:Key="Cron_IconSource" Symbol="Calendar"/>
+                        <SymbolIconSource x:Key="Voice_IconSource" Symbol="Microphone"/>
+                        <SymbolIconSource x:Key="Settings_IconSource" Symbol="Setting"/>
+                        <SymbolIconSource x:Key="Permissions_IconSource" Symbol="Permissions"/>
+                        <SymbolIconSource x:Key="Sandbox_IconSource" Symbol="ProtectedDocument"/>
+                        <SymbolIconSource x:Key="Activity_IconSource" Symbol="View"/>
+                        <SymbolIconSource x:Key="Debug_IconSource" Symbol="Help"/>
                     </ResourceDictionary>
                 </ResourceDictionary.ThemeDictionaries>
                 <!-- Match Windows 11 Settings: ~22px colorful icons in a default-height row.
