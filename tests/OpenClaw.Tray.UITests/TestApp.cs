@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 
@@ -76,6 +77,7 @@ internal sealed class TestApp : Application
             "<Setter Property='Foreground' Value='White' />" +
             "<Setter Property='CornerRadius' Value='4' />" +
             "</Style>");
+        AddChatUserBubbleSelectionStyle(resources);
 
         EnsureFluentBrushFallbacks(resources);
     }
@@ -86,6 +88,8 @@ internal sealed class TestApp : Application
         {
             TryAddBrushResource(resources, key, color);
         }
+
+        AddChatUserBubbleSelectionStyle(resources);
     }
 
     private bool TryGetResources(out ResourceDictionary resources)
@@ -132,5 +136,16 @@ internal sealed class TestApp : Application
         {
             // best-effort; missing key just means renderers fall back.
         }
+    }
+
+    private static void AddChatUserBubbleSelectionStyle(ResourceDictionary resources)
+    {
+        if (resources.ContainsKey("ChatUserBubbleSelectionStyle"))
+            return;
+
+        resources["ChatUserBubbleSelectionStyle"] = new Style
+        {
+            TargetType = typeof(RichTextBlock),
+        };
     }
 }
