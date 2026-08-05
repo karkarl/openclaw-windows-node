@@ -98,6 +98,7 @@ public sealed partial class HubWindow : WindowEx
         InitializeComponent();
         Title = AppIdentity.DisplayName;
         RefreshDiagnosticsNavVisibility();
+        ApplyHighContrastFallbackIfNeeded();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         Closed += (s, e) =>
@@ -1393,11 +1394,90 @@ public sealed partial class HubWindow : WindowEx
         }
     }
 
+    #region High Contrast icon fallback
+
+    // Fixed-color SVGs provide the normal Hub presentation. In High Contrast,
+    // App.xaml resolves this path to system-foreground Fluent glyphs without
+    // constructing or subscribing to the legacy WinRT accessibility API.
+    private static readonly Dictionary<string, string> s_highContrastGlyphFallback = new()
+    {
+        { "chat",        "\uE8BD" },
+        { "connection",  "\uE839" },
+        { "sessions",    "\uE8F2" },
+        { "skills",      "\uE945" },
+        { "channels",    "\uEC05" },
+        { "instances",   "\uE977" },
+        { "agentevents", "\uE943" },
+        { "bindings",    "\uE8AD" },
+        { "config",      "\uE90F" },
+        { "usage",       "\uE9D9" },
+        { "cron",        "\uE787" },
+        { "voice",       "\uE720" },
+        { "settings",    "\uE713" },
+        { "permissions", "\uEA18" },
+        { "sandbox",     "\uE72E" },
+        { "activity",    "\uEA95" },
+        { "notifications", "\uE7F4" },
+        { "debug",       "\uEBE8" },
+    };
+
+    private const string AdvancedGroupGlyph = "\uE950";
+    private const string AgentsGroupGlyph = "\uE99A";
+    private bool _isHighContrast;
+
+    private void ApplyHighContrastFallbackIfNeeded()
+    {
+        const string resourceKey = "HubNavigationUseHighContrastIcons";
+        _isHighContrast = Application.Current.Resources.ContainsKey(resourceKey)
+            && Application.Current.Resources[resourceKey] is true;
+        if (!_isHighContrast)
+            return;
+
+        SwapToFontIcons(NavView.MenuItems);
+        SwapToFontIcons(NavView.FooterMenuItems);
+    }
+
+    private void SwapToFontIcons(IList<object> items)
+    {
+        foreach (var value in items)
+        {
+            if (value is not NavigationViewItem item)
+                continue;
+
+            item.Icon = ResolveHighContrastIcon(item);
+            if (item.MenuItems.Count > 0)
+                SwapToFontIcons(item.MenuItems);
+        }
+    }
+
+    private IconElement ResolveHighContrastIcon(NavigationViewItem item)
+    {
+        if (item.Tag is string tag)
+        {
+            if (s_highContrastGlyphFallback.TryGetValue(tag, out var glyph))
+                return FluentIconCatalog.Build(glyph, 20);
+            if (tag.StartsWith("agent:", StringComparison.Ordinal))
+                return FluentIconCatalog.Build(AgentsGroupGlyph, 20);
+        }
+
+        if (item == AgentsNavItem)
+            return FluentIconCatalog.Build(AgentsGroupGlyph, 20);
+        if (item == NavAdvanced)
+            return FluentIconCatalog.Build(AdvancedGroupGlyph, 20);
+
+        return FluentIconCatalog.Build("\uE700", 20);
+    }
+
     private IconElement BuildAgentItemIcon()
     {
+        if (_isHighContrast)
+            return FluentIconCatalog.Build(AgentsGroupGlyph, 20);
+
         return new ImageIcon
         {
             Source = (ImageSource)NavView.Resources["Agents_Icon"]
         };
     }
+
+    #endregion
 }

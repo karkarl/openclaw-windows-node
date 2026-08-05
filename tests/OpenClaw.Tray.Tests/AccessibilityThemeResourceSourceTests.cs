@@ -16,7 +16,7 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.DoesNotContain("HighContrastChanged", connection);
         Assert.DoesNotContain("TrySubscribeAccessibilitySettings", connection);
         Assert.DoesNotContain("AccessibilitySettings", hub);
-        Assert.DoesNotContain("ApplyHighContrastFallbackIfNeeded", hub);
+        Assert.DoesNotContain("HighContrastChanged", hub);
         Assert.DoesNotContain("AccessibilitySettings", timeline);
         Assert.DoesNotContain("TryDetectHighContrast", timeline);
 
@@ -27,6 +27,13 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("ImageIcon Source=\"{StaticResource Chat_Icon}\"", hubXaml);
         Assert.Contains("new ImageIcon", hub);
         Assert.Contains("NavView.Resources[\"Agents_Icon\"]", hub);
+        Assert.Contains("ApplyHighContrastFallbackIfNeeded", hub);
+        Assert.Contains("HubNavigationUseHighContrastIcons", hub);
+        Assert.Contains("SwapToFontIcons", hub);
+        Assert.Contains("FluentIconCatalog.Build", hub);
+        Assert.Contains("item == NavAdvanced", hub);
+        Assert.DoesNotContain("content.Equals(\"Advanced\"", hub);
+        Assert.Contains("return FluentIconCatalog.Build(\"\\uE700\", 20);", hub);
         Assert.DoesNotContain("<IconSourceElement", hubXaml);
         Assert.DoesNotContain("FontIconSource", hubXaml);
         var stateIconBlock = connection[
@@ -40,6 +47,7 @@ public sealed class AccessibilityThemeResourceSourceTests
         Assert.Contains("ChatUserBubbleSelectionHighlightBrush", resources);
         Assert.Contains("SystemColorHighlightColor", resources);
         Assert.Contains("<x:Double x:Key=\"ChatAccessibleBorderThickness\">2</x:Double>", resources);
+        Assert.Contains("<x:Boolean x:Key=\"HubNavigationUseHighContrastIcons\">True</x:Boolean>", resources);
     }
 
     private static string ReadSource(params string[] relativePathParts)

@@ -39,6 +39,7 @@
                     <SolidColorBrush x:Key="ConnectionCapabilityPillCriticalBrush" Color="{ThemeResource SystemFillColorCritical}" Opacity="0.14" />
                     <SolidColorBrush x:Key="ChatUserBubbleSelectionHighlightBrush" Color="{ThemeResource SystemAccentColorDark2}" />
                     <x:Double x:Key="ChatAccessibleBorderThickness">1</x:Double>
+                    <x:Boolean x:Key="HubNavigationUseHighContrastIcons">False</x:Boolean>
 
                     <!-- Composer scrim: the chat timeline dissolves into the composer dock via a
                          vertical fade from transparent to the base surface fill. FunctionalUI
@@ -67,6 +68,7 @@
                     <SolidColorBrush x:Key="ConnectionCapabilityPillCriticalBrush" Color="{ThemeResource SystemFillColorCritical}" Opacity="0.14" />
                     <SolidColorBrush x:Key="ChatUserBubbleSelectionHighlightBrush" Color="{ThemeResource SystemAccentColorDark2}" />
                     <x:Double x:Key="ChatAccessibleBorderThickness">1</x:Double>
+                    <x:Boolean x:Key="HubNavigationUseHighContrastIcons">False</x:Boolean>
 
                     <!-- Light mirror of ChatComposerFadeBrush (SolidBackgroundFillColorBase light #F3F3F3). -->
                     <LinearGradientBrush x:Key="ChatComposerFadeBrush" StartPoint="0,0" EndPoint="0,1">
@@ -89,6 +91,7 @@
                     <SolidColorBrush x:Key="ConnectionCapabilityPillCriticalBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="ChatUserBubbleSelectionHighlightBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <x:Double x:Key="ChatAccessibleBorderThickness">2</x:Double>
+                    <x:Boolean x:Key="HubNavigationUseHighContrastIcons">True</x:Boolean>
 
                     <!-- High-contrast follows the system window color so the scrim stays legible. -->
                     <LinearGradientBrush x:Key="ChatComposerFadeBrush" StartPoint="0,0" EndPoint="0,1">
