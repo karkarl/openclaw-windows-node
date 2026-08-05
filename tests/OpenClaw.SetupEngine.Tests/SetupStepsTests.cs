@@ -1030,6 +1030,96 @@ public class SetupStepsTests : IDisposable
         Assert.Contains("--web-download", installCall.Arguments);
     }
 
+    [Theory]
+    [InlineData("verbose")]
+    [InlineData("probe")]
+    public async Task CreateWslInstance_RetriesTransientFreshDistroReadinessTimeout(string transientStage)
+    {
+        var installed = false;
+        var verboseAttempts = 0;
+        var probeAttempts = 0;
+        var commands = new FakeCommandRunner(args =>
+        {
+            if (args.SequenceEqual(["--list", "--quiet"]))
+                return Ok(installed ? "OpenClawGateway\n" : "");
+            if (args.Contains("--install"))
+            {
+                installed = true;
+                return Ok("Installing Ubuntu-24.04\n");
+            }
+            if (args.SequenceEqual(["--list", "--verbose"]))
+            {
+                verboseAttempts++;
+                return transientStage == "verbose" && verboseAttempts == 1
+                    ? new CommandResult(-1, "", "", TimeSpan.FromSeconds(15), TimedOut: true)
+                    : Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         2\n");
+            }
+            if (args.SequenceEqual(["-d", "OpenClawGateway", "-u", "root", "--", "sh", "-lc", "id -u && test -d / && echo OPENCLAW_FRESH_WSL_READY"]))
+            {
+                probeAttempts++;
+                return transientStage == "probe" && probeAttempts == 1
+                    ? new CommandResult(-1, "", "", TimeSpan.FromSeconds(30), TimedOut: true)
+                    : Ok("0\nOPENCLAW_FRESH_WSL_READY\n");
+            }
+
+            return Fail($"unexpected args: {string.Join(' ', args)}");
+        });
+        var ctx = CreateContext(commands: commands);
+
+        var result = await new CreateWslInstanceStep().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(transientStage == "verbose" ? 2 : 1, verboseAttempts);
+        Assert.Equal(transientStage == "probe" ? 2 : 1, probeAttempts);
+        Assert.DoesNotContain(commands.Calls, call => call.Arguments.Contains("--unregister"));
+    }
+
+    [Theory]
+    [InlineData("wsl1", 1)]
+    [InlineData("timeout", 3)]
+    public async Task CreateWslInstance_DoesNotRetryConfirmedWsl1AndBoundsPersistentTimeouts(
+        string failureMode,
+        int expectedVerboseAttempts)
+    {
+        var installed = false;
+        var verboseAttempts = 0;
+        var commands = new FakeCommandRunner(args =>
+        {
+            if (args.SequenceEqual(["--list", "--quiet"]))
+                return Ok(installed ? "OpenClawGateway\n" : "");
+            if (args.Contains("--install"))
+            {
+                installed = true;
+                return Ok("Installing Ubuntu-24.04\n");
+            }
+            if (args.SequenceEqual(["--list", "--verbose"]))
+            {
+                verboseAttempts++;
+                return failureMode == "wsl1"
+                    ? Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         1\n")
+                    : new CommandResult(-1, "", "", TimeSpan.FromSeconds(15), TimedOut: true);
+            }
+            if (args.SequenceEqual(["--terminate", "OpenClawGateway"]))
+                return Ok();
+            if (args.SequenceEqual(["--unregister", "OpenClawGateway"]))
+            {
+                installed = false;
+                return Ok();
+            }
+
+            return Fail($"unexpected args: {string.Join(' ', args)}");
+        });
+        var ctx = CreateContext(commands: commands);
+
+        var result = await new CreateWslInstanceStep().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(StepOutcome.Failed, result.Outcome);
+        Assert.Equal(expectedVerboseAttempts, verboseAttempts);
+        Assert.Contains(
+            failureMode == "wsl1" ? "WSL1; WSL2 is required" : "could not verify it is WSL2",
+            result.Message);
+    }
+
     [Fact]
     public async Task CreateWslInstance_PartialCleanupAvoidsGlobalShutdownWhenUnregisterSucceeds()
     {
