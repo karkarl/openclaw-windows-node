@@ -160,6 +160,7 @@ public sealed class ReactorChatTimeline : Component<ReactorChatTimelineProps>
                 .BindVerticalScrollController(
                     annotatedScrollBarRef,
                     rows.Count - 1,
+                    rows.Count,
                     initialTailRequestKey,
                     displayedTailKey)
                 .Grid(column: 0)

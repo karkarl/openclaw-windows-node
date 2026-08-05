@@ -14,6 +14,7 @@ file sealed record ItemsViewVerticalScrollControllerElement(
     Element Child,
     ElementRef<WinUIAnnotatedScrollBar> ScrollBarRef,
     int InitialTailIndex,
+    int ItemCount,
     string InitialTailRequestKey,
     string? DisplayedTailKey) : Element
 {
@@ -41,6 +42,7 @@ file sealed class ItemsViewVerticalScrollControllerHandler
         Positioners.Add(itemsView, positioner);
         positioner.Request(
             element.InitialTailIndex,
+            element.ItemCount,
             element.InitialTailRequestKey,
             element.DisplayedTailKey);
         return itemsView;
@@ -59,11 +61,13 @@ file sealed class ItemsViewVerticalScrollControllerHandler
             && Positioners.TryGetValue(itemsView, out var positioner))
             positioner.Request(
                 newElement.InitialTailIndex,
+                newElement.ItemCount,
                 newElement.InitialTailRequestKey,
                 newElement.DisplayedTailKey);
         else if (Positioners.TryGetValue(itemsView, out var existingPositioner))
             existingPositioner.UpdateTail(
                 newElement.InitialTailIndex,
+                newElement.ItemCount,
                 newElement.DisplayedTailKey);
         return itemsView;
     }
@@ -87,13 +91,14 @@ file sealed class InitialTailPositioner : IDisposable
     private string? _requestKey;
     private string? _displayedTailKey;
     private int _tailIndex;
+    private int _itemCount;
     private int _version;
     private bool _valid;
     private bool _awaitingLayout;
     private WinUIScrollView? _awaitingScrollView;
     private WinUIScrollView? _scrollView;
     private bool _following;
-    private bool _tailRequestQueued;
+    private readonly TailNavigationQueue _tailNavigationQueue = new();
     private bool _disposed;
 
     public InitialTailPositioner(WinUIItemsView itemsView)
@@ -103,7 +108,7 @@ file sealed class InitialTailPositioner : IDisposable
         itemsView.Unloaded += OnUnloaded;
     }
 
-    public void Request(int tailIndex, string requestKey, string? displayedTailKey)
+    public void Request(int tailIndex, int itemCount, string requestKey, string? displayedTailKey)
     {
         if (_disposed || string.Equals(_requestKey, requestKey, StringComparison.Ordinal))
             return;
@@ -111,25 +116,34 @@ file sealed class InitialTailPositioner : IDisposable
         _requestKey = requestKey;
         _version++;
         DetachLayout();
-        _valid = tailIndex >= 0;
+        _tailIndex = tailIndex;
+        _itemCount = itemCount;
+        _displayedTailKey = displayedTailKey;
+        _following = true;
+        _valid = TailNavigationPolicy.TryCapture(tailIndex, displayedTailKey, itemCount, out _);
         if (!_valid)
             return;
 
-        _tailIndex = tailIndex;
-        _displayedTailKey = displayedTailKey;
-        _following = true;
         if (itemsView.IsLoaded)
             AwaitLayout();
     }
 
-    public void UpdateTail(int tailIndex, string? displayedTailKey)
+    public void UpdateTail(int tailIndex, int itemCount, string? displayedTailKey)
     {
         var changed = !string.Equals(_displayedTailKey, displayedTailKey, StringComparison.Ordinal);
         _tailIndex = tailIndex;
+        _itemCount = itemCount;
         _displayedTailKey = displayedTailKey;
-        if (changed && _following && tailIndex >= 0 && itemsView.IsLoaded && displayedTailKey is not null)
+        _valid = TailNavigationPolicy.TryCapture(tailIndex, displayedTailKey, itemCount, out var request);
+        if (!_valid)
         {
-            QueueTailRequest(_version);
+            _tailNavigationQueue.Clear();
+            return;
+        }
+
+        if (changed && _following && itemsView.IsLoaded)
+        {
+            QueueTailRequest(_version, request);
         }
     }
 
@@ -174,7 +188,9 @@ file sealed class InitialTailPositioner : IDisposable
         }
 
         var version = _version;
-        var index = _tailIndex;
+        if (!TailNavigationPolicy.TryCapture(_tailIndex, _displayedTailKey, _itemCount, out var request))
+            return;
+
         itemsView.DispatcherQueue.TryEnqueue(() =>
         {
             if (_disposed || !_valid || !itemsView.IsLoaded || version != _version
@@ -186,7 +202,8 @@ file sealed class InitialTailPositioner : IDisposable
             }
 
             AttachScrollView();
-            StartTailRequest(index);
+            if (!StartTailRequest(request) && !_disposed && _valid)
+                AwaitLayout();
         });
     }
 
@@ -210,38 +227,51 @@ file sealed class InitialTailPositioner : IDisposable
         _following = IsNearBottom(sender);
     }
 
-    private void QueueTailRequest(int version)
+    private void QueueTailRequest(int version, TailNavigationRequest request)
     {
-        if (_tailRequestQueued)
+        if (!_tailNavigationQueue.Enqueue(version, request))
             return;
 
-        _tailRequestQueued = true;
         if (!itemsView.DispatcherQueue.TryEnqueue(() =>
         {
-            _tailRequestQueued = false;
-            if (_disposed || !_valid || !itemsView.IsLoaded || version != _version || !_following)
+            if (!_tailNavigationQueue.TryDequeue(_version, out var queuedRequest)
+                || _disposed
+                || !_valid
+                || !itemsView.IsLoaded
+                || !_following)
             {
                 return;
             }
 
-            StartTailRequest(_tailIndex);
+            StartTailRequest(queuedRequest);
         }))
         {
-            _tailRequestQueued = false;
+            _tailNavigationQueue.SchedulingFailed();
             _following = false;
         }
     }
 
-    private void StartTailRequest(int index)
+    private bool StartTailRequest(TailNavigationRequest request)
     {
         if (itemsView.ScrollView is not { IsLoaded: true })
-            return;
+            return false;
+
+        if (!TailNavigationPolicy.CanExecute(
+                request,
+                _tailIndex,
+                _displayedTailKey,
+                _itemCount))
+        {
+            return false;
+        }
+
         _following = true;
-        itemsView.StartBringItemIntoView(index, new BringIntoViewOptions
+        itemsView.StartBringItemIntoView(request.Index, new BringIntoViewOptions
         {
             AnimationDesired = false,
             VerticalAlignmentRatio = 1.0,
         });
+        return true;
     }
 
     private static bool IsNearBottom(WinUIScrollView scrollView) =>
@@ -250,6 +280,7 @@ file sealed class InitialTailPositioner : IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _version++;
+        _tailNavigationQueue.Clear();
         DetachLayout();
         DetachScrollView();
     }
@@ -287,6 +318,7 @@ file sealed class InitialTailPositioner : IDisposable
 
         _disposed = true;
         _version++;
+        _tailNavigationQueue.Clear();
         DetachLayout();
         DetachScrollView();
         itemsView.Loaded -= OnLoaded;
@@ -300,12 +332,14 @@ internal static class ItemsViewScrollControllerExtensions
         this ItemsViewElement<T> itemsView,
         ElementRef<WinUIAnnotatedScrollBar> scrollBarRef,
         int initialTailIndex,
+        int itemCount,
         string initialTailRequestKey,
         string? displayedTailKey) =>
         new ItemsViewVerticalScrollControllerElement(
             itemsView,
             scrollBarRef,
             initialTailIndex,
+            itemCount,
             initialTailRequestKey,
             displayedTailKey);
 }

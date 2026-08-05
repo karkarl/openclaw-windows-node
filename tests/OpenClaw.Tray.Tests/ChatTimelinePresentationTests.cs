@@ -1,3 +1,5 @@
+using OpenClawTray.Chat;
+
 namespace OpenClaw.Tray.Tests;
 
 public sealed class ChatTimelinePresentationTests
@@ -29,6 +31,7 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains(".BindVerticalScrollController(", timeline);
         Assert.Contains("annotatedScrollBarRef,", timeline);
         Assert.Contains("rows.Count - 1", timeline);
+        Assert.Contains("rows.Count,", timeline);
         Assert.Contains("initialTailRequestKey", timeline);
         Assert.Contains("var displayedTailKey = rows.Count > 0 ? rows[^1].Key : null", timeline);
         Assert.DoesNotContain("ItemsRepeater(", timeline);
@@ -67,11 +70,13 @@ public sealed class ChatTimelinePresentationTests
         Assert.Contains("VerticalAlignmentRatio = 1.0", binding);
         Assert.Contains("!string.Equals(_displayedTailKey, displayedTailKey, StringComparison.Ordinal)", binding);
         Assert.Contains("_following = IsNearBottom(sender)", binding);
-        Assert.Contains("displayedTailKey is not null", binding);
         Assert.Contains("_scrollView.VerticalAnchorRatio = 1.0", binding);
         Assert.Contains("_scrollView.VerticalAnchorRatio = double.NaN", binding);
-        Assert.Contains("if (_tailRequestQueued)", binding);
-        Assert.Contains("_valid = tailIndex >= 0", binding);
+        Assert.Contains("_tailNavigationQueue.Enqueue(version, request)", binding);
+        Assert.Contains("_tailNavigationQueue.TryDequeue(_version, out var queuedRequest)", binding);
+        Assert.Contains("_valid = TailNavigationPolicy.TryCapture", binding);
+        Assert.Contains("_itemCount = itemCount", binding);
+        Assert.Contains("TailNavigationPolicy.CanExecute(", binding);
         Assert.Contains("itemsView.Unloaded += OnUnloaded", binding);
         Assert.Contains("itemsView.Loaded -= OnLoaded", binding);
         Assert.Contains("itemsView.LayoutUpdated -= OnLayoutUpdated", binding);
@@ -91,6 +96,77 @@ public sealed class ChatTimelinePresentationTests
         var viewChanged = binding[viewChangedStart..tailRequestStart];
         Assert.DoesNotContain("VerticalAnchorRatio", viewChanged);
         Assert.DoesNotContain("StartBringItemIntoView", viewChanged);
+    }
+
+    [Fact]
+    public void TailNavigationPolicy_RejectsQueuedRequestAfterValidTailBecomesEmpty()
+    {
+        Assert.True(TailNavigationPolicy.TryCapture(2, "assistant-3", 3, out var queued));
+        Assert.False(TailNavigationPolicy.TryCapture(-1, null, 0, out _));
+
+        Assert.False(TailNavigationPolicy.CanExecute(
+            queued,
+            currentTailIndex: -1,
+            currentDisplayedTailKey: null,
+            itemCount: 0));
+    }
+
+    [Fact]
+    public void TailNavigationPolicy_AllowsNewRequestAfterEmptyTailBecomesValid()
+    {
+        Assert.False(TailNavigationPolicy.TryCapture(-1, null, 0, out _));
+        Assert.True(TailNavigationPolicy.TryCapture(0, "assistant-1", 1, out var queued));
+
+        Assert.True(TailNavigationPolicy.CanExecute(
+            queued,
+            currentTailIndex: 0,
+            currentDisplayedTailKey: "assistant-1",
+            itemCount: 1));
+    }
+
+    [Fact]
+    public void TailNavigationPolicy_RejectsStaleIdentityAndOutOfRangeIndex()
+    {
+        Assert.True(TailNavigationPolicy.TryCapture(1, "assistant-2", 2, out var queued));
+
+        Assert.False(TailNavigationPolicy.CanExecute(
+            queued,
+            currentTailIndex: 1,
+            currentDisplayedTailKey: "assistant-3",
+            itemCount: 2));
+        Assert.False(TailNavigationPolicy.CanExecute(
+            queued,
+            currentTailIndex: 1,
+            currentDisplayedTailKey: "assistant-2",
+            itemCount: 1));
+    }
+
+    [Fact]
+    public void TailNavigationQueue_OldCallbackConsumesNewestMatchingGeneration()
+    {
+        var queue = new TailNavigationQueue();
+        var first = new TailNavigationRequest(1, "assistant-2");
+        var replacement = new TailNavigationRequest(0, "assistant-1");
+
+        Assert.True(queue.Enqueue(version: 1, first));
+        queue.Clear();
+        Assert.False(queue.Enqueue(version: 2, replacement));
+
+        Assert.True(queue.TryDequeue(currentVersion: 2, out var dequeued));
+        Assert.Equal(replacement, dequeued);
+        Assert.False(queue.IsScheduled);
+    }
+
+    [Fact]
+    public void TailNavigationQueue_RejectsPendingRequestFromStaleGeneration()
+    {
+        var queue = new TailNavigationQueue();
+        Assert.True(queue.Enqueue(
+            version: 1,
+            new TailNavigationRequest(1, "assistant-2")));
+
+        Assert.False(queue.TryDequeue(currentVersion: 2, out _));
+        Assert.False(queue.IsScheduled);
     }
 
     [Fact]
