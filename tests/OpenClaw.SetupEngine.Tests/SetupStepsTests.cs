@@ -1030,13 +1030,10 @@ public class SetupStepsTests : IDisposable
         Assert.Contains("--web-download", installCall.Arguments);
     }
 
-    [Theory]
-    [InlineData("verbose")]
-    [InlineData("probe")]
-    public async Task CreateWslInstance_RetriesTransientFreshDistroReadinessTimeout(string transientStage)
+    [Fact]
+    public async Task CreateWslInstance_RetriesTransientFreshDistroRootProbeTimeout()
     {
         var installed = false;
-        var verboseAttempts = 0;
         var probeAttempts = 0;
         var commands = new FakeCommandRunner(args =>
         {
@@ -1048,16 +1045,11 @@ public class SetupStepsTests : IDisposable
                 return Ok("Installing Ubuntu-24.04\n");
             }
             if (args.SequenceEqual(["--list", "--verbose"]))
-            {
-                verboseAttempts++;
-                return transientStage == "verbose" && verboseAttempts == 1
-                    ? new CommandResult(-1, "", "", TimeSpan.FromSeconds(15), TimedOut: true)
-                    : Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         2\n");
-            }
+                return Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         2\n");
             if (args.SequenceEqual(["-d", "OpenClawGateway", "-u", "root", "--", "sh", "-lc", "id -u && test -d / && echo OPENCLAW_FRESH_WSL_READY"]))
             {
                 probeAttempts++;
-                return transientStage == "probe" && probeAttempts == 1
+                return probeAttempts == 1
                     ? new CommandResult(-1, "", "", TimeSpan.FromSeconds(30), TimedOut: true)
                     : Ok("0\nOPENCLAW_FRESH_WSL_READY\n");
             }
@@ -1069,20 +1061,15 @@ public class SetupStepsTests : IDisposable
         var result = await new CreateWslInstanceStep().ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Message);
-        Assert.Equal(transientStage == "verbose" ? 2 : 1, verboseAttempts);
-        Assert.Equal(transientStage == "probe" ? 2 : 1, probeAttempts);
+        Assert.Equal(2, probeAttempts);
         Assert.DoesNotContain(commands.Calls, call => call.Arguments.Contains("--unregister"));
     }
 
-    [Theory]
-    [InlineData("wsl1", 1)]
-    [InlineData("timeout", 3)]
-    public async Task CreateWslInstance_DoesNotRetryConfirmedWsl1AndBoundsPersistentTimeouts(
-        string failureMode,
-        int expectedVerboseAttempts)
+    [Fact]
+    public async Task CreateWslInstance_BoundsPersistentFreshDistroRootProbeTimeouts()
     {
         var installed = false;
-        var verboseAttempts = 0;
+        var probeAttempts = 0;
         var commands = new FakeCommandRunner(args =>
         {
             if (args.SequenceEqual(["--list", "--quiet"]))
@@ -1093,11 +1080,11 @@ public class SetupStepsTests : IDisposable
                 return Ok("Installing Ubuntu-24.04\n");
             }
             if (args.SequenceEqual(["--list", "--verbose"]))
+                return Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         2\n");
+            if (args.SequenceEqual(["-d", "OpenClawGateway", "-u", "root", "--", "sh", "-lc", "id -u && test -d / && echo OPENCLAW_FRESH_WSL_READY"]))
             {
-                verboseAttempts++;
-                return failureMode == "wsl1"
-                    ? Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         1\n")
-                    : new CommandResult(-1, "", "", TimeSpan.FromSeconds(15), TimedOut: true);
+                probeAttempts++;
+                return new CommandResult(-1, "", "", TimeSpan.FromSeconds(30), TimedOut: true);
             }
             if (args.SequenceEqual(["--terminate", "OpenClawGateway"]))
                 return Ok();
@@ -1114,10 +1101,50 @@ public class SetupStepsTests : IDisposable
         var result = await new CreateWslInstanceStep().ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Equal(StepOutcome.Failed, result.Outcome);
-        Assert.Equal(expectedVerboseAttempts, verboseAttempts);
-        Assert.Contains(
-            failureMode == "wsl1" ? "WSL1; WSL2 is required" : "could not verify it is WSL2",
-            result.Message);
+        Assert.Equal(3, probeAttempts);
+        Assert.Contains("could not run a root verification command", result.Message);
+        Assert.Equal(
+            [
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(60),
+                TimeSpan.FromSeconds(90),
+            ],
+            commands.TimedCalls
+                .Where(call => call.Arguments.SequenceEqual(
+                    ["-d", "OpenClawGateway", "-u", "root", "--", "sh", "-lc", "id -u && test -d / && echo OPENCLAW_FRESH_WSL_READY"]))
+                .Select(call => call.Timeout)
+                .ToArray());
+    }
+
+    [Fact]
+    public async Task CreateWslInstance_AllowsWslServiceToSettleBeforeVersionVerification()
+    {
+        var installed = false;
+        var commands = new FakeCommandRunner(args =>
+        {
+            if (args.SequenceEqual(["--list", "--quiet"]))
+                return Ok(installed ? "OpenClawGateway\n" : "");
+            if (args.Contains("--install"))
+            {
+                installed = true;
+                return Ok("Installing Ubuntu-24.04\n");
+            }
+            if (args.SequenceEqual(["--list", "--verbose"]))
+                return Ok("  NAME              STATE           VERSION\n* OpenClawGateway   Stopped         2\n");
+            if (args.SequenceEqual(["-d", "OpenClawGateway", "-u", "root", "--", "sh", "-lc", "id -u && test -d / && echo OPENCLAW_FRESH_WSL_READY"]))
+                return Ok("0\nOPENCLAW_FRESH_WSL_READY\n");
+
+            return Fail($"unexpected args: {string.Join(' ', args)}");
+        });
+        var ctx = CreateContext(commands: commands);
+
+        var result = await new CreateWslInstanceStep().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Message);
+        var verboseCall = Assert.Single(
+            commands.TimedCalls,
+            call => call.Arguments.SequenceEqual(["--list", "--verbose"]));
+        Assert.Equal(TimeSpan.FromMinutes(1), verboseCall.Timeout);
     }
 
     [Fact]
@@ -3666,6 +3693,7 @@ public class SetupStepsTests : IDisposable
         Func<string, string, TimeSpan, CommandResult>? runInWsl = null) : ICommandRunner
     {
         public List<(string Executable, string[] Arguments)> Calls { get; } = [];
+        public List<(string Executable, string[] Arguments, TimeSpan Timeout)> TimedCalls { get; } = [];
         public List<(string Executable, string[] Arguments, string? StdinInput)> DetailedCalls { get; } = [];
         public List<(string DistroName, string Command, TimeSpan Timeout, string? User, bool InputViaStdin)> WslCalls { get; } = [];
         public List<IReadOnlyDictionary<string, string>?> WslEnvironments { get; } = [];
@@ -3680,6 +3708,7 @@ public class SetupStepsTests : IDisposable
             CancellationToken ct = default)
         {
             Calls.Add((executable, arguments));
+            TimedCalls.Add((executable, arguments, timeout));
             DetailedCalls.Add((executable, arguments, stdinInput));
             return Task.FromResult(run(arguments));
         }

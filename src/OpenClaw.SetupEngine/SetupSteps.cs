@@ -740,13 +740,7 @@ public sealed class PreflightPortStep : SetupStep
 
 public sealed class CreateWslInstanceStep : SetupStep
 {
-    private static readonly TimeSpan[] FreshDistroVersionTimeouts =
-    [
-        TimeSpan.FromSeconds(15),
-        TimeSpan.FromSeconds(30),
-        TimeSpan.FromSeconds(60),
-    ];
-
+    private static readonly TimeSpan DistroVersionVerificationTimeout = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan[] FreshDistroProbeTimeouts =
     [
         TimeSpan.FromSeconds(30),
@@ -846,35 +840,13 @@ public sealed class CreateWslInstanceStep : SetupStep
             return StepResult.Fail(environmentIssue != null ? $"{baseMessage} {environmentIssue}" : baseMessage);
         }
 
-        CommandResult? verbose = null;
-        int version = 0;
-        for (var attempt = 0; attempt < FreshDistroVersionTimeouts.Length; attempt++)
-        {
-            verbose = await ctx.Commands.RunAsync(
-                WslConstants.WslExePath,
-                ["--list", "--verbose"],
-                FreshDistroVersionTimeouts[attempt],
-                ct: ct);
-            if (verbose.ExitCode == 0
-                && WslInstallSupport.TryGetDistroVersion(verbose.Stdout, distro, out version))
-            {
-                break;
-            }
-
-            if (attempt < FreshDistroVersionTimeouts.Length - 1)
-            {
-                ctx.Logger.Warn(
-                    $"Fresh WSL distro '{distro}' version check was not ready " +
-                    $"(attempt {attempt + 1}/{FreshDistroVersionTimeouts.Length}); retrying.");
-            }
-        }
-
-        if (verbose is null
-            || verbose.ExitCode != 0
-            || !WslInstallSupport.TryGetDistroVersion(verbose.Stdout, distro, out version))
-        {
+        var verbose = await ctx.Commands.RunAsync(
+            WslConstants.WslExePath,
+            ["--list", "--verbose"],
+            DistroVersionVerificationTimeout,
+            ct: ct);
+        if (verbose.ExitCode != 0 || !WslInstallSupport.TryGetDistroVersion(verbose.Stdout, distro, out var version))
             return StepResult.Fail($"Fresh WSL install registered '{distro}', but setup could not verify it is WSL2.");
-        }
 
         if (version != 2)
             return StepResult.Fail($"Fresh WSL install registered '{distro}' as WSL{version}; WSL2 is required.");
