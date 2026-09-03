@@ -308,6 +308,9 @@ public sealed partial class SetupWindow : Window
         string? errorMessage = null,
         GatewayCompatibilityFailureKind? compatibilityFailure = null)
     {
+        var canRetryFallback =
+            compatibilityFailure is { } failureKind &&
+            GatewayInstallPolicy.CanRetryWithFallback(_config, failureKind);
         NavigateTo(
             typeof(CompletePage),
             new CompletePageArgs(
@@ -317,7 +320,20 @@ public sealed partial class SetupWindow : Window
                 errorMessage,
                 DefaultAutoStart: true,
                 ShowStartupPreference: _showStartupPreferenceOnComplete,
-                ReviewSummary: SetupReviewSummaryBuilder.Build(_config, _dataDir, _localDataDir)));
+                ReviewSummary: SetupReviewSummaryBuilder.Build(_config, _dataDir, _localDataDir),
+                CanRetryGatewayFallback: canRetryFallback,
+                GatewayFallbackVersion: canRetryFallback
+                    ? _config.Gateway.FallbackVersion
+                    : null));
+    }
+
+    public bool TryRetryWithGatewayFallback(out string? error)
+    {
+        if (!GatewayInstallPolicy.TryApplyFallback(_config, out error))
+            return false;
+
+        NavigateToProgress();
+        return true;
     }
 
     private void ShowConfigurationError(string errorMessage)
@@ -482,5 +498,7 @@ public sealed record CompletePageArgs(
     string? ErrorMessage = null,
     bool DefaultAutoStart = true,
     bool ShowStartupPreference = true,
-    SetupReviewSummary? ReviewSummary = null);
+    SetupReviewSummary? ReviewSummary = null,
+    bool CanRetryGatewayFallback = false,
+    string? GatewayFallbackVersion = null);
 public sealed record SetupCompletedEventArgs(bool EnableAutoStart);

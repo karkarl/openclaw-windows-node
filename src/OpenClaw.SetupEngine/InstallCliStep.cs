@@ -90,7 +90,7 @@ public sealed class InstallCliStep : SetupStep
                 var verify = await ctx.Commands.RunInWslAsync(distro, cmd, TimeSpan.FromSeconds(15), ct: ct);
                 if (verify.ExitCode == 0 && !string.IsNullOrWhiteSpace(verify.Stdout))
                 {
-                    if (!GatewayReleaseVersion.TryExtract(verify.Stdout, out var installedVersion))
+                    if (!GatewayPackageVersion.TryExtract(verify.Stdout, out var installedVersion))
                     {
                         var failure = new GatewayCompatibilityException(
                             GatewayCompatibilityFailureKind.InstalledVersionMismatch,
@@ -98,7 +98,7 @@ public sealed class InstallCliStep : SetupStep
                         return StepResult.Terminal(failure.Message, failure);
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requestedVersion) &&
+                    if (GatewayPackageVersion.IsExact(requestedVersion) &&
                         !string.Equals(installedVersion, requestedVersion, StringComparison.Ordinal))
                     {
                         var failure = new GatewayCompatibilityException(
@@ -107,7 +107,7 @@ public sealed class InstallCliStep : SetupStep
                         return StepResult.Terminal(failure.Message, failure);
                     }
 
-                    ctx.Config.Gateway.Version = installedVersion;
+                    ctx.Config.Gateway.InstalledVersion = installedVersion;
 
                     if (executablePath != null)
                     {

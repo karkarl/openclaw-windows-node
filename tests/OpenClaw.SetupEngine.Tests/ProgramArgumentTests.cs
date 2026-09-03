@@ -403,7 +403,7 @@ public sealed class ProgramArgumentTests : IDisposable
     }
 
     [Fact]
-    public async Task Main_RejectsOfficialVersionPinWithoutValidationFlag()
+    public async Task Main_AcceptsOfficialVersionPinWithoutValidationFlag()
     {
         var configPath = Path.Combine(_tempDir, "candidate.json");
         await File.WriteAllTextAsync(
@@ -412,7 +412,7 @@ public sealed class ProgramArgumentTests : IDisposable
 
         var exitCode = await Program.Main(["--config", configPath, "--dry-run"]);
 
-        Assert.Equal(2, exitCode);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
