@@ -160,7 +160,7 @@ public sealed partial class SetupWindow : Window
         }
         try
         {
-            GatewayReleasePolicy.ResolveAndApply(_config);
+            GatewayInstallPolicy.ValidateAndApply(_config);
         }
         catch (GatewayCompatibilityException ex)
         {
@@ -308,9 +308,6 @@ public sealed partial class SetupWindow : Window
         string? errorMessage = null,
         GatewayCompatibilityFailureKind? compatibilityFailure = null)
     {
-        var canRetryFallback =
-            compatibilityFailure is { } failureKind &&
-            GatewayReleasePolicy.CanRetryWithFallback(_config, failureKind);
         NavigateTo(
             typeof(CompletePage),
             new CompletePageArgs(
@@ -320,20 +317,7 @@ public sealed partial class SetupWindow : Window
                 errorMessage,
                 DefaultAutoStart: true,
                 ShowStartupPreference: _showStartupPreferenceOnComplete,
-                ReviewSummary: SetupReviewSummaryBuilder.Build(_config, _dataDir, _localDataDir),
-                CanRetryGatewayFallback: canRetryFallback,
-                GatewayFallbackVersion: canRetryFallback
-                    ? GatewayReleasePolicy.FallbackVersion
-                    : null));
-    }
-
-    public bool TryRetryWithGatewayFallback(out string? error)
-    {
-        if (!GatewayReleasePolicy.TryApplyFallback(_config, out error))
-            return false;
-
-        NavigateToProgress();
-        return true;
+                ReviewSummary: SetupReviewSummaryBuilder.Build(_config, _dataDir, _localDataDir)));
     }
 
     private void ShowConfigurationError(string errorMessage)
@@ -498,7 +482,5 @@ public sealed record CompletePageArgs(
     string? ErrorMessage = null,
     bool DefaultAutoStart = true,
     bool ShowStartupPreference = true,
-    SetupReviewSummary? ReviewSummary = null,
-    bool CanRetryGatewayFallback = false,
-    string? GatewayFallbackVersion = null);
+    SetupReviewSummary? ReviewSummary = null);
 public sealed record SetupCompletedEventArgs(bool EnableAutoStart);

@@ -33,6 +33,7 @@ public class SetupConfigTests : IDisposable
         Assert.Equal("trace", config.LogLevel);
         Assert.False(config.RollbackOnFailure);
         Assert.Equal("loopback", config.Gateway.Bind);
+        Assert.Null(config.Gateway.Version);
         Assert.Equal("hybrid", config.Gateway.ReloadMode);
         Assert.False(config.SkipPermissions);
         Assert.False(config.SkipWizard);
@@ -426,7 +427,7 @@ public class SetupConfigTests : IDisposable
                 {
                     Bind = "lan",
                     InstallUrl = "https://example.test/install.sh",
-                    Version = GatewayReleasePolicy.SecurityFloor
+                    Version = "2026.8.1"
                 },
                 LocalAi =
                 {
@@ -464,6 +465,17 @@ public class SetupConfigTests : IDisposable
             Environment.SetEnvironmentVariable("OPENCLAW_TRAY_DATA_DIR", oldData);
             Environment.SetEnvironmentVariable("OPENCLAW_TRAY_LOCAL_DATA_DIR", oldLocalData);
         }
+    }
+
+    [Fact]
+    public void SetupReviewSummary_DefaultsToNpmLatestWithoutVersionArgument()
+    {
+        var summary = SetupReviewSummaryBuilder.Build(new SetupConfig());
+
+        Assert.Contains("Latest stable OpenClaw package from npm", summary.InstallerDescription);
+        Assert.Equal("npm latest", summary.InstallerBadge);
+        Assert.DoesNotContain("--version", summary.ExactCommands, StringComparison.Ordinal);
+        Assert.Contains("--node-version", summary.ExactCommands, StringComparison.Ordinal);
     }
 
     [Fact]
