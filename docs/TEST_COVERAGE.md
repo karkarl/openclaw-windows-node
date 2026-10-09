@@ -113,6 +113,27 @@ They do not inject physical input into the desktop, switch Windows High Contrast
 or prove Narrator speech. `ChatTextSelectionDocumentTests` adds six fast pure
 behavioral cases; it contains no source-marker assertions.
 
+`RoutedInput_SelectsAcrossNativeMarkdownChildren` is an additional opt-in real
+SendInput proof. It mounts production Markdown with an injected clipboard,
+drags from paragraph through list and code to heading, shift-clicks a native
+text child, then checks Ctrl+A, Ctrl+C and keyboard extension. UIA supplies
+geometry only. The helper refuses input unless the fixture owns the foreground
+HWND, and pointer coordinates must hit that window. Child-handled routed
+presses must reach the message selection owner; buttons and scrollbars retain
+their native interaction. Each gesture can be captured with
+`OPENCLAW_VISUAL_TEST=1` and a repository-local `OPENCLAW_VISUAL_TEST_DIR`.
+
+```powershell
+$env:OPENCLAW_RUN_KEYBOARD_PROOF = '1'
+foreach ($configuration in @('Debug', 'Release')) {
+    .\scripts\run-proof-tests.ps1 `
+        -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
+        -Filter 'FullyQualifiedName~RoutedInput_SelectsAcrossNativeMarkdownChildren' `
+        -ResultName "routed-selection-$($configuration.ToLowerInvariant())" `
+        -Configuration $configuration -RuntimeIdentifier win-x64
+}
+```
+
 Native Markdown disclosure proofs use a fresh WinUI test process for each
 theme and the inert-content case. Attached native `Expander` templates can
 crash the shared testhost when a later fixture replaces application theme

@@ -33,6 +33,8 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
     private readonly Dictionary<FrameworkElement, ChatTextSurface> _surfaces = [];
     private readonly Dictionary<FrameworkElement, (int Start, int End)> _elementRanges = [];
     private readonly List<ChatTextSurface> _ordered = [];
+    private readonly PointerEventHandler _pointerPressedHandler;
+    private readonly KeyEventHandler _keyDownHandler;
     private Func<string, bool>? _tryCopy;
     private ChatMessageTextAutomationPeer? _peer;
     private bool _disposed;
@@ -53,6 +55,8 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     public NativeChatMessageText()
     {
+        _pointerPressedHandler = OnPointerPressed;
+        _keyDownHandler = OnKeyDown;
         IsTabStop = true;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Top;
@@ -115,12 +119,13 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         _uiSettings.ColorValuesChanged += OnSystemColorsChanged;
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
-        PointerPressed += OnPointerPressed;
+        // Native text children handle presses before the message-level selection owner.
+        AddHandler(PointerPressedEvent, _pointerPressedHandler, handledEventsToo: true);
         PointerMoved += OnPointerMoved;
         PointerReleased += OnPointerReleased;
         PointerCaptureLost += OnPointerCaptureLost;
         DoubleTapped += OnDoubleTapped;
-        KeyDown += OnKeyDown;
+        AddHandler(KeyDownEvent, _keyDownHandler, handledEventsToo: true);
         GotFocus += OnGotFocus;
         LostFocus += OnLostFocus;
         RightTapped += OnRightTapped;
@@ -391,8 +396,9 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (!IsInteractive(args.OriginalSource as DependencyObject))
-            args.Handled = ProcessKey(args.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift));
+        if (!IsInteractive(args.OriginalSource as DependencyObject) &&
+            ProcessKey(args.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift)))
+            args.Handled = true;
     }
 
     internal bool ProcessKey(VirtualKey key, bool control, bool shift)
@@ -736,12 +742,12 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         ReleasePointerCaptures();
         Unloaded -= OnUnloaded;
         SizeChanged -= OnSizeChanged;
-        PointerPressed -= OnPointerPressed;
+        RemoveHandler(PointerPressedEvent, _pointerPressedHandler);
         PointerMoved -= OnPointerMoved;
         PointerReleased -= OnPointerReleased;
         PointerCaptureLost -= OnPointerCaptureLost;
         DoubleTapped -= OnDoubleTapped;
-        KeyDown -= OnKeyDown;
+        RemoveHandler(KeyDownEvent, _keyDownHandler);
         GotFocus -= OnGotFocus;
         LostFocus -= OnLostFocus;
         RightTapped -= OnRightTapped;

@@ -20,6 +20,136 @@ namespace OpenClaw.Tray.UITests;
 [Trait("Category", "NativeMarkdownSelectionProof")]
 public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
 {
+    [NativeKeyboardTheory]
+    [Trait("Category", "NativeKeyboard")]
+    [InlineData("Light")]
+    public async Task RoutedInput_SelectsAcrossNativeMarkdownChildren(string theme)
+    {
+        await ui.ResetContainerAsync();
+        NativeChatMessageText? owner = null;
+        ITextProvider? provider = null;
+        ReactorHostControl? host = null;
+        Border? surface = null;
+        ChatThemeProofScope? resources = null;
+        nint window = 0;
+        string? copied = null;
+        string pointerRoute = "No routed press";
+        try
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                resources = new ChatThemeProofScope(theme);
+                host = new ReactorHostControl { Width = 620, RequestedTheme = resources.ElementTheme };
+                var element = ReactorChatTimeline.BuildSafeMarkdown(
+                    "Opening paragraph with **bold evidence**.\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n# Ending heading",
+                    text => { copied = text; return true; });
+                host.Content = host.Reconciler.Mount(element, () => { });
+                surface = new Border
+                {
+                    Child = host,
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White),
+                    VerticalAlignment = VerticalAlignment.Top,
+                };
+                ui.Container.Children.Add(surface);
+                ui.TestWindow.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(100, 100, 900, 900));
+                ui.TestWindow.AppWindow.Show();
+                ui.TestWindow.Activate();
+                window = WinRT.Interop.WindowNative.GetWindowHandle(ui.TestWindow);
+            });
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() =>
+            {
+                owner = Assert.Single(FindLogical<NativeChatMessageText>(host!));
+                owner.RefreshDocument();
+                provider = Assert.IsAssignableFrom<ITextProvider>(
+                    FrameworkElementAutomationPeer.CreatePeerForElement(owner)!.GetPattern(PatternInterface.Text));
+                owner.AddHandler(UIElement.PointerPressedEvent,
+                    new Microsoft.UI.Xaml.Input.PointerEventHandler((_, args) =>
+                        pointerRoute = $"Handled={args.Handled}; source={args.OriginalSource.GetType().Name}"),
+                    handledEventsToo: true);
+            });
+            await NativeKeyboardProof.ActivateAsync(window);
+            async Task Move(string text, bool trailing, uint flags = 0, bool shift = false)
+            {
+                var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var routedEvent = flags == 2 ? UIElement.PointerPressedEvent :
+                    flags == 4 ? UIElement.PointerReleasedEvent : UIElement.PointerMovedEvent;
+                var handler = new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => received.TrySetResult());
+                var point = await ui.RunOnUIAsync<Point>(() =>
+                {
+                    ui.Container.AddHandler(routedEvent, handler, handledEventsToo: true);
+                    var local = PointForText(owner!, provider!, text, trailing);
+                    var client = owner!.TransformToVisual(null).TransformPoint(local);
+                    var scale = owner!.XamlRoot.RasterizationScale;
+                    var screen = NativeKeyboardProof.ClientPoint(window,
+                        (int)Math.Round(client.X * scale), (int)Math.Round(client.Y * scale));
+                    return Task.FromResult(new Point(screen.X, screen.Y));
+                });
+                await NativeKeyboardProof.ActivateAsync(window);
+                Console.WriteLine($"Pointer geometry {text}: {point.X},{point.Y}");
+                try
+                {
+                    NativeKeyboardProof.Mouse(window, (int)Math.Round(point.X), (int)Math.Round(point.Y), flags, shift);
+                    await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                finally
+                {
+                    if (shift)
+                        NativeKeyboardProof.ReleaseShift(window);
+                    await ui.RunOnUIAsync(() => ui.Container.RemoveHandler(routedEvent, handler));
+                }
+                await ui.YieldToRenderAsync();
+                await ui.RunOnUIAsync(() => Console.WriteLine(
+                    $"Selection {text} flags={flags} shift={shift}: {owner!.Document.Anchor}:{owner.Document.Focus}; {pointerRoute}"));
+            }
+            async Task Capture(string gesture) =>
+                await ui.RunOnUIAsync(() => VisualTestCapture.CaptureAsync(surface!, $"RoutedSelection-{theme}-{gesture}"));
+
+            await Move("Opening", false, 2);
+            await Move("plugin purpose", true);
+            await Capture("drag-list");
+            await Move("code two", true);
+            await Capture("drag-code");
+            await Move("Ending heading", true, 4);
+            await Capture("drag-heading");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.True(owner!.Document.SelectedText.Contains("Opening paragraph"), pointerRoute);
+                Assert.Contains("code two", owner.Document.SelectedText);
+                Assert.Contains("Ending heading", owner.Document.SelectedText);
+            });
+            await Move("Opening", false, 2);
+            await Move("Opening", false, 4);
+            await Move("code two", true, 2, shift: true);
+            await Move("code two", true, 4);
+            await Capture("shift-click");
+            await ui.RunOnUIAsync(() => Assert.True(owner!.Document.SelectedText.Contains("code two"), pointerRoute));
+            NativeKeyboardProof.Press(window, VirtualKey.A, control: true);
+            await ui.YieldToRenderAsync();
+            await Capture("ctrl-a");
+            await ui.RunOnUIAsync(() => Assert.Equal(provider!.DocumentRange.GetText(-1), owner!.Document.SelectedText));
+            NativeKeyboardProof.Press(window, VirtualKey.C, control: true);
+            await ui.YieldToRenderAsync();
+            await Capture("ctrl-c");
+            await ui.RunOnUIAsync(() => Assert.Equal(owner!.Document.SelectedText, copied));
+            NativeKeyboardProof.Press(window, VirtualKey.Home);
+            NativeKeyboardProof.Press(window, VirtualKey.Right, shift: true);
+            await ui.YieldToRenderAsync();
+            await Capture("keyboard-extend");
+            await ui.RunOnUIAsync(() => Assert.Equal(1, owner!.Document.SelectedText.Length));
+        }
+        finally
+        {
+            NativeKeyboardProof.ReleaseOwnedInput(window);
+            await ui.RunOnUIAsync(() =>
+            {
+                owner?.Dispose();
+                ui.Container.Children.Clear();
+                resources?.Dispose();
+            });
+        }
+    }
+
     private const string Message =
         "Opening paragraph with **bold evidence**.\n\n" +
         "- plugin purpose and default activation.\n" +
