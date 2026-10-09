@@ -948,7 +948,9 @@ the typed native owner. It does not own a second selection range or copy path.
 Behavioral guards are `ChatTextSelectionDocumentTests` and the isolated
 `ChatMessageTextSelectionProofTests` matrix, including cross-block selection,
 message isolation, collapsed-content removal, native child peers, scrolling and
-owner disposal/reuse. Rendering, disclosure parsing and sanitization retain
+owner disposal/reuse and transient native unload/reload without a Reactor update.
+UIA Line boundaries come from rendered geometry; Paragraph boundaries come from
+native block metadata and retain following separators. Rendering, disclosure parsing and sanitization retain
 their existing owners.
 
 ## Deferred test builders

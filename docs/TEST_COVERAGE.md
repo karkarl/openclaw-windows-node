@@ -85,13 +85,14 @@ Native Markdown selection proofs (`Category=NativeMarkdownSelectionProof`) also
 run in fresh processes, one case/theme at a time, in both Debug and Release.
 The shared UI lane excludes this category. CI enumerates both
 `VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange` and
-`MessageBoundary_DragScrollAndRealizationReuse` in Light, Dark and synthetic
+`MessageBoundary_DragScrollAndRealizationReuse`, plus
+`NativeUnits_RespectWrappingParagraphsAndTransientReload` in Light, Dark and synthetic
 HighContrast. Each invocation selects exactly one required case, and the proof
 runner rejects zero-test and zero-pass results.
 
 ```powershell
 foreach ($configuration in @('Debug', 'Release')) {
-    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse')) {
+    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload')) {
         foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
             .\scripts\run-proof-tests.ps1 `
                 -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `

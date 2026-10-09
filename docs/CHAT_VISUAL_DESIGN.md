@@ -384,8 +384,12 @@ status instead of claiming success.
 `ChatMessageTextAutomationPeer` exposes the Text pattern with grapheme-aware
 ranges, selection, search, viewport geometry and revision rebasing. Native text
 leaves are Raw accessibility children to avoid duplicate text navigation;
-interactive widgets remain accessible. Unloading disposes selection subscriptions
-and native highlights; a reused owner attaches again through its Reactor update.
+interactive widgets remain accessible. UIA Line units use rendered native
+geometry, including soft wraps; Paragraph units follow native paragraph metadata
+and include following separators. Unsupported Format promotes to Word.
+Unloading suspends selection subscriptions and native highlights while retaining
+a guarded Loaded hook, so the same native owner resumes without a Reactor update.
+Explicit disposal is final and removes that hook too.
 The timeline remains responsible for rendering and virtualization, not selection.
 
 The isolated native proof matrix exercises synthetic native geometry, keyboard

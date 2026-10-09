@@ -294,8 +294,15 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 scroll.Content = null;
                 first.Dispose();
                 Assert.Empty(first.Document.Text);
+                var retired = first;
                 var replacement = "Recycled message with new body.";
-                first.Content = new TextBlock { Text = replacement, IsTextSelectionEnabled = true };
+                retired.Update(_ => true);
+                Assert.Empty(retired.Document.Text);
+                first = new NativeChatMessageText
+                {
+                    Content = new TextBlock { Text = replacement, IsTextSelectionEnabled = true },
+                    Width = 500,
+                };
                 first.Update(_ => true);
                 first.Loaded += (_, _) => reused.TrySetResult();
                 scroll.Content = first;
@@ -325,6 +332,111 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                     ui.Container.Children.Remove(root);
                 if (scroll is not null)
                     scroll.Content = null;
+            });
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() => resources?.Dispose());
+        }
+    }
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrast")]
+    public async Task NativeUnits_RespectWrappingParagraphsAndTransientReload(string theme)
+    {
+        await ui.ResetContainerAsync();
+        const string prose = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
+        const string code = "code one\ncode two";
+        NativeChatMessageText? owner = null;
+        StackPanel? root = null;
+        ChatThemeProofScope? resources = null;
+        var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var unloaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                resources = new ChatThemeProofScope(theme);
+                RichTextBlock Body(string text)
+                {
+                    var block = new RichTextBlock { IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap };
+                    var paragraph = new Paragraph();
+                    paragraph.Inlines.Add(new Run { Text = text });
+                    block.Blocks.Add(paragraph);
+                    return block;
+                }
+                var body = new StackPanel();
+                body.Children.Add(Body(prose));
+                body.Children.Add(Body(code));
+                owner = new NativeChatMessageText { Content = body, Width = 140 };
+                owner.Loaded += (_, _) => loaded.TrySetResult();
+                owner.Unloaded += (_, _) => unloaded.TrySetResult();
+                root = new StackPanel { RequestedTheme = resources.ElementTheme };
+                root.Children.Add(owner);
+                ui.Container.Children.Add(root);
+            });
+            await loaded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() =>
+            {
+                var provider = Assert.IsAssignableFrom<ITextProvider>(
+                    FrameworkElementAutomationPeer.CreatePeerForElement(owner!)!.GetPattern(PatternInterface.Text));
+                Assert.Equal(prose + "\n\n" + code, owner!.Document.Text);
+                var line = provider.DocumentRange.FindText("alpha", false, false);
+                line.ExpandToEnclosingUnit(TextUnit.Line);
+                Assert.StartsWith("alpha", line.GetText(-1));
+                Assert.True(line.GetText(-1).Length < prose.Length);
+                line.GetBoundingRectangles(out var firstRects);
+                Assert.NotEmpty(firstRects);
+                Assert.All(firstRects.Chunk(4), rectangle => Assert.Equal(firstRects[1], rectangle[1], precision: 1));
+                Assert.Equal(1, line.Move(TextUnit.Line, 1));
+                line.GetBoundingRectangles(out var secondRects);
+                Assert.True(secondRects[1] > firstRects[1]);
+                var paragraph = provider.DocumentRange.FindText("beta", false, false);
+                paragraph.ExpandToEnclosingUnit(TextUnit.Paragraph);
+                Assert.Equal(prose + "\n\n", paragraph.GetText(-1));
+                Assert.Equal(1, paragraph.Move(TextUnit.Paragraph, 1));
+                Assert.Equal(code, paragraph.GetText(-1));
+                var codeParagraph = provider.DocumentRange.FindText("code two", false, false);
+                codeParagraph.ExpandToEnclosingUnit(TextUnit.Paragraph);
+                Assert.Equal(code, codeParagraph.GetText(-1));
+                var format = provider.DocumentRange.FindText("beta", false, false);
+                var word = format.Clone();
+                format.ExpandToEnclosingUnit(TextUnit.Format);
+                word.ExpandToEnclosingUnit(TextUnit.Word);
+                Assert.Equal("beta ", format.GetText(-1));
+                Assert.True(format.Compare(word));
+                Assert.Equal(word.Move(TextUnit.Word, 1), format.Move(TextUnit.Format, 1));
+                Assert.True(format.Compare(word));
+                owner.SelectRange(0, 5);
+                root!.Children.Remove(owner);
+            });
+            await unloaded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.Empty(owner!.Document.Text);
+                loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                root!.Children.Add(owner);
+            });
+            await loaded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await ui.RunOnUIAsync(() =>
+            {
+                // No Update or Refresh: native Loaded must restore the same retained content.
+                Assert.Equal(prose + "\n\n" + code, owner!.Document.Text);
+                owner.ProcessKey(VirtualKey.A, control: true, shift: false);
+                Assert.Equal(owner.Document.Text, owner.Document.SelectedText);
+                owner.Dispose();
+                owner.Update(_ => true);
+                Assert.Empty(owner.Document.Text);
+            });
+        }
+        finally
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                owner?.Dispose();
+                if (root is not null)
+                    ui.Container.Children.Remove(root);
             });
             await ui.YieldToRenderAsync();
             await ui.RunOnUIAsync(() => resources?.Dispose());

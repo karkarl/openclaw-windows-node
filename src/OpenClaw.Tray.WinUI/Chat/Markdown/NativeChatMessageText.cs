@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Reactor.Wrappers;
@@ -35,6 +36,7 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
     private Func<string, bool>? _tryCopy;
     private ChatMessageTextAutomationPeer? _peer;
     private bool _disposed;
+    private bool _suspended;
     private bool _refreshPending;
     private bool _dragging;
     private int _generation;
@@ -66,6 +68,7 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
               </Grid>
             </ControlTemplate>
             """);
+        Loaded += OnLoaded;
         Attach();
     }
 
@@ -86,12 +89,9 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     internal void Update(Func<string, bool>? tryCopy)
     {
-        _tryCopy = tryCopy;
         if (_disposed)
-        {
-            _disposed = false;
-            Attach();
-        }
+            return;
+        _tryCopy = tryCopy;
         if (_refreshPending)
             return;
         _refreshPending = true;
@@ -108,10 +108,11 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     private void Attach()
     {
+        _suspended = false;
+        _refreshPending = false;
         _generation++;
         UpdateSystemColors();
         _uiSettings.ColorValuesChanged += OnSystemColorsChanged;
-        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
         PointerPressed += OnPointerPressed;
@@ -141,8 +142,15 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         });
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs args) => RefreshDocument();
-    private void OnUnloaded(object sender, RoutedEventArgs args) => Dispose();
+    private void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        if (_disposed)
+            return;
+        if (_suspended)
+            Attach();
+        RefreshDocument();
+    }
+    private void OnUnloaded(object sender, RoutedEventArgs args) => Suspend();
     private void OnSizeChanged(object sender, SizeChangedEventArgs args) => RefreshDocument();
     private void OnGotFocus(object sender, RoutedEventArgs args) => UpdateCaret();
 
@@ -159,7 +167,7 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     internal void RefreshDocument()
     {
-        if (_disposed || !IsLoaded || Content is not FrameworkElement content)
+        if (_disposed || _suspended || !IsLoaded || Content is not FrameworkElement content)
             return;
         var previous = new Dictionary<FrameworkElement, ChatTextSurface>(_surfaces);
         _surfaces.Clear();
@@ -600,6 +608,43 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         return ranges;
     }
 
+    internal int[] ParagraphBoundaries()
+    {
+        var boundaries = new SortedSet<int> { 0, Document.Text.Length };
+        foreach (var surface in _ordered)
+        {
+            foreach (var position in surface.ParagraphStarts)
+            {
+                // A list marker/body pair or adjacent table columns share a paragraph.
+                if (position > 0 || surface.Start == 0 || surface.Separator.Contains('\n'))
+                    boundaries.Add(surface.Start + position);
+            }
+        }
+        return boundaries.ToArray();
+    }
+
+    internal int[]? VisualLineBoundaries()
+    {
+        var boundaries = new SortedSet<int> { 0, Document.Text.Length };
+        double? previousY = null;
+        foreach (var surface in _ordered)
+        {
+            foreach (var position in StringInfo.ParseCombiningCharacters(surface.Text))
+            {
+                if (surface.Text[position] is '\r' or '\n' or '\u2028' or '\u2029')
+                    continue;
+                var rectangle = surface.CharacterRectangle(position);
+                if (rectangle.IsEmpty || rectangle.Height <= 0)
+                    return null;
+                rectangle = surface.Element.TransformToVisual(this).TransformBounds(rectangle);
+                if (previousY is { } y && Math.Abs(y - rectangle.Y) > 0.5)
+                    boundaries.Add(surface.Start + position);
+                previousY = rectangle.Y;
+            }
+        }
+        return boundaries.ToArray();
+    }
+
     internal (int Start, int End)? RangeForElement(FrameworkElement element) =>
         _elementRanges.TryGetValue(element, out var range) ? range : null;
 
@@ -673,12 +718,22 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+            return;
         _disposed = true;
+        Loaded -= OnLoaded;
+        Suspend();
+    }
+
+    private void Suspend()
+    {
+        if (_suspended)
+            return;
+        _suspended = true;
         _generation++;
         _refreshPending = false;
         EndSelection();
         ReleasePointerCaptures();
-        Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
         SizeChanged -= OnSizeChanged;
         PointerPressed -= OnPointerPressed;

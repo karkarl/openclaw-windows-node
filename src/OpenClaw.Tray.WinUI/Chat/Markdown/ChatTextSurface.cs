@@ -17,6 +17,8 @@ internal sealed class ChatTextSurface
     private sealed record State(bool SelectionEnabled, AccessibilityView Accessibility, TextHighlighter Highlight);
     private readonly List<Leaf> _leaves = [];
     private readonly Dictionary<FrameworkElement, State> _states = [];
+    private readonly List<int> _paragraphStarts = [];
+    internal IReadOnlyList<int> ParagraphStarts => _paragraphStarts;
     internal FrameworkElement Element { get; }
     internal string Text { get; }
     internal int Start { get; set; }
@@ -63,11 +65,15 @@ internal sealed class ChatTextSurface
                         nativeOffset++;
                     }
                     first = false;
+                    if (owner == Element)
+                        _paragraphStarts.Add(text.Length);
                     Append(owner, paragraph.Inlines, ref nativeOffset);
                 }
             }
             else if (owner is TextBlock block)
             {
+                if (owner == Element)
+                    _paragraphStarts.Add(text.Length);
                 var before = text.Length;
                 Append(owner, block.Inlines, ref nativeOffset);
                 if (before == text.Length && block.Text.Length > 0)

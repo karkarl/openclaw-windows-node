@@ -285,44 +285,19 @@ internal sealed class ChatMessageTextAutomationPeer : FrameworkElementAutomation
                 case TextUnit.Page:
                     return _text.Length == 0 ? [0] : [0, _text.Length];
                 case TextUnit.Format:
-                    // No formatting runs are exposed, so promote Format to the whole document.
-                    return _text.Length == 0 ? [0] : [0, _text.Length];
+                    // Word is the next supported unit above Format in UIA's hierarchy.
+                    return WordBoundaries();
                 case TextUnit.Character:
                     return StringInfo.ParseCombiningCharacters(_text).Append(_text.Length).ToArray();
                 case TextUnit.Word:
                     return WordBoundaries();
                 case TextUnit.Line:
+                    return _peer._owner.VisualLineBoundaries() ?? _peer._owner.ParagraphBoundaries();
                 case TextUnit.Paragraph:
-                    return LineBoundaries();
+                    return _peer._owner.ParagraphBoundaries();
                 default:
                     throw new ArgumentOutOfRangeException(nameof(unit));
             }
-        }
-
-        private int[] LineBoundaries()
-        {
-            var boundaries = new List<int> { 0 };
-            for (var index = 0; index < _text.Length; index++)
-            {
-                var character = _text[index];
-                if (character == '\r' && index + 1 < _text.Length && _text[index + 1] == '\n')
-                {
-                    index++;
-                }
-                else if (character is not ('\r' or '\n' or '\u2028' or '\u2029'))
-                {
-                    continue;
-                }
-
-                boundaries.Add(index + 1);
-            }
-
-            if (boundaries[^1] != _text.Length)
-            {
-                boundaries.Add(_text.Length);
-            }
-
-            return boundaries.ToArray();
         }
 
         private int[] WordBoundaries()
