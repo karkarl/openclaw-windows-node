@@ -363,3 +363,33 @@ Attachment, queue, recording, loading, thinking and error presentations use the
 same resources and bounded layouts. Markdown sanitization, disabled HTML,
 blocked link navigation, inert images, list measurement, timeline keys and
 scroll-follow remain with their existing owners.
+
+### Per-message Markdown selection
+
+Each realized assistant Markdown body has a native `NativeChatMessageText`
+selection owner. A single range crosses paragraphs, list markers, multiline
+code, table cells (tab-separated columns and newline-separated rows), and inert
+inline link text. It never crosses into another message. Code language and Copy
+labels, disclosure summary controls, and collapsed disclosure bodies are not
+characters in this range. Buttons and expanders retain their native child peers
+and interactions.
+
+Pointer drag, double-click word selection, Shift extension, arrows, Home/End,
+Ctrl+Home/End, Ctrl+Shift+arrows, Ctrl+A, Ctrl+C and the selection context menu
+share the same model. Dragging beyond an ancestor viewport scrolls on render
+frames, with the pointer retained in root coordinates. Highlight and foreground
+use Windows system selection colors. Copy failures expose a polite live-region
+status instead of claiming success.
+
+`ChatMessageTextAutomationPeer` exposes the Text pattern with grapheme-aware
+ranges, selection, search, viewport geometry and revision rebasing. Native text
+leaves are Raw accessibility children to avoid duplicate text navigation;
+interactive widgets remain accessible. Unloading disposes selection subscriptions
+and native highlights; a reused owner attaches again through its Reactor update.
+The timeline remains responsible for rendering and virtualization, not selection.
+
+The isolated native proof matrix exercises synthetic native geometry, keyboard
+dispatch, an injected clipboard, provider APIs and render-frame scrolling in
+Light, Dark and a synthetic High Contrast resource scope. Physical pointer/key
+injection, Narrator speech, actual Windows High Contrast switching and a published
+application run are separate manual checks, not claims made by these proofs.

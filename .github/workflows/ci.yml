@@ -707,7 +707,7 @@ jobs:
         -ResultsDirectory TestResults\TrayUI
         -TrxFileName OpenClaw.Tray.UITests.trx
         -Runtime win-x64
-        -Filter "Category!=Accessibility&Category!=NativeOnboardingProof&Category!=NativeMarkdownProof"
+        -Filter "Category!=Accessibility&Category!=NativeOnboardingProof&Category!=NativeMarkdownProof&Category!=NativeMarkdownSelectionProof"
         -HangTimeoutSeconds 300
 
     # Native Expander templates cannot safely outlive theme resource replacement
@@ -730,6 +730,25 @@ jobs:
           -ResultName markdown-inert-content `
           -RuntimeIdentifier win-x64 `
           -ResultsDirectory TestResults\Markdown
+
+    - name: Run native per-message Markdown selection proofs
+      timeout-minutes: 20
+      shell: pwsh
+      run: |
+        foreach ($configuration in @('Debug', 'Release')) {
+          foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse')) {
+            foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
+              $name = "selection-$($configuration.ToLowerInvariant())-$($case.Split('_')[0].ToLowerInvariant())-$($theme.ToLowerInvariant())"
+              ./scripts/run-proof-tests.ps1 `
+                -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
+                -Filter "Category=NativeMarkdownSelectionProof&FullyQualifiedName~$case&DisplayName~$theme" `
+                -ResultName $name `
+                -Configuration $configuration `
+                -RuntimeIdentifier win-x64 `
+                -ResultsDirectory TestResults\MarkdownSelection
+            }
+          }
+        }
 
     # Accessibility Insights CI pass: scans each page in the real app process.
     - name: Run Accessibility Tests (Axe.Windows)

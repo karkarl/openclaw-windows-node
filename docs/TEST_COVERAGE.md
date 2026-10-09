@@ -81,6 +81,37 @@ shared thread-pool scheduling latency.
 
 ### Additional projects
 
+Native Markdown selection proofs (`Category=NativeMarkdownSelectionProof`) also
+run in fresh processes, one case/theme at a time, in both Debug and Release.
+The shared UI lane excludes this category. CI enumerates both
+`VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange` and
+`MessageBoundary_DragScrollAndRealizationReuse` in Light, Dark and synthetic
+HighContrast. Each invocation selects exactly one required case, and the proof
+runner rejects zero-test and zero-pass results.
+
+```powershell
+foreach ($configuration in @('Debug', 'Release')) {
+    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse')) {
+        foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
+            .\scripts\run-proof-tests.ps1 `
+                -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
+                -Filter "Category=NativeMarkdownSelectionProof&FullyQualifiedName~$case&DisplayName~$theme" `
+                -ResultName "selection-$($configuration.ToLowerInvariant())-$($case.Split('_')[0].ToLowerInvariant())-$($theme.ToLowerInvariant())" `
+                -Configuration $configuration -RuntimeIdentifier win-x64 `
+                -ResultsDirectory TestResults\MarkdownSelection
+        }
+    }
+}
+```
+
+These exercise actual native text/highlight geometry, the selection owner input
+pipeline with an injected clipboard, live copy-failure status, UIA range
+operations and native widget peers, disclosure removal, streaming/resize,
+message isolation, render-frame drag autoscroll and realized-owner reuse.
+They do not inject physical input into the desktop, switch Windows High Contrast,
+or prove Narrator speech. `ChatTextSelectionDocumentTests` adds six fast pure
+behavioral cases; it contains no source-marker assertions.
+
 Native Markdown disclosure proofs use a fresh WinUI test process for each
 theme and the inert-content case. Attached native `Expander` templates can
 crash the shared testhost when a later fixture replaces application theme

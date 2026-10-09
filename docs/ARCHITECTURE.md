@@ -933,6 +933,24 @@ leading and trailing pipe. Columns, in order:
 | setup-dashboard-pending-proof | authoritative | src/OpenClaw.Tray.WinUI/Services/SetupDashboardHandoff.cs | accepting external serialized completion JSON as verified proof | SetupDashboardHandoffStore + SetupNativeHandoffLauncher | activation parser admits only an opaque native handle; WindowManager rechecks current observations with SetupDashboardLiveFacts | a short-lived local pending record is exclusively leased, consumed on successful native presentation and retained only for explicit failed-launch retry; unknown, expired, forged, consumed and in-flight replay fail visibly; old generation numbers are not live authority | SetupDashboardHandoffStoreTests.ForgedShapeAndUnknownHandle_AreNotVerificationAuthority | behavioral | - |
 <!-- LEDGER:END -->
 
+## Per-message Markdown selection ownership
+
+| Responsibility | Owner | Status |
+|---|---|---|
+| Visible-body UTF-16 projection, grapheme/word movement and streaming position mapping | `ChatTextSelectionDocument` | authoritative |
+| Pointer capture, keyboard/copy, viewport autoscroll, focus/caret and realized-message lifecycle | `NativeChatMessageText` | authoritative |
+| Native Run/Span/LineBreak and inert inline-child geometry/highlight offsets | `ChatTextSurface` | authoritative |
+| UI Automation Text pattern and revision-aware range providers | `ChatMessageTextAutomationPeer` | authoritative |
+| Transcript-wide or per-leaf selection coordination in the timeline | `ReactorChatTimeline` | closed |
+
+`ReactorChatTimeline.BuildSafeMarkdown` composes the existing Markdown body into
+the typed native owner. It does not own a second selection range or copy path.
+Behavioral guards are `ChatTextSelectionDocumentTests` and the isolated
+`ChatMessageTextSelectionProofTests` matrix, including cross-block selection,
+message isolation, collapsed-content removal, native child peers, scrolling and
+owner disposal/reuse. Rendering, disclosure parsing and sanitization retain
+their existing owners.
+
 ## Deferred test builders
 
 `DeviceIdentityBuilder` and `SetupContextBuilder` are intentionally **not** in
