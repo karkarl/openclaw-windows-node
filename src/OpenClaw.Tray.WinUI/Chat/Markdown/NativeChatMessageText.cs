@@ -164,9 +164,21 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         var generation = _generation;
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (!_disposed && IsLoaded && generation == _generation && XamlRoot is not null &&
-                !ContainsElement(FocusManager.GetFocusedElement(XamlRoot) as DependencyObject))
-                SelectRange(Document.Focus, Document.Focus);
+            if (_disposed || !IsLoaded || generation != _generation || XamlRoot is null)
+                return;
+            // Inactive selection stays visible until focus transfers to another message.
+            var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+            while (focused is not null)
+            {
+                if (focused is NativeChatMessageText message)
+                {
+                    if (message != this)
+                        SelectRange(Document.Focus, Document.Focus);
+                    break;
+                }
+                focused = VisualTreeHelper.GetParent(focused);
+            }
+            UpdateCaret();
         });
     }
 

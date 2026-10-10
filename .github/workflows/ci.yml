@@ -736,7 +736,7 @@ jobs:
       shell: pwsh
       run: |
         foreach ($configuration in @('Debug', 'Release')) {
-          foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload')) {
+          foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile')) {
             foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
               $name = "selection-$($configuration.ToLowerInvariant())-$($case.Split('_')[0].ToLowerInvariant())-$($theme.ToLowerInvariant())"
               ./scripts/run-proof-tests.ps1 `

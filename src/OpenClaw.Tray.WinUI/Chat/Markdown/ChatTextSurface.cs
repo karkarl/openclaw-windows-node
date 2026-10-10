@@ -125,8 +125,6 @@ internal sealed class ChatTextSurface
             var collection = Highlights(pair.Key);
             pair.Value.Highlight.Background = background;
             pair.Value.Highlight.Foreground = foreground;
-            if (!collection.Contains(pair.Value.Highlight))
-                collection.Add(pair.Value.Highlight);
             var expected = new List<TextRange>();
             foreach (var leaf in _leaves.Where(leaf => leaf.Owner == pair.Key))
             {
@@ -142,10 +140,19 @@ internal sealed class ChatTextSurface
             var ranges = pair.Value.Highlight.Ranges;
             if (ranges.Count == expected.Count && ranges.Zip(expected).All(values =>
                 values.First.StartIndex == values.Second.StartIndex && values.First.Length == values.Second.Length))
+            {
+                if (expected.Count > 0 && !collection.Contains(pair.Value.Highlight))
+                    collection.Add(pair.Value.Highlight);
                 continue;
+            }
+            // Publish populated ranges through the owner's native collection. Mutating an
+            // already attached range vector can leave the cached text drawing unchanged.
+            collection.Remove(pair.Value.Highlight);
             ranges.Clear();
             foreach (var range in expected)
                 ranges.Add(range);
+            if (expected.Count > 0)
+                collection.Add(pair.Value.Highlight);
         }
     }
 

@@ -15,6 +15,35 @@ public sealed class NativeKeyboardTheoryAttribute : TheoryAttribute
 
 internal static class NativeKeyboardProof
 {
+    public static (System.Drawing.Bitmap Bitmap, System.Drawing.Rectangle Bounds) Capture(nint window)
+    {
+        if (window == 0 || GetForegroundWindow() != window)
+            throw new InvalidOperationException("The owned proof window must be foreground for desktop pixel capture.");
+        GetWindowThreadProcessId(window, out var processId);
+        if (processId != Environment.ProcessId)
+            throw new InvalidOperationException("Pixel capture requires the owned proof window.");
+        if (!GetClientRect(window, out var rect))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        Marshal.ThrowExceptionForHR(DwmFlush());
+        if (GetForegroundWindow() != window)
+            throw new InvalidOperationException("The owned proof window lost foreground before pixel capture.");
+        var origin = ClientPoint(window, rect.Left, rect.Top);
+        var bounds = new System.Drawing.Rectangle(origin.X, origin.Y, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        var bitmap = new System.Drawing.Bitmap(bounds.Width, bounds.Height);
+        using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+        graphics.CopyFromScreen(bounds.Location, System.Drawing.Point.Empty, bounds.Size);
+        return (bitmap, bounds);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(nint window, out NativeRect rect);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
     private static bool _leftButtonHeld;
     private static bool _shiftHeld;
     public static async Task ActivateAsync(nint window)

@@ -87,12 +87,13 @@ The shared UI lane excludes this category. CI enumerates both
 `VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange` and
 `MessageBoundary_DragScrollAndRealizationReuse`, plus
 `NativeUnits_RespectWrappingParagraphsAndTransientReload` in Light, Dark and synthetic
-HighContrast. Each invocation selects exactly one required case, and the proof
+HighContrast, plus the rendered pixel comparison
+`SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile`. Each invocation selects exactly one required case, and the proof
 runner rejects zero-test and zero-pass results.
 
 ```powershell
 foreach ($configuration in @('Debug', 'Release')) {
-    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload')) {
+    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile')) {
         foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
             .\scripts\run-proof-tests.ps1 `
                 -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
@@ -122,15 +123,29 @@ HWND, and pointer coordinates must hit that window. Child-handled routed
 presses must reach the message selection owner; buttons and scrollbars retain
 their native interaction. Each gesture can be captured with
 `OPENCLAW_VISUAL_TEST=1` and a repository-local `OPENCLAW_VISUAL_TEST_DIR`.
+The routed proof now captures foreground desktop pixels, not RenderTargetBitmap,
+and checks system highlight-colored fill in every selected native text rectangle.
+Run each Light, Dark and synthetic HighContrast case in a separate process.
+
+`SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile` compares rendered
+pixels against an unselected frame in all three themes. It checks partial first
+and last blocks, every intervening bullet/code block, unselected prefix/suffix,
+inactive focus and Reactor reconciliation. Native text range updates are
+published through the owning TextHighlighters collection so cached text drawing
+is invalidated. Losing focus outside the message retains visible selection;
+transferring focus to another message still clears the old message's selection.
+This rendered proof does not substitute for foreground desktop input proof.
 
 ```powershell
 $env:OPENCLAW_RUN_KEYBOARD_PROOF = '1'
 foreach ($configuration in @('Debug', 'Release')) {
-    .\scripts\run-proof-tests.ps1 `
-        -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
-        -Filter 'FullyQualifiedName~RoutedInput_SelectsAcrossNativeMarkdownChildren' `
-        -ResultName "routed-selection-$($configuration.ToLowerInvariant())" `
-        -Configuration $configuration -RuntimeIdentifier win-x64
+    foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
+        .\scripts\run-proof-tests.ps1 `
+            -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
+            -Filter "FullyQualifiedName~RoutedInput_SelectsAcrossNativeMarkdownChildren&DisplayName~$theme" `
+            -ResultName "routed-selection-$($configuration.ToLowerInvariant())-$($theme.ToLowerInvariant())" `
+            -Configuration $configuration -RuntimeIdentifier win-x64
+    }
 }
 ```
 

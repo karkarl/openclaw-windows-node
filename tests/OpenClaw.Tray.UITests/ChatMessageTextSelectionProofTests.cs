@@ -7,6 +7,9 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Automation.Text;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Imaging;
+using System.Runtime.InteropServices.WindowsRuntime;
 using OpenClawTray.Chat;
 using OpenClawTray.Chat.Markdown;
 using OpenClawTray.Helpers;
@@ -20,9 +23,164 @@ namespace OpenClaw.Tray.UITests;
 [Trait("Category", "NativeMarkdownSelectionProof")]
 public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
 {
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrast")]
+    public async Task SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile(string theme)
+    {
+        await ui.ResetContainerAsync();
+        ChatThemeProofScope? resources = null;
+        ReactorHostControl? host = null;
+        NativeChatMessageText? owner = null;
+        ITextProvider? provider = null;
+        Border? surface = null;
+        Button? outside = null;
+        Element? element = null;
+        UIElement? native = null;
+        const string markdown = "Opening paragraph with **bold evidence**.\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n# Ending heading";
+        var start = 0;
+        var end = 0;
+        Rect[] regions = [];
+        Rect[] excluded = [];
+        try
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                resources = new ChatThemeProofScope(theme);
+                ui.TestWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 900));
+                host = new ReactorHostControl { Width = 620, RequestedTheme = resources.ElementTheme };
+                element = ReactorChatTimeline.BuildSafeMarkdown(markdown, _ => true);
+                native = host.Reconciler.Mount(element, () => { });
+                host.Content = native;
+                surface = new Border
+                {
+                    Child = host,
+                    Width = 652,
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        theme == "Dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White),
+                    VerticalAlignment = VerticalAlignment.Top,
+                };
+                outside = new Button { Content = "Outside message", VerticalAlignment = VerticalAlignment.Bottom };
+                ui.Container.Children.Add(new ScrollViewer { Content = surface, Height = 600, Width = 700 });
+                ui.Container.Children.Add(outside);
+            });
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() =>
+            {
+                owner = Assert.Single(FindLogical<NativeChatMessageText>(host!));
+                owner.RefreshDocument();
+                provider = Assert.IsAssignableFrom<ITextProvider>(
+                    FrameworkElementAutomationPeer.CreatePeerForElement(owner)!.GetPattern(PatternInterface.Text));
+                start = owner.Document.Text.IndexOf("paragraph", StringComparison.Ordinal);
+                end = owner.Document.Text.IndexOf("Ending", StringComparison.Ordinal) + 3;
+            });
+            async Task<(byte[] Pixels, int Width, int Height)> Frame(string name) =>
+                await ui.RunOnUIAsync(async () =>
+                {
+                    Console.WriteLine($"Frame {name}: selected={owner!.Document.SelectedText.Length}; ownerFocus={owner.FocusState}; focused={FocusManager.GetFocusedElement(owner.XamlRoot)?.GetType().Name}");
+                    var bitmap = new RenderTargetBitmap();
+                    await bitmap.RenderAsync(surface!);
+                    var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+                    await VisualTestCapture.CaptureAsync(surface!, $"SelectionPaint-{theme}-{name}");
+                    return (pixels, bitmap.PixelWidth, bitmap.PixelHeight);
+                });
+            var before = await Frame("before");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.True(owner!.Focus(FocusState.Programmatic));
+                owner.SelectRange(start, end);
+                provider!.GetSelection()[0].GetBoundingRectangles(out var rectangles);
+                var bounds = FrameworkElementAutomationPeer.CreatePeerForElement(owner)!.GetBoundingRectangle();
+                var scale = owner.XamlRoot.RasterizationScale;
+                var result = new List<Rect>();
+                for (var index = 0; index < rectangles.Length; index += 4)
+                {
+                    var local = new Point((rectangles[index] - bounds.X) / scale,
+                        (rectangles[index + 1] - bounds.Y) / scale);
+                    var origin = owner.TransformToVisual(surface).TransformPoint(local);
+                    result.Add(new Rect(origin.X * scale, origin.Y * scale,
+                        rectangles[index + 2], rectangles[index + 3]));
+                }
+                regions = result.ToArray();
+                Assert.NotEmpty(regions);
+                result.Clear();
+                foreach (var text in new[] { "Opening", "heading" })
+                {
+                    var range = provider.DocumentRange.FindText(text, false, false);
+                    Assert.NotNull(range);
+                    range.GetBoundingRectangles(out var remaining);
+                    for (var index = 0; index < remaining.Length; index += 4)
+                    {
+                        var local = new Point((remaining[index] - bounds.X) / scale,
+                            (remaining[index + 1] - bounds.Y) / scale);
+                        var origin = owner.TransformToVisual(surface).TransformPoint(local);
+                        result.Add(new Rect(origin.X * scale, origin.Y * scale,
+                            remaining[index + 2], remaining[index + 3]));
+                    }
+                }
+                excluded = result.ToArray();
+                Assert.NotEmpty(excluded);
+            });
+            await ui.YieldToRenderAsync();
+            void AssertPaint((byte[] Pixels, int Width, int Height) frame, bool selected, Rect[]? areas = null)
+            {
+                var color = new Windows.UI.ViewManagement.UISettings().UIElementColor(
+                    Windows.UI.ViewManagement.UIElementType.Highlight);
+                foreach (var region in areas ?? regions)
+                {
+                    var count = 0;
+                    var area = 0;
+                    for (var y = Math.Max(0, (int)region.Top); y < Math.Min(frame.Height, (int)region.Bottom); y++)
+                        for (var x = Math.Max(0, (int)region.Left); x < Math.Min(frame.Width, (int)region.Right); x++)
+                        {
+                            var offset = (y * frame.Width + x) * 4;
+                            area++;
+                            if (Math.Abs(frame.Pixels[offset] - color.B) <= 8 &&
+                                Math.Abs(frame.Pixels[offset + 1] - color.G) <= 8 &&
+                                Math.Abs(frame.Pixels[offset + 2] - color.R) <= 8)
+                                count++;
+                        }
+                    Console.WriteLine($"Rendered paint {theme}: selected={selected}, area={area}, pixels={count}");
+                    if (selected)
+                        Assert.True(count >= Math.Max(3, area / 8), $"No system highlight fill in {region}.");
+                    else
+                        Assert.Equal(0, count);
+                }
+            }
+            AssertPaint(before, false);
+            var active = await Frame("active");
+            AssertPaint(active, true);
+            AssertPaint(active, false, excluded);
+            await ui.RunOnUIAsync(() => Assert.True(outside!.Focus(FocusState.Programmatic)));
+            await ui.YieldToRenderAsync();
+            AssertPaint(await Frame("inactive"), true);
+            await ui.RunOnUIAsync(() =>
+            {
+                var next = ReactorChatTimeline.BuildSafeMarkdown(markdown, _ => true);
+                native = host!.Reconciler.Reconcile(element!, next, native!, () => { });
+                element = next;
+                host.Content = native;
+            });
+            await ui.YieldToRenderAsync();
+            AssertPaint(await Frame("reconciled"), true);
+        }
+        finally
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                owner?.Dispose();
+                ui.Container.Children.Clear();
+                resources?.Dispose();
+            });
+        }
+    }
+
     [NativeKeyboardTheory]
     [Trait("Category", "NativeKeyboard")]
     [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrast")]
     public async Task RoutedInput_SelectsAcrossNativeMarkdownChildren(string theme)
     {
         await ui.ResetContainerAsync();
@@ -47,10 +205,17 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 surface = new Border
                 {
                     Child = host,
-                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        theme == "Dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White),
                     VerticalAlignment = VerticalAlignment.Top,
                 };
-                ui.Container.Children.Add(surface);
+                ui.Container.Children.Add(new ScrollViewer
+                {
+                    Content = surface,
+                    Height = 600,
+                    Width = 700,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                });
                 ui.TestWindow.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(100, 100, 900, 900));
                 ui.TestWindow.AppWindow.Show();
                 ui.TestWindow.Activate();
@@ -102,8 +267,72 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 await ui.RunOnUIAsync(() => Console.WriteLine(
                     $"Selection {text} flags={flags} shift={shift}: {owner!.Document.Anchor}:{owner.Document.Focus}; {pointerRoute}"));
             }
-            async Task Capture(string gesture) =>
-                await ui.RunOnUIAsync(() => VisualTestCapture.CaptureAsync(surface!, $"RoutedSelection-{theme}-{gesture}"));
+            async Task Capture(string gesture)
+            {
+                var presented = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                EventHandler<object>? rendering = null;
+                rendering = (_, _) =>
+                {
+                    Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= rendering;
+                    ui.Dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                        () => presented.TrySetResult());
+                };
+                await ui.RunOnUIAsync(() => Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += rendering);
+                try
+                {
+                    await presented.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                finally
+                {
+                    await ui.RunOnUIAsync(() => Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= rendering);
+                }
+                var regions = await ui.RunOnUIAsync<System.Drawing.Rectangle[]>(() =>
+                {
+                    provider!.GetSelection()[0].GetBoundingRectangles(out var rectangles);
+                    var bounds = FrameworkElementAutomationPeer.CreatePeerForElement(owner!)!.GetBoundingRectangle();
+                    var scale = owner!.XamlRoot.RasterizationScale;
+                    var result = new List<System.Drawing.Rectangle>();
+                    for (var index = 0; index < rectangles.Length; index += 4)
+                    {
+                        var local = new Point((rectangles[index] - bounds.X) / scale,
+                            (rectangles[index + 1] - bounds.Y) / scale);
+                        var client = owner.TransformToVisual(null).TransformPoint(local);
+                        var origin = NativeKeyboardProof.ClientPoint(window,
+                            (int)Math.Round(client.X * scale), (int)Math.Round(client.Y * scale));
+                        result.Add(new System.Drawing.Rectangle(origin.X, origin.Y,
+                            (int)Math.Ceiling(rectangles[index + 2]), (int)Math.Ceiling(rectangles[index + 3])));
+                    }
+                    return Task.FromResult(result.ToArray());
+                });
+                var color = new Windows.UI.ViewManagement.UISettings().UIElementColor(
+                    Windows.UI.ViewManagement.UIElementType.Highlight);
+                var frame = NativeKeyboardProof.Capture(window);
+                using var bitmap = frame.Bitmap;
+                var directory = Path.Combine(Environment.GetEnvironmentVariable("OPENCLAW_VISUAL_TEST_DIR")
+                    ?? Path.Combine(Environment.GetEnvironmentVariable("OPENCLAW_REPO_ROOT")!, "TestResults"),
+                    $"RoutedSelection-{theme}-{gesture}");
+                Directory.CreateDirectory(directory);
+                bitmap.Save(Path.Combine(directory, "desktop.png"), System.Drawing.Imaging.ImageFormat.Png);
+                Assert.NotEmpty(regions);
+                foreach (var region in regions)
+                {
+                    var local = new System.Drawing.Rectangle(region.X - frame.Bounds.X,
+                        region.Y - frame.Bounds.Y, region.Width, region.Height);
+                    local.Intersect(new System.Drawing.Rectangle(System.Drawing.Point.Empty, bitmap.Size));
+                    var selectedPixels = 0;
+                    for (var y = local.Top; y < local.Bottom; y++)
+                        for (var x = local.Left; x < local.Right; x++)
+                        {
+                            var pixel = bitmap.GetPixel(x, y);
+                            if (Math.Abs(pixel.R - color.R) <= 8 && Math.Abs(pixel.G - color.G) <= 8 &&
+                                Math.Abs(pixel.B - color.B) <= 8)
+                                selectedPixels++;
+                        }
+                    Console.WriteLine($"Paint {gesture}: region={local}; system highlight pixels={selectedPixels}");
+                    Assert.True(selectedPixels >= Math.Max(3, local.Width * local.Height / 8),
+                        $"No visible system selection fill in {gesture}: {selectedPixels} pixels in {local}.");
+                }
+            }
 
             await Move("Opening", false, 2);
             await Move("plugin purpose", true);
