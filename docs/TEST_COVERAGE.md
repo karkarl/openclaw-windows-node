@@ -82,12 +82,11 @@ shared thread-pool scheduling latency.
 ### Additional projects
 
 Native Markdown selection proofs (`Category=NativeMarkdownSelectionProof`) also
-run in fresh processes, one case/theme at a time, in both Debug and Release.
+run in fresh processes, one case at a time, in both Debug and Release.
 The shared UI lane excludes this category. CI enumerates both
 `VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange` and
 `MessageBoundary_DragScrollAndRealizationReuse`, plus
-`NativeUnits_RespectWrappingParagraphsAndTransientReload` in Light, Dark and synthetic
-HighContrast, plus the rendered pixel comparison
+`NativeUnits_RespectWrappingParagraphsAndTransientReload` in Light, plus the rendered pixel comparison
 `SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile`. Each invocation selects exactly one required case, and the proof
 runner rejects zero-test and zero-pass results.
 
@@ -104,7 +103,7 @@ desktop and an injected copy sink; UIA range selection is not physical input pro
 ```powershell
 foreach ($configuration in @('Debug', 'Release')) {
     foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile', 'DisclosureSelection_VisibleSummaryAndExpandedBody')) {
-        foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
+        foreach ($theme in @('Light')) {
             .\scripts\run-proof-tests.ps1 `
                 -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
                 -Filter "Category=NativeMarkdownSelectionProof&FullyQualifiedName~$case&DisplayName~$theme" `
@@ -121,8 +120,17 @@ pipeline with an injected clipboard, live copy-failure status, UIA range
 operations and native widget peers, disclosure removal, streaming/resize,
 message isolation, render-frame drag autoscroll and realized-owner reuse.
 They do not inject physical input into the desktop, switch Windows High Contrast,
-or prove Narrator speech. `ChatTextSelectionDocumentTests` adds six fast pure
+or prove Narrator speech. `ChatTextSelectionDocumentTests` adds seven fast pure
 behavioral cases; it contains no source-marker assertions.
+
+Selection theory data always includes Light. Dark and simulated HighContrast
+are available only with `OPENCLAW_VISUAL_TEST=1` for screenshot review, not as
+additional CI rows or skipped tests. System `UISettings` owns selection highlight
+colors; changing the application theme does not change those system colors.
+The five non-input methods therefore run five cases per configuration in CI.
+The sixth method is the separately opt-in physical-input proof. The unit suite
+merges middle-content removal into streaming rebasing and explicitly guards
+out-of-range endpoint clamping and word selection at the document end.
 
 `RoutedInput_SelectsAcrossNativeMarkdownChildren` is an additional opt-in real
 SendInput proof. It mounts production Markdown with an injected clipboard,
@@ -135,10 +143,11 @@ their native interaction. Each gesture can be captured with
 `OPENCLAW_VISUAL_TEST=1` and a repository-local `OPENCLAW_VISUAL_TEST_DIR`.
 The routed proof now captures foreground desktop pixels, not RenderTargetBitmap,
 and checks system highlight-colored fill in every selected native text rectangle.
-Run each Light, Dark and synthetic HighContrast case in a separate process.
+Run the Light case in a separate process. Set `OPENCLAW_VISUAL_TEST=1` to
+include Dark and synthetic HighContrast capture rows, each in its own process.
 
 `SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile` compares rendered
-pixels against an unselected frame in all three themes. It checks partial first
+pixels against an unselected frame in Light (and optional theme capture rows). It checks partial first
 and last blocks, every intervening bullet/code block, unselected prefix/suffix,
 inactive focus and Reactor reconciliation. Native text range updates are
 published through the owning TextHighlighters collection so cached text drawing

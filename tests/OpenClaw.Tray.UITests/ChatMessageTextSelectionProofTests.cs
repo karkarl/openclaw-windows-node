@@ -23,10 +23,21 @@ namespace OpenClaw.Tray.UITests;
 [Trait("Category", "NativeMarkdownSelectionProof")]
 public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
 {
+    public static IEnumerable<object[]> Themes
+    {
+        get
+        {
+            yield return ["Light"];
+            if (Environment.GetEnvironmentVariable("OPENCLAW_VISUAL_TEST") == "1")
+            {
+                yield return ["Dark"];
+                yield return ["HighContrast"];
+            }
+        }
+    }
+
     [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task DisclosureSelection_VisibleSummaryAndExpandedBody(string theme)
     {
         await ui.ResetContainerAsync();
@@ -113,9 +124,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
     }
 
     [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile(string theme)
     {
         await ui.ResetContainerAsync();
@@ -278,9 +287,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
 
     [NativeKeyboardTheory]
     [Trait("Category", "NativeKeyboard")]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task RoutedInput_SelectsAcrossNativeMarkdownChildren(string theme)
     {
         await ui.ResetContainerAsync();
@@ -581,9 +588,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
         "Final paragraph.";
 
     [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange(string theme)
     {
         await ui.ResetContainerAsync();
@@ -772,9 +777,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
     }
 
     [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task MessageBoundary_DragScrollAndRealizationReuse(string theme)
     {
         await ui.ResetContainerAsync();
@@ -889,9 +892,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
     }
 
     [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    [InlineData("HighContrast")]
+    [MemberData(nameof(Themes))]
     public async Task NativeUnits_RespectWrappingParagraphsAndTransientReload(string theme)
     {
         await ui.ResetContainerAsync();

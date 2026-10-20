@@ -40,16 +40,28 @@ public sealed class ChatTextSelectionDocumentTests
         Assert.Equal(focus, document.Focus);
         document.Update([new(document.Text + "\n\nMore evidence.")]);
         Assert.Equal("Chosen evidence.", document.SelectedText);
+        document.Update([new("Before.\n\nChosen evidence.\n\nMore evidence.")]);
+        Assert.Equal("Chosen evidence.", document.SelectedText);
     }
 
     [Fact]
-    public void CollapsedContentRemoval_ClampsRangeButPreservesRemainingSuffix()
+    public void Select_ClampsEndpointsToVisibleDocument()
     {
         var document = new ChatTextSelectionDocument();
-        document.Update([new("Before.\n\nHidden.\n\nAfter.")]);
-        document.Select(document.Text.IndexOf("After.", StringComparison.Ordinal), document.Text.Length);
-        document.Update([new("Before.\n\nAfter.")]);
-        Assert.Equal("After.", document.SelectedText);
+        document.Update([new("Visible evidence.")]);
+        document.Select(-5, 999);
+        Assert.Equal(0, document.Anchor);
+        Assert.Equal(document.Text.Length, document.Focus);
+        Assert.Equal("Visible evidence.", document.SelectedText);
+    }
+
+    [Fact]
+    public void SelectWord_AtDocumentEndSelectsLastWord()
+    {
+        var document = new ChatTextSelectionDocument();
+        document.Update([new("First final_word")]);
+        document.SelectWord(document.Text.Length);
+        Assert.Equal("final_word", document.SelectedText);
     }
 
     [Fact]

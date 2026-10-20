@@ -737,7 +737,7 @@ jobs:
       run: |
         foreach ($configuration in @('Debug', 'Release')) {
           foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile', 'DisclosureSelection_VisibleSummaryAndExpandedBody')) {
-            foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
+            foreach ($theme in @('Light')) {
               $name = "selection-$($configuration.ToLowerInvariant())-$($case.Split('_')[0].ToLowerInvariant())-$($theme.ToLowerInvariant())"
               ./scripts/run-proof-tests.ps1 `
                 -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `
