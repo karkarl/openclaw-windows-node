@@ -27,6 +27,95 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
     [InlineData("Light")]
     [InlineData("Dark")]
     [InlineData("HighContrast")]
+    public async Task DisclosureSelection_VisibleSummaryAndExpandedBody(string theme)
+    {
+        await ui.ResetContainerAsync();
+        ChatThemeProofScope? resources = null;
+        NativeChatMessageText? owner = null;
+        ReactorHostControl? host = null;
+        string? copied = null;
+        try
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                resources = new ChatThemeProofScope(theme);
+                host = new ReactorHostControl { Width = 620, RequestedTheme = resources.ElementTheme };
+                var element = ReactorChatTimeline.BuildSafeMarkdown(
+                    "Before paragraph.\n\n<details><summary>Visible summary title</summary>\n\nHidden body.\n\n</details>\n\nAfter paragraph.",
+                    text => { copied = text; return true; });
+                host.Content = host.Reconciler.Mount(element, () => { });
+                ui.Container.Children.Add(host);
+            });
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() =>
+            {
+                ui.Container.UpdateLayout();
+                owner = Assert.Single(FindLogical<NativeChatMessageText>(host!));
+                owner.RefreshDocument();
+                var provider = Assert.IsAssignableFrom<ITextProvider>(
+                    FrameworkElementAutomationPeer.CreatePeerForElement(owner)!.GetPattern(PatternInterface.Text));
+                Console.WriteLine($"Rendered collapsed document: {owner.Document.Text.Replace("\n", "\\n")}");
+                provider.DocumentRange.Select();
+                owner.ProcessKey(VirtualKey.C, control: true, shift: false);
+                Assert.Equal("Before paragraph.\n\nVisible summary title\n\nAfter paragraph.", copied);
+                Assert.True(owner.BeginSelection(PointForText(owner, provider, "summary", false)));
+                owner.ExtendSelection(PointForText(owner, provider, "summary", true));
+                owner.EndSelection();
+                owner.ProcessKey(VirtualKey.C, control: true, shift: false);
+                Assert.Equal("summary", copied);
+                provider.GetSelection()[0].GetBoundingRectangles(out var rectangles);
+                Assert.NotEmpty(rectangles);
+                var expander = Assert.Single(FindLogical<Expander>(host!));
+                Assert.NotNull(FrameworkElementAutomationPeer.CreatePeerForElement(expander)!
+                    .GetPattern(PatternInterface.ExpandCollapse));
+                expander.IsExpanded = true;
+                ui.Container.UpdateLayout();
+                owner.RefreshDocument();
+                Console.WriteLine($"Rendered expanded document: {owner.Document.Text.Replace("\n", "\\n")}");
+                Assert.Equal("Before paragraph.\n\nVisible summary title\n\nHidden body.\n\nAfter paragraph.", owner.Document.Text);
+                expander.Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = "Outer body.", IsTextSelectionEnabled = true },
+                        new Expander
+                        {
+                            Content = new TextBlock { Text = "Nested hidden body.", IsTextSelectionEnabled = true },
+                        },
+                        new TextBlock { Text = "Outer tail.", IsTextSelectionEnabled = true },
+                    },
+                };
+                var nested = Assert.IsType<Expander>(((StackPanel)expander.Content).Children[1]);
+                NativeChatMessageText.ConfigureDisclosure(nested, "Nested summary");
+                ui.Container.UpdateLayout();
+                owner.RefreshDocument();
+                Assert.Equal("Before paragraph.\n\nVisible summary title\n\nOuter body.\n\nNested summary\n\nOuter tail.\n\nAfter paragraph.", owner.Document.Text);
+                nested.IsExpanded = true;
+                ui.Container.UpdateLayout();
+                owner.RefreshDocument();
+                Assert.Contains("Nested summary\n\nNested hidden body.\n\nOuter tail.", owner.Document.Text);
+                expander.IsExpanded = false;
+                ui.Container.UpdateLayout();
+                owner.RefreshDocument();
+                Assert.DoesNotContain("Nested summary", owner.Document.Text);
+                Assert.DoesNotContain("Outer body.", owner.Document.Text);
+            });
+        }
+        finally
+        {
+            await ui.RunOnUIAsync(() =>
+            {
+                owner?.Dispose();
+                ui.Container.Children.Clear();
+                resources?.Dispose();
+            });
+        }
+    }
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrast")]
     public async Task SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile(string theme)
     {
         await ui.ResetContainerAsync();
@@ -38,7 +127,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
         Button? outside = null;
         Element? element = null;
         UIElement? native = null;
-        const string markdown = "Opening paragraph with **bold evidence**.\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n# Ending heading";
+        const string markdown = "Opening paragraph with **bold evidence**.\n\n<details><summary>Visible summary title</summary>\n\nHidden body.\n\n</details>\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n# Ending heading";
         var start = 0;
         var end = 0;
         Rect[] regions = [];
@@ -72,8 +161,9 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 owner.RefreshDocument();
                 provider = Assert.IsAssignableFrom<ITextProvider>(
                     FrameworkElementAutomationPeer.CreatePeerForElement(owner)!.GetPattern(PatternInterface.Text));
-                start = owner.Document.Text.IndexOf("paragraph", StringComparison.Ordinal);
+                start = owner.Document.Text.IndexOf("summary", StringComparison.Ordinal);
                 end = owner.Document.Text.IndexOf("Ending", StringComparison.Ordinal) + 3;
+                Assert.DoesNotContain("Hidden body.", owner.Document.Text);
             });
             async Task<(byte[] Pixels, int Width, int Height)> Frame(string name) =>
                 await ui.RunOnUIAsync(async () =>
@@ -105,7 +195,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 regions = result.ToArray();
                 Assert.NotEmpty(regions);
                 result.Clear();
-                foreach (var text in new[] { "Opening", "heading" })
+                foreach (var text in new[] { "Opening", "Visible", "heading" })
                 {
                     var range = provider.DocumentRange.FindText(text, false, false);
                     Assert.NotNull(range);
@@ -127,9 +217,12 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
             {
                 var color = new Windows.UI.ViewManagement.UISettings().UIElementColor(
                     Windows.UI.ViewManagement.UIElementType.Highlight);
+                var foreground = new Windows.UI.ViewManagement.UISettings().UIElementColor(
+                    Windows.UI.ViewManagement.UIElementType.HighlightText);
                 foreach (var region in areas ?? regions)
                 {
                     var count = 0;
+                    var textPixels = 0;
                     var area = 0;
                     for (var y = Math.Max(0, (int)region.Top); y < Math.Min(frame.Height, (int)region.Bottom); y++)
                         for (var x = Math.Max(0, (int)region.Left); x < Math.Min(frame.Width, (int)region.Right); x++)
@@ -140,10 +233,17 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                                 Math.Abs(frame.Pixels[offset + 1] - color.G) <= 8 &&
                                 Math.Abs(frame.Pixels[offset + 2] - color.R) <= 8)
                                 count++;
+                            if (Math.Abs(frame.Pixels[offset] - foreground.B) <= 8 &&
+                                Math.Abs(frame.Pixels[offset + 1] - foreground.G) <= 8 &&
+                                Math.Abs(frame.Pixels[offset + 2] - foreground.R) <= 8)
+                                textPixels++;
                         }
                     Console.WriteLine($"Rendered paint {theme}: selected={selected}, area={area}, pixels={count}");
                     if (selected)
+                    {
                         Assert.True(count >= Math.Max(3, area / 8), $"No system highlight fill in {region}.");
+                        Assert.True(textPixels > 0, $"No system selected text color in {region}.");
+                    }
                     else
                         Assert.Equal(0, count);
                 }
@@ -192,6 +292,8 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
         nint window = 0;
         string? copied = null;
         string pointerRoute = "No routed press";
+        Expander Disclosure() => FindLogical<Expander>(host!)
+            .Single(control => AutomationProperties.GetName(control) == "Visible summary title");
         try
         {
             await ui.RunOnUIAsync(() =>
@@ -199,7 +301,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 resources = new ChatThemeProofScope(theme);
                 host = new ReactorHostControl { Width = 620, RequestedTheme = resources.ElementTheme };
                 var element = ReactorChatTimeline.BuildSafeMarkdown(
-                    "Opening paragraph with **bold evidence**.\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n# Ending heading",
+                    "Opening paragraph with **bold evidence**.\n\n- plugin purpose and default activation.\n\n```text\ncode one\ncode two\n```\n\n<details><summary>Visible summary title</summary>\n\nHidden body.\n\n<details><summary>Nested summary</summary>\n\nNested hidden body.\n\n</details>\n\n</details>\n\n# Ending heading",
                     text => { copied = text; return true; });
                 host.Content = host.Reconciler.Mount(element, () => { });
                 surface = new Border
@@ -236,6 +338,35 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
             await NativeKeyboardProof.ActivateAsync(window);
             async Task Move(string text, bool trailing, uint flags = 0, bool shift = false)
             {
+                // Expander animates its body translation. Synchronize with rendered
+                // geometry, not dispatcher idleness, before injecting screen input.
+                var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                Point? last = null;
+                var stableFrames = 0;
+                EventHandler<object>? layoutFrame = null;
+                layoutFrame = (_, _) =>
+                {
+                    owner!.RefreshDocument();
+                    var point = PointForText(owner, provider!, text, trailing);
+                    stableFrames = last == point ? stableFrames + 1 : 0;
+                    last = point;
+                    if (stableFrames >= 3)
+                    {
+                        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= layoutFrame;
+                        settled.TrySetResult();
+                    }
+                    else
+                        owner.InvalidateArrange();
+                };
+                await ui.RunOnUIAsync(() => Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += layoutFrame);
+                try
+                {
+                    await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                finally
+                {
+                    await ui.RunOnUIAsync(() => Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= layoutFrame);
+                }
                 var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var routedEvent = flags == 2 ? UIElement.PointerPressedEvent :
                     flags == 4 ? UIElement.PointerReleasedEvent : UIElement.PointerMovedEvent;
@@ -334,6 +465,66 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 }
             }
 
+            await Move("summary", false, 2);
+            await Move("Ending heading", true);
+            await Move("Ending heading", true, 4);
+            await Capture("summary-to-after");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.StartsWith("summary title", owner!.Document.SelectedText);
+                Assert.EndsWith("Ending heading", owner.Document.SelectedText);
+                Assert.False(Disclosure().IsExpanded);
+                Assert.DoesNotContain("Hidden body.", owner.Document.Text);
+                owner.ProcessKey(VirtualKey.C, control: true, shift: false);
+                Assert.Equal(owner.Document.SelectedText, copied);
+            });
+            await Move("Opening", false, 2);
+            await Move("summary", true);
+            await Move("summary", true, 4);
+            await Capture("paragraph-to-summary");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.StartsWith("Opening paragraph", owner!.Document.SelectedText);
+                Assert.EndsWith("Visible summary", owner.Document.SelectedText);
+                Assert.False(Disclosure().IsExpanded);
+            });
+            await Move("summary", false, 2);
+            await Move("summary", false, 4);
+            await ui.RunOnUIAsync(() => Assert.True(Disclosure().IsExpanded));
+            NativeKeyboardProof.Press(window, VirtualKey.Space);
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() => Assert.False(Disclosure().IsExpanded));
+            await Move("summary", false, 2);
+            await Move("summary", false, 4);
+            await ui.RunOnUIAsync(() => Assert.True(Disclosure().IsExpanded));
+            NativeKeyboardProof.Press(window, VirtualKey.Space);
+            await ui.YieldToRenderAsync();
+            await ui.RunOnUIAsync(() => Assert.False(Disclosure().IsExpanded));
+            await Move("Opening", false, 2);
+            await Move("Opening", false, 4);
+            await Move("summary", true, 2, shift: true);
+            await Move("summary", true, 4);
+            await Capture("shift-click-summary");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.EndsWith("Visible summary", owner!.Document.SelectedText);
+                Assert.False(Disclosure().IsExpanded);
+            });
+            await Move("summary", false, 2);
+            await Move("summary", false, 4);
+            await Move("Hidden body.", false, 2);
+            await Move("Nested summary", true);
+            await Move("Nested summary", true, 4);
+            await Capture("expanded-body-to-nested-summary");
+            await ui.RunOnUIAsync(() =>
+            {
+                Assert.Equal("Hidden body.\n\nNested summary", owner!.Document.SelectedText);
+                Assert.DoesNotContain("Nested hidden body.", owner.Document.Text);
+                owner.ProcessKey(VirtualKey.C, control: true, shift: false);
+                Assert.Equal("Hidden body.\n\nNested summary", copied);
+            });
+            await Move("summary", false, 2);
+            await Move("summary", false, 4);
             await Move("Opening", false, 2);
             await Move("plugin purpose", true);
             await Capture("drag-list");
@@ -455,7 +646,7 @@ public sealed class ChatMessageTextSelectionProofTests(UIThreadFixture ui)
                 Assert.Contains("Metric\tValue\nCount\t2", text);
                 Assert.Contains("Reference https://example.invalid/evidence and trailing text.", text);
                 Assert.DoesNotContain("Hidden evidence.", text);
-                Assert.DoesNotContain("Collapsed evidence", text);
+                Assert.Contains("Collapsed evidence", text);
                 Assert.DoesNotContain("Copy code", text);
                 Assert.Equal(SupportedTextSelection.Single, provider.SupportedTextSelection);
 

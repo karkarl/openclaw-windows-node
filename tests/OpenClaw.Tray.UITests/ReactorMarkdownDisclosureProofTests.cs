@@ -91,7 +91,7 @@ public sealed class ReactorMarkdownDisclosureProofTests(UIThreadFixture ui)
             await ui.RunOnUIAsync(() =>
             {
                 disclosure = Assert.Single(FindLogical<Expander>(host!),
-                    control => Equals(control.Header, "Sources and evidence"));
+                    control => AutomationProperties.GetName(control) == "Sources and evidence");
                 Assert.False(disclosure.IsExpanded);
                 Assert.Equal("Sources and evidence", AutomationProperties.GetName(disclosure));
                 ExpandCollapse(disclosure).Expand();
@@ -121,7 +121,7 @@ public sealed class ReactorMarkdownDisclosureProofTests(UIThreadFixture ui)
                 Assert.Contains("Before disclosure.", texts);
                 Assert.Contains("After disclosure.", texts);
                 var nested = Assert.Single(FindLogical<Expander>(host!),
-                    control => Equals(control.Header, "Nested evidence"));
+                    control => AutomationProperties.GetName(control) == "Nested evidence");
                 Assert.True(nested.IsExpanded);
                 Assert.Empty(FindLogical<Image>(host!));
                 Assert.Empty(FindLogical<RichTextBlock>(host!).SelectMany(text =>
@@ -155,7 +155,7 @@ public sealed class ReactorMarkdownDisclosureProofTests(UIThreadFixture ui)
             {
                 ui.Container.UpdateLayout();
                 Assert.Same(disclosure, Assert.Single(FindLogical<Expander>(host!),
-                    control => Equals(control.Header, "Sources and evidence")));
+                    control => AutomationProperties.GetName(control) == "Sources and evidence"));
                 Assert.True(disclosure!.IsExpanded);
                 Assert.Contains("Streamed continuation.", FindLogical<RichTextBlock>(host!).Select(CollectText));
                 Assert.Contains("Streamed evidence.", FindLogical<RichTextBlock>(host!).Select(CollectText));

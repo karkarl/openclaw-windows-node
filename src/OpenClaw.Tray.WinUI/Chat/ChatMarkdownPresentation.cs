@@ -4,6 +4,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using OpenClawTray.Chat.Markdown;
 using OpenClawTray.Helpers;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -132,6 +133,7 @@ internal sealed class ChatMarkdownDisclosureView : Component<ChatMarkdownDisclos
                 setExpanded)
             .HorizontalContentAlignment(HorizontalAlignment.Stretch)
             .HAlign(HorizontalAlignment.Stretch)
+            .Set(control => NativeChatMessageText.ConfigureDisclosure(control, disclosure.Summary))
             .AutomationName(disclosure.Summary);
     }
 }

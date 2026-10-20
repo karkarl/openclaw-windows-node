@@ -91,9 +91,19 @@ HighContrast, plus the rendered pixel comparison
 `SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile`. Each invocation selects exactly one required case, and the proof
 runner rejects zero-test and zero-pass results.
 
+`DisclosureSelection_VisibleSummaryAndExpandedBody` verifies that the visible
+summary participates in the native range and copy, including partial title
+endpoints, expanded bodies and nested disclosure order. Collapsed bodies are
+excluded. The rendered paint proof selects part of a summary and checks system
+selection color plus its unselected title prefix. The opt-in
+`RoutedInput_SelectsAcrossNativeMarkdownChildren` proof drives actual pointer
+drag from summary to following text, paragraph to summary, shift-click, title
+click versus drag, and native Space toggling. It requires an isolated foreground
+desktop and an injected copy sink; UIA range selection is not physical input proof.
+
 ```powershell
 foreach ($configuration in @('Debug', 'Release')) {
-    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile')) {
+    foreach ($case in @('VisibleMessage_PointerKeyboardCopyAndTextProviderShareOneRange', 'MessageBoundary_DragScrollAndRealizationReuse', 'NativeUnits_RespectWrappingParagraphsAndTransientReload', 'SelectionPaint_PartialBlocksSurviveInactiveFocusAndReconcile', 'DisclosureSelection_VisibleSummaryAndExpandedBody')) {
         foreach ($theme in @('Light', 'Dark', 'HighContrast')) {
             .\scripts\run-proof-tests.ps1 `
                 -Project 'tests\OpenClaw.Tray.UITests\OpenClaw.Tray.UITests.csproj' `

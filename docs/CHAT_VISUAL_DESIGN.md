@@ -370,9 +370,14 @@ Each realized assistant Markdown body has a native `NativeChatMessageText`
 selection owner. A single range crosses paragraphs, list markers, multiline
 code, table cells (tab-separated columns and newline-separated rows), and inert
 inline link text. It never crosses into another message. Code language and Copy
-labels, disclosure summary controls, and collapsed disclosure bodies are not
-characters in this range. Buttons and expanders retain their native child peers
-and interactions.
+labels and collapsed disclosure bodies are not characters in this range.
+Disclosure summaries are visible, selectable native text: a spanning range
+includes the title, a collapsed disclosure contributes only its summary, and
+an expanded disclosure contributes its summary followed by its visible body.
+Pointer endpoints inside a summary resolve individual title characters and
+paint partial selections. A title click toggles the disclosure; dragging or
+Shift-clicking selects without toggling. The chevron, keyboard and native
+ExpandCollapse accessibility pattern retain their disclosure behavior.
 
 Pointer drag, double-click word selection, Shift extension, arrows, Home/End,
 Ctrl+Home/End, Ctrl+Shift+arrows, Ctrl+A, Ctrl+C and the selection context menu

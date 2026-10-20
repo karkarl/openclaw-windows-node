@@ -41,6 +41,9 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
     private bool _suspended;
     private bool _refreshPending;
     private bool _dragging;
+    private Expander? _pressedDisclosure;
+    private Point _summaryPressPoint;
+    private bool _summaryDragged;
     private int _generation;
     private int _announcedAnchor;
     private int _announcedFocus;
@@ -230,6 +233,8 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
             }
             else if (element is Expander expander)
             {
+                if (expander.Header is TextBlock summary)
+                    Walk(summary, separator);
                 if (expander.IsExpanded && expander.Content is FrameworkElement body)
                     Walk(body, separator);
             }
@@ -320,6 +325,7 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     internal void EndSelection()
     {
+        _pressedDisclosure = null;
         _dragging = false;
         CompositionTarget.Rendering -= OnSelectionFrame;
     }
@@ -366,6 +372,8 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
     {
+        if (_dragging && args.Pointer.PointerId == _pointerId)
+            return;
         var point = args.GetCurrentPoint(this);
         if (!point.Properties.IsLeftButtonPressed || IsInteractive(args.OriginalSource as DependencyObject))
             return;
@@ -376,10 +384,52 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
         args.Handled = true;
     }
 
+    internal static void ConfigureDisclosure(Expander disclosure, string title)
+    {
+        if (disclosure.Header is TextBlock existing)
+        {
+            existing.Text = title;
+            return;
+        }
+        var summary = new TextBlock
+        {
+            Text = title,
+            IsTextSelectionEnabled = true,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        // Handle the title before the template's ToggleButton captures the pointer.
+        // The chevron, keyboard and ExpandCollapse provider keep native behavior.
+        summary.AddHandler(PointerPressedEvent, new PointerEventHandler((_, args) =>
+        {
+            NativeChatMessageText? owner = null;
+            for (DependencyObject? parent = disclosure; parent is not null;
+                parent = VisualTreeHelper.GetParent(parent))
+                if (parent is NativeChatMessageText candidate)
+                {
+                    owner = candidate;
+                    break;
+                }
+            if (owner is null || !args.GetCurrentPoint(owner).Properties.IsLeftButtonPressed)
+                return;
+            var point = args.GetCurrentPoint(owner).Position;
+            var shift = Down(VirtualKey.Shift);
+            if (!owner.BeginSelection(point, shift))
+                return;
+            owner._pressedDisclosure = shift ? null : disclosure;
+            owner._summaryPressPoint = args.GetCurrentPoint(null).Position;
+            owner._summaryDragged = false;
+            owner._pointerId = args.Pointer.PointerId;
+            owner.CapturePointer(args.Pointer);
+            args.Handled = true;
+        }), handledEventsToo: true);
+        disclosure.Header = summary;
+    }
+
     private void OnPointerMoved(object sender, PointerRoutedEventArgs args)
     {
         if (!_dragging || args.Pointer.PointerId != _pointerId)
             return;
+        UpdateSummaryDrag(args);
         ExtendSelection(args.GetCurrentPoint(this).Position);
         args.Handled = true;
     }
@@ -388,13 +438,38 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
     {
         if (!_dragging || args.Pointer.PointerId != _pointerId)
             return;
+        UpdateSummaryDrag(args);
         ExtendSelection(args.GetCurrentPoint(this).Position);
+        var toggle = !_summaryDragged ? _pressedDisclosure : null;
         EndSelection();
         ReleasePointerCapture(args.Pointer);
+        if (toggle is not null)
+        {
+            toggle.IsExpanded = !toggle.IsExpanded;
+            for (var parent = VisualTreeHelper.GetParent((DependencyObject)toggle.Header);
+                parent is not null && parent != toggle; parent = VisualTreeHelper.GetParent(parent))
+                if (parent is ButtonBase button)
+                {
+                    button.Focus(FocusState.Pointer);
+                    break;
+                }
+        }
         args.Handled = true;
     }
 
-    private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs args) => EndSelection();
+    private void UpdateSummaryDrag(PointerRoutedEventArgs args)
+    {
+        var point = args.GetCurrentPoint(null).Position;
+        if (_pressedDisclosure is not null &&
+            (Math.Abs(point.X - _summaryPressPoint.X) > 4 || Math.Abs(point.Y - _summaryPressPoint.Y) > 4))
+            _summaryDragged = true;
+    }
+
+    private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs args)
+    {
+        if (ReferenceEquals(args.OriginalSource, this) && args.Pointer.PointerId == _pointerId)
+            EndSelection();
+    }
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
@@ -722,6 +797,8 @@ internal sealed class NativeChatMessageText : ContentControl, IDisposable
     {
         while (element is not null && element != this)
         {
+            if (element is TextBlock summary && _surfaces.ContainsKey(summary))
+                return false;
             if (element is ButtonBase or ScrollBar or Thumb or TextBox or PasswordBox or RichEditBox)
                 return true;
             element = VisualTreeHelper.GetParent(element);
