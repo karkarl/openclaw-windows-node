@@ -8065,4 +8065,61 @@
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>此工作階段已不再為空，因此已取消待定的位置選擇。請檢查工作階段並重新傳送，以在目前位置繼續。</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>傳送意見反應</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>回報問題或提出功能建議</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>您想分享什麼意見？</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>在 GitHub 上繼續</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>新增記錄</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>記錄資料夾</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>在檔案總管中開啟資料夾</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>複製 ZIP</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>儲存 ZIP</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>意見反應將在瀏覽器中以公開 GitHub 議題提交。記錄會保留在本機，直到您附加 ZIP 檔案。分享前請檢查記錄中是否包含私人資訊。</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>正在收集已遮蔽敏感資訊的閘道記錄...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP 已準備就緒。開啟記錄資料夾檢查檔案，再將其拖曳至 GitHub 議題。尚未上傳任何內容。</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP 已準備就緒，但可能缺少部分診斷資訊。請先檢查封存檔，再將其附加到 GitHub。</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>收集記錄需要安裝原生閘道。您仍可在不附加記錄的情況下傳送意見反應。</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>操作失敗，請重試。您也可以複製意見反應並在 GitHub 上提交。</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP 已複製。若瀏覽器支援貼上檔案，請將其貼至 GitHub 議題；否則請開啟記錄資料夾並拖曳檔案。</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP 已儲存至您選擇的位置。</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>請在瀏覽器中登入、檢查意見反應、視需要附加 ZIP，然後提交議題。</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>意見反應太長，無法放入瀏覽器連結，已為您複製。請將其貼至 GitHub 議題，並視需要附加 ZIP。</value>
+  </data>
 </root>

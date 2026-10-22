@@ -11,6 +11,68 @@ public sealed class WorkspaceProofCollection;
 public sealed class WorkspaceWindowProofTests
 {
     [Theory]
+    [InlineData("Light", "settings", "SettingsTitleBar")]
+    [InlineData("Dark", "chat", "WorkspaceTitleBar")]
+    [Trait("Category", "Accessibility")]
+    public async Task FeedbackTitleBar_OpensAccessibleDraftWithoutSubmitting(
+        string theme, string route, string titleId)
+    {
+        using var app = new AccessibilityAppFixture(initializeAxe: false, theme: theme, initialRoute: route);
+        var root = AutomationElement.FromHandle(app.HubWindowHandle);
+        var button = Find(root, "TitleBarFeedback");
+        var title = Find(root, titleId).Current.BoundingRectangle;
+        var bounds = button.Current.BoundingRectangle;
+        Assert.Equal("Send feedback", button.Current.Name);
+        Assert.False(button.Current.IsOffscreen);
+        Assert.True(bounds.Top >= title.Top && bounds.Bottom <= title.Bottom);
+        Assert.True(bounds.Left > title.Left + title.Width / 2 && bounds.Right <= title.Right);
+        var minimize = Find(root, "Minimize").Current.BoundingRectangle;
+        double scale = bounds.Width / 40;
+        // TitleBar reserves AppWindow's physical caption inset as DIPs. Keep our own
+        // spacing small without replacing the native template to correct that SDK behavior.
+        double nativeInsetOverReservation = (title.Right - minimize.Left) * (1 - 1 / scale);
+        Assert.True(minimize.Left >= bounds.Right);
+        Assert.InRange((minimize.Left - bounds.Right) / scale - nativeInsetOverReservation, -1, 24);
+        await FocusForKeyboardAsync(app, root, "TitleBarFeedback");
+        if (theme == "Light")
+        {
+            System.Windows.Forms.Cursor.Position = new System.Drawing.Point(
+                (int)(bounds.Left + bounds.Width / 2), (int)(bounds.Top + bounds.Height / 2));
+            MouseEvent(0x0002, 0, 0, 0, UIntPtr.Zero);
+            MouseEvent(0x0004, 0, 0, 0, UIntPtr.Zero);
+        }
+        else
+            System.Windows.Forms.SendKeys.SendWait("{ENTER}");
+        await WaitUntilAsync(() => FindPopup(root, "FeedbackDialog") is not null);
+        var dialog = FindPopup(root, "FeedbackDialog")!;
+        var input = Find(dialog, "FeedbackText");
+        var cancel = Find(dialog, "PrimaryButton");
+        var share = Find(dialog, "SecondaryButton");
+        Assert.Equal("Cancel", cancel.Current.Name);
+        Assert.Equal("Continue on GitHub", share.Current.Name);
+        Assert.True(cancel.Current.BoundingRectangle.Right <= share.Current.BoundingRectangle.Left);
+        Assert.True(cancel.Current.IsEnabled);
+        Assert.False(share.Current.IsEnabled);
+        Assert.True(Find(dialog, "FeedbackAddLogs").Current.IsEnabled);
+        Assert.Null(dialog.FindFirst(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, "FeedbackCopyFeedback")));
+        Assert.False(IsVisible(dialog, "FeedbackLogDirectory"));
+        var value = (ValuePattern)input.GetCurrentPattern(ValuePattern.Pattern);
+        value.SetValue(" \r\n ");
+        Assert.False(share.Current.IsEnabled);
+        const string draft = "The title bar feedback dialog works.\r\nThis is only a local test draft.";
+        value.SetValue(draft);
+        await WaitUntilAsync(() => share.Current.IsEnabled);
+        Assert.Equal(draft.ReplaceLineEndings("\n"), value.Current.Value.ReplaceLineEndings("\n"));
+        AxeHelper.AssertNoAccessibilityErrors(app.HubWindowHandle, context: $"Feedback-{theme}",
+            targetProcessId: root.Current.ProcessId);
+        CaptureFlyout(root, theme, "feedback-draft");
+        Invoke(cancel);
+        await WaitUntilAsync(() => FindPopup(root, "FeedbackDialog") is null);
+        Assert.True(Find(root, "TitleBarFeedback").Current.IsEnabled);
+    }
+
+    [Theory]
     [InlineData("Light")]
     [InlineData("Dark")]
     public async Task SidebarActionBackplates_AlignWithNavigationItems(string theme)

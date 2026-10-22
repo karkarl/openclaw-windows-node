@@ -33,7 +33,14 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <TitleBar x:Name="WorkspaceTitleBar" Title="OpenClaw" AutomationProperties.AutomationId="WorkspaceTitleBar"/>
+        <TitleBar x:Name="WorkspaceTitleBar" Title="OpenClaw" AutomationProperties.AutomationId="WorkspaceTitleBar">
+            <TitleBar.Resources>
+                <x:Double x:Key="TitleBarMinDragRegionWidth">8</x:Double>
+            </TitleBar.Resources>
+            <TitleBar.RightHeader>
+                <controls:FeedbackButton x:Name="TitleFeedback"/>
+            </TitleBar.RightHeader>
+        </TitleBar>
         <Grid x:Name="NavigationSection" Grid.Row="1">
         <NavigationView x:Name="NavView"
                         AutomationProperties.AutomationId="WorkspaceNavigation"

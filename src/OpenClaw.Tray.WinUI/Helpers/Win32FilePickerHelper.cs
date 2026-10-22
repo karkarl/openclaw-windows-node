@@ -124,7 +124,11 @@ internal static class Win32FilePickerHelper
                 if (!string.IsNullOrWhiteSpace(suggestedFileName))
                     dialog.SetFileName(suggestedFileName);
 
-                var filterSpec = new COMDLG_FILTERSPEC("Text file (*.txt)", "*.txt");
+                var pattern = $"*.{defaultExtension}";
+                var description = defaultExtension == "txt"
+                    ? "Text file (*.txt)"
+                    : $"{defaultExtension.ToUpperInvariant()} ({pattern})";
+                var filterSpec = new COMDLG_FILTERSPEC(description, pattern);
                 filterSpecPtr = Marshal.AllocCoTaskMem(Marshal.SizeOf<COMDLG_FILTERSPEC>());
                 Marshal.StructureToPtr(filterSpec, filterSpecPtr, fDeleteOld: false);
                 dialog.SetFileTypes(1, filterSpecPtr);
@@ -133,7 +137,10 @@ internal static class Win32FilePickerHelper
                 var hr = dialog.Show(ownerHwnd);
                 if (hr < 0)
                 {
-                    tcs.SetResult(null); // cancelled or error
+                    const int cancelled = unchecked((int)0x800704C7);
+                    if (hr != cancelled)
+                        Marshal.ThrowExceptionForHR(hr);
+                    tcs.SetResult(null);
                     return;
                 }
 

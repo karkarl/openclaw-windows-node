@@ -92,6 +92,7 @@ public sealed partial class WorkspaceWindow : WindowEx
         };
         this.SetIcon("Assets\\openclaw.ico");
         SetTitleBar(WorkspaceTitleBar);
+        TitleFeedback.Initialize(() => IsClosed ? IntPtr.Zero : WinRT.Interop.WindowNative.GetWindowHandle(this));
         NewAgentLabel.Text = LocalizationHelper.GetString("AgentCreation_Title");
         AutomationProperties.SetName(NewAgentOption, NewAgentLabel.Text);
         // ComboBox temporarily removes its selected presentation while the popup is open.

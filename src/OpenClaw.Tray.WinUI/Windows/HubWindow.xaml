@@ -19,7 +19,14 @@
         </Grid.RowDefinitions>
 
         <TitleBar x:Name="AppTitleBar" Title="OpenClaw Settings"
-                  AutomationProperties.AutomationId="SettingsTitleBar"/>
+                  AutomationProperties.AutomationId="SettingsTitleBar">
+            <TitleBar.Resources>
+                <x:Double x:Key="TitleBarMinDragRegionWidth">8</x:Double>
+            </TitleBar.Resources>
+            <TitleBar.RightHeader>
+                <controls:FeedbackButton x:Name="TitleFeedback"/>
+            </TitleBar.RightHeader>
+        </TitleBar>
 
         <Grid x:Name="NavContentHost" Grid.Row="1" SizeChanged="OnNavContentHostSizeChanged">
             <Grid.Clip>

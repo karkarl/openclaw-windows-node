@@ -8132,4 +8132,61 @@ After enrolling, return to Settings &gt; Windows Update and check for updates. I
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>This session is no longer empty, so the pending location selection was cancelled. Review the session and send again to continue in its current location.</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>Send feedback</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>Report a bug or suggest a feature</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>What feedback would you like to share?</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>Continue on GitHub</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>Add logs</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>Logs folder</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>Open folder in File Explorer</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>Copy ZIP</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>Save ZIP</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>Feedback is submitted as a public GitHub issue in your browser. Logs stay local until you attach the ZIP. Review logs for private information before sharing.</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>Collecting redacted Gateway logs...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP ready. Open the logs folder to review it, then drag it into your GitHub issue. Nothing has been uploaded.</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP ready, but some diagnostics may be missing. Review the archive before attaching it in GitHub.</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>Log collection requires an installed native Gateway. You can still send feedback without logs.</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>This action failed. Please retry. You can also copy your feedback and submit it on GitHub.</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP copied. Paste it into the GitHub issue if your browser supports file pasting, or open the logs folder and drag it in.</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP saved to your chosen location.</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>Continue in your browser to sign in, review your feedback, attach the ZIP if needed, and submit the issue.</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>Your feedback was too long for a browser link and has been copied. Paste it into the GitHub issue and attach the ZIP if needed.</value>
+  </data>
 </root>

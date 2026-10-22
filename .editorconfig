@@ -176,6 +176,10 @@ dotnet_diagnostic.REACTOR_DIALOG_001.severity = none
 [src/OpenClaw.Tray.WinUI/Dialogs/SessionCheckpointDialogCoordinator.cs]
 dotnet_diagnostic.REACTOR_DIALOG_001.severity = none
 
+# Native title-bar controls are outside the embedded Reactor chat render tree.
+[src/OpenClaw.Tray.WinUI/Controls/FeedbackButton.cs]
+dotnet_diagnostic.REACTOR_DIALOG_001.severity = none
+
 [src/OpenClaw.Tray.WinUI/Chat/ReactorChatHostExtensions.cs]
 dotnet_diagnostic.REACTOR_DIALOG_001.severity = none
 

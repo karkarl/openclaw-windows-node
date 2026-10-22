@@ -4,6 +4,7 @@ using System.Text.Json;
 namespace OpenClaw.Connection.NativeGateway;
 
 public sealed record NativeGatewayCommandResult(int ExitCode, string StandardOutput);
+public sealed record NativeGatewayLogBundle(string Path, bool HostOnly, bool HasNotes);
 
 /// <summary>Invokes only the installed package's qualified control alias and checks its JSON contract.</summary>
 public sealed class NativeGatewayPackageClient
@@ -124,6 +125,38 @@ public sealed class NativeGatewayPackageClient
             string.IsNullOrWhiteSpace(RequiredString(session, "sandboxId")))
             throw new NativeGatewayContractException(
                 "The Gateway MSIX has no ready isolated session. Run clawctl setup again.");
+    }
+
+    public async Task<NativeGatewayLogBundle> CollectLogsAsync(
+        NativeGatewayPackage package, string outputPath, CancellationToken cancellationToken)
+    {
+        if (!Path.IsPathFullyQualified(outputPath) ||
+            !string.Equals(Path.GetExtension(outputPath), ".zip", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Log collection requires an absolute ZIP path.", nameof(outputPath));
+
+        outputPath = Path.GetFullPath(outputPath);
+        NativeGatewayCommandResult result = await _invoke(
+            package, ["collect-logs", "--output", outputPath, "--json"], null, cancellationToken)
+            .ConfigureAwait(false);
+        using JsonDocument document = Parse(result.StandardOutput);
+        JsonElement root = document.RootElement;
+        // collect-logs has its own versioned contract, without the lifecycle integration field.
+        if (root.ValueKind != JsonValueKind.Object ||
+            RequiredInt(root, "schemaVersion") != 1 ||
+            RequiredString(root, "command") != "collect-logs")
+            throw new InvalidOperationException("The Gateway returned an unsupported log collection response.");
+        RequireSuccess(root, result.ExitCode);
+        JsonElement bundle = RequiredObject(root, "bundle");
+        string path = RequiredString(bundle, "path");
+        string included = RequiredString(bundle, "included");
+        if (!Path.IsPathFullyQualified(path) ||
+            !string.Equals(Path.GetFullPath(path), outputPath, StringComparison.OrdinalIgnoreCase) ||
+            included is not ("host-only" or "host-and-session") ||
+            !bundle.TryGetProperty("notes", out JsonElement notes) ||
+            notes.ValueKind != JsonValueKind.Array ||
+            notes.EnumerateArray().Any(note => note.ValueKind != JsonValueKind.String))
+            throw new InvalidOperationException("The Gateway did not return the requested diagnostics ZIP.");
+        return new NativeGatewayLogBundle(outputPath, included == "host-only", notes.GetArrayLength() > 0);
     }
 
     public async Task<IsolatedGatewayStatus> StatusAsync(

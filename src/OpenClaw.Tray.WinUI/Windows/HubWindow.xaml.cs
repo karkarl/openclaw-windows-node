@@ -106,6 +106,7 @@ public sealed partial class HubWindow : WindowEx
         ApplyHighContrastFallbackIfNeeded();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        TitleFeedback.Initialize(() => IsClosed ? IntPtr.Zero : WinRT.Interop.WindowNative.GetWindowHandle(this));
         Closed += (s, e) =>
         {
             IsClosed = true;

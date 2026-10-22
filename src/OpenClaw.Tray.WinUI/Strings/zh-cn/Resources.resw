@@ -8065,4 +8065,61 @@
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>此会话已不再为空，因此已取消待定的位置选择。请检查会话并重新发送，以在当前位置继续。</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>发送反馈</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>报告问题或提出功能建议</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>您想分享什么反馈？</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>在 GitHub 上继续</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>添加日志</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>日志文件夹</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>在文件资源管理器中打开文件夹</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>复制 ZIP</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>保存 ZIP</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>反馈将在浏览器中作为公开的 GitHub 议题提交。日志会保留在本地，直到您附加 ZIP 文件。分享前请检查日志中是否含有私人信息。</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>正在收集已脱敏的网关日志...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP 已准备就绪。打开日志文件夹检查文件，然后将其拖入 GitHub 议题。尚未上传任何内容。</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP 已准备就绪，但部分诊断信息可能缺失。请先检查压缩包，再将其附加到 GitHub。</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>收集日志需要安装原生网关。您仍可在不附加日志的情况下发送反馈。</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>操作失败，请重试。您也可以复制反馈并在 GitHub 上提交。</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP 已复制。如果浏览器支持粘贴文件，请将其粘贴到 GitHub 议题；否则请打开日志文件夹并拖入文件。</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP 已保存到您选择的位置。</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>请在浏览器中登录、检查反馈、按需附加 ZIP，然后提交议题。</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>反馈内容过长，无法放入浏览器链接，已为您复制。请将其粘贴到 GitHub 议题，并按需附加 ZIP。</value>
+  </data>
 </root>

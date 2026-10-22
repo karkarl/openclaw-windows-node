@@ -10,6 +10,63 @@ public sealed class NativeGatewayPackageClientTests
         new("OpenClaw.Gateway_123456789abcd", "2026.9.5.5",
             @"C:\package\openclaw.exe", @"C:\package\clawctl.exe");
 
+    [Theory]
+    [InlineData("host-only", true)]
+    [InlineData("host-and-session", false)]
+    public async Task CollectLogsUsesTheExactOutputAndDedicatedContract(string included, bool hostOnly)
+    {
+        string path = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "feedback with spaces.zip"));
+        using var cancellation = new CancellationTokenSource();
+        var client = new NativeGatewayPackageClient((package, args, ct) =>
+        {
+            Assert.Same(s_package, package);
+            Assert.Equal(cancellation.Token, ct);
+            Assert.Equal(["collect-logs", "--output", path, "--json"], args);
+            return Task.FromResult(new NativeGatewayCommandResult(0, JsonSerializer.Serialize(new
+            {
+                ok = true, schemaVersion = 1, command = "collect-logs",
+                bundle = new { path, included, notes = Array.Empty<string>() }
+            })));
+        });
+
+        var result = await client.CollectLogsAsync(s_package, path, cancellation.Token);
+        Assert.Equal(path, result.Path);
+        Assert.Equal(hostOnly, result.HostOnly);
+        Assert.False(result.HasNotes);
+    }
+
+    [Theory]
+    [InlineData("exit")]
+    [InlineData("ok")]
+    [InlineData("schema")]
+    [InlineData("command")]
+    [InlineData("path")]
+    [InlineData("no-files")]
+    [InlineData("included")]
+    [InlineData("notes")]
+    [InlineData("malformed")]
+    public async Task CollectLogsRejectsFailureAndIncompatibleResponses(string fault)
+    {
+        string path = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "feedback.zip"));
+        var client = new NativeGatewayPackageClient((_, _, _) =>
+            Task.FromResult(new NativeGatewayCommandResult(fault == "exit" ? 1 : 0,
+                fault == "malformed" ? "not-json" : JsonSerializer.Serialize(new
+                {
+                    ok = fault != "ok",
+                    schemaVersion = fault == "schema" ? 2 : 1,
+                    command = fault == "command" ? "status" : "collect-logs",
+                    bundle = new
+                    {
+                        path = fault == "no-files" ? null : fault == "path" ? path + ".other" : path,
+                        included = fault == "included" ? "unknown" : "host-and-session",
+                        notes = fault == "notes" ? null : Array.Empty<string>()
+                    }
+                }))));
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(
+            () => client.CollectLogsAsync(s_package, path, CancellationToken.None));
+    }
+
     [Fact]
     public async Task DetectAcceptsOnlyVersionedIsolatedContract()
     {

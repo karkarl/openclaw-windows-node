@@ -8117,4 +8117,61 @@ Após a inscrição, volte para Configurações &gt; Windows Update e verifique 
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>Esta sessão não está mais vazia, então a seleção de local pendente foi cancelada. Verifique a sessão e envie novamente para continuar no local atual.</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>Enviar comentários</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>Relatar um erro ou sugerir um recurso</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>Que comentário você gostaria de compartilhar?</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>Continuar no GitHub</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>Adicionar logs</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>Pasta de logs</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>Abrir pasta no Explorador de Arquivos</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>Copiar ZIP</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>Salvar ZIP</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>O comentário é enviado como uma issue pública do GitHub no navegador. Os logs ficam no computador até você anexar o ZIP. Verifique se há informações privadas antes de compartilhar.</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>Coletando logs do Gateway com dados sensíveis ocultados...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP pronto. Abra a pasta de logs para revisá-lo e arraste-o para a issue do GitHub. Nada foi enviado.</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP pronto, mas alguns diagnósticos podem estar ausentes. Revise o arquivo antes de anexá-lo no GitHub.</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>A coleta de logs requer um Gateway nativo instalado. Você ainda pode enviar comentários sem logs.</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>Esta ação falhou. Tente novamente. Você também pode copiar seu comentário e enviá-lo no GitHub.</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP copiado. Cole-o na issue do GitHub se o navegador permitir colar arquivos, ou abra a pasta de logs e arraste-o.</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP salvo no local escolhido.</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>Continue no navegador para entrar na conta, revisar o comentário, anexar o ZIP se necessário e enviar a issue.</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>Seu comentário era longo demais para um link e foi copiado. Cole-o na issue do GitHub e anexe o ZIP se necessário.</value>
+  </data>
 </root>

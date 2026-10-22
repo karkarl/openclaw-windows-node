@@ -8066,4 +8066,61 @@ Ga na inschrijving terug naar Instellingen &gt; Windows Update en controleer op 
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>Deze sessie is niet meer leeg, dus de wachtende locatiekeuze is geannuleerd. Controleer de sessie en verzend opnieuw om op de huidige locatie door te gaan.</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>Feedback versturen</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>Een fout melden of een functie voorstellen</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>Welke feedback wilt u delen?</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>Doorgaan op GitHub</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>Logboeken toevoegen</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>Map met logbestanden</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>Map openen in Verkenner</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>ZIP kopiëren</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>ZIP opslaan</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>Feedback wordt via uw browser als een openbaar GitHub-issue ingediend. Logboeken blijven lokaal totdat u de ZIP bijvoegt. Controleer de logboeken op privégegevens voordat u ze deelt.</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>Geanonimiseerde Gateway-logboeken verzamelen...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP gereed. Open de map met logbestanden om deze te controleren en sleep deze vervolgens naar uw GitHub-issue. Er is niets geüpload.</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP gereed, maar sommige diagnostische gegevens kunnen ontbreken. Controleer het archief voordat u het op GitHub bijvoegt.</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>Voor het verzamelen van logboeken is een geïnstalleerde native Gateway vereist. U kunt nog steeds feedback zonder logboeken versturen.</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>Deze actie is mislukt. Probeer het opnieuw. U kunt uw feedback ook kopiëren en op GitHub indienen.</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP gekopieerd. Plak deze in het GitHub-issue als uw browser het plakken van bestanden ondersteunt, of open de map met logbestanden en sleep deze erin.</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP opgeslagen op de gekozen locatie.</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>Ga verder in uw browser om in te loggen, uw feedback te controleren, eventueel de ZIP bij te voegen en het issue in te dienen.</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>Uw feedback was te lang voor een browserlink en is gekopieerd. Plak deze in het GitHub-issue en voeg indien nodig de ZIP bij.</value>
+  </data>
 </root>

@@ -146,6 +146,30 @@ This sandbox covers commands run through the Windows node. Commands run directly
 - Background updates from GitHub Releases
 - `openclaw://` deep links for automation
 
+### Send feedback
+
+Select **Send feedback** in the top-right title bar of Chat or Settings, beside
+the window controls. Write your report, then select **Continue on GitHub**.
+Your browser handles GitHub sign-in and final submission to a public issue.
+Companion does not store GitHub credentials or submit the issue itself.
+Long reports are copied automatically for pasting into GitHub rather than
+being truncated in a URL. You can also select and copy text in the feedback box.
+
+**Add logs** runs the installed native Gateway's package-qualified
+`clawctl collect-logs --output <zip-path> --json`. It does not install a Gateway,
+run a PATH-resolved executable, or upload anything. Collection requires a
+native Gateway package that supports this command; feedback without logs works
+with any connection type. A host-only or incomplete collection shows a warning.
+
+Review the archive for private information before sharing it publicly.
+After collection, the **Logs folder** field shows the local directory. The
+icon beside it opens File Explorer with the ZIP selected; drag it into the
+GitHub issue.
+**Copy ZIP** supports browsers that accept pasted files, and **Save ZIP** copies
+it to a local location you choose. Collected archives remain in Companion's
+local data directory under `Feedback` after the dialog closes, so browser
+attachments do not lose their source file. Delete them when no longer needed.
+
 ### Useful deep links
 
 | Link | Action |

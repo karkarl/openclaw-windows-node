@@ -137,6 +137,8 @@
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\DiagnosticsExportSanitizer.cs" Link="Services\DiagnosticsExportSanitizer.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\DiagnosticsLogTailReader.cs" Link="Services\DiagnosticsLogTailReader.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\DiagnosticsBundleBuilder.cs" Link="Services\DiagnosticsBundleBuilder.cs" />
+    <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\FeedbackSubmission.cs" Link="Services\FeedbackSubmission.cs" />
+    <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\FeedbackLogCollector.cs" Link="Services\FeedbackLogCollector.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\SettingsManager.cs" Link="Services\SettingsManager.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\AutoStartReconciliation.cs" Link="Services\AutoStartReconciliation.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\AutoStartSettingsApplier.cs" Link="Services\AutoStartSettingsApplier.cs" />

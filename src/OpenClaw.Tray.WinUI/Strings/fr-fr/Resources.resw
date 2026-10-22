@@ -8065,4 +8065,61 @@ Après votre inscription, revenez dans Paramètres &gt; Windows Update et recher
   <data name="Chat_Placement_Error_NoLongerEmpty" xml:space="preserve">
     <value>Cette session n'est plus vide, donc le choix d'emplacement en attente a été annulé. Vérifiez la session et envoyez à nouveau pour continuer à son emplacement actuel.</value>
   </data>
+  <data name="Feedback_Button" xml:space="preserve">
+    <value>Envoyer un commentaire</value>
+  </data>
+  <data name="Feedback_Title" xml:space="preserve">
+    <value>Signaler un bogue ou suggérer une fonctionnalité</value>
+  </data>
+  <data name="Feedback_Placeholder" xml:space="preserve">
+    <value>Quel commentaire souhaitez-vous partager ?</value>
+  </data>
+  <data name="Feedback_Share" xml:space="preserve">
+    <value>Continuer sur GitHub</value>
+  </data>
+  <data name="Feedback_AddLogs" xml:space="preserve">
+    <value>Ajouter les journaux</value>
+  </data>
+  <data name="Feedback_LogDirectory" xml:space="preserve">
+    <value>Dossier des journaux</value>
+  </data>
+  <data name="Feedback_OpenLogsFolder" xml:space="preserve">
+    <value>Ouvrir le dossier dans l'Explorateur de fichiers</value>
+  </data>
+  <data name="Feedback_CopyLogs" xml:space="preserve">
+    <value>Copier le ZIP</value>
+  </data>
+  <data name="Feedback_SaveLogs" xml:space="preserve">
+    <value>Enregistrer le ZIP</value>
+  </data>
+  <data name="Feedback_Privacy" xml:space="preserve">
+    <value>Le commentaire est envoyé comme ticket public GitHub dans votre navigateur. Les journaux restent locaux tant que vous ne joignez pas le ZIP. Vérifiez leur contenu avant de les partager.</value>
+  </data>
+  <data name="Feedback_Collecting" xml:space="preserve">
+    <value>Collecte des journaux expurgés de la passerelle...</value>
+  </data>
+  <data name="Feedback_LogsReady" xml:space="preserve">
+    <value>ZIP prêt. Ouvrez le dossier des journaux pour le vérifier, puis faites-le glisser dans votre ticket GitHub. Rien n'a été téléversé.</value>
+  </data>
+  <data name="Feedback_LogsPartial" xml:space="preserve">
+    <value>ZIP prêt, mais certains diagnostics peuvent manquer. Vérifiez l'archive avant de la joindre sur GitHub.</value>
+  </data>
+  <data name="Feedback_NoGateway" xml:space="preserve">
+    <value>La collecte des journaux nécessite une passerelle native installée. Vous pouvez envoyer un commentaire sans journaux.</value>
+  </data>
+  <data name="Feedback_Failed" xml:space="preserve">
+    <value>Cette action a échoué. Réessayez. Vous pouvez aussi copier votre commentaire et l'envoyer sur GitHub.</value>
+  </data>
+  <data name="Feedback_LogsCopied" xml:space="preserve">
+    <value>ZIP copié. Collez-le dans le ticket GitHub si votre navigateur accepte le collage de fichiers, ou ouvrez le dossier des journaux et faites-le glisser.</value>
+  </data>
+  <data name="Feedback_Saved" xml:space="preserve">
+    <value>ZIP enregistré à l'emplacement choisi.</value>
+  </data>
+  <data name="Feedback_OpenedBrowser" xml:space="preserve">
+    <value>Continuez dans votre navigateur pour vous connecter, vérifier votre commentaire, joindre le ZIP si nécessaire et envoyer le ticket.</value>
+  </data>
+  <data name="Feedback_PasteInBrowser" xml:space="preserve">
+    <value>Votre commentaire était trop long pour un lien et a été copié. Collez-le dans le ticket GitHub et joignez le ZIP si nécessaire.</value>
+  </data>
 </root>
