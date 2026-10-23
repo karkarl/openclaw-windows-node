@@ -65,7 +65,7 @@ public sealed partial class SkillsPage : Page
         };
     }
 
-    public void Initialize(SetupNativeNavigationRequest? request)
+    internal void Initialize(SetupNativeNavigationRequest? request)
     {
         _nativeSetupRequest = request;
         if (request is not null)
