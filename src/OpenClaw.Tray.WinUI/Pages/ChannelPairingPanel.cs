@@ -4,9 +4,9 @@ using Microsoft.UI.Xaml.Controls;
 using OpenClaw.Shared;
 using OpenClawTray.Helpers;
 
-namespace OpenClawTray.Controls;
+namespace OpenClawTray.Pages;
 
-/// <summary>Native DM-access requests. Never participates in channel login or device pairing.</summary>
+/// <summary>Native Channels-page subsection, not a Reactor tree. Does not handle channel login or device pairing.</summary>
 public sealed class ChannelPairingPanel : UserControl
 {
     private readonly StackPanel _rows = new() { Spacing = 8 };
