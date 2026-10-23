@@ -63,11 +63,19 @@
                     </Button>
                 </Grid>
 
-                <AutoSuggestBox x:Name="TranscriptQuery" x:Uid="SessionsPage_TranscriptQuery"
-                                QueryIcon="Find"
-                                QuerySubmitted="OnTranscriptQuerySubmitted"
-                                TextChanged="OnTranscriptQueryChanged"
-                                AutomationProperties.AutomationId="SessionsTranscriptQuery"/>
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <AutoSuggestBox x:Name="TranscriptQuery" x:Uid="SessionsPage_TranscriptQuery"
+                                    QuerySubmitted="OnTranscriptQuerySubmitted"
+                                    TextChanged="OnTranscriptQueryChanged"
+                                    AutomationProperties.AutomationId="SessionsTranscriptQuery"/>
+                    <Button Grid.Column="1" x:Uid="SessionsPage_SearchButton"
+                            Click="OnTranscriptSearchClick"
+                            AutomationProperties.AutomationId="SessionsTranscriptSubmit"/>
+                </Grid>
                 <TextBlock x:Name="TranscriptSearchStatus" TextWrapping="Wrap"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            AutomationProperties.LiveSetting="Polite"

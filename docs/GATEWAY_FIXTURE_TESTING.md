@@ -70,8 +70,8 @@ test container. The request-driven server and scenario live in
 `tests\OpenClaw.TestSupport\Gateway`. Repeated reads and different request
 orders work; this is deliberately not sequential packet playback.
 
-In Sessions, submit **Search active conversation messages** with Enter or the
-native search icon. This calls `sessions.search` against the Gateway's active,
+In Sessions, submit **Search active conversation messages** with Enter or
+**Search**. This calls `sessions.search` against the Gateway's active,
 configured-agent roster rather than filtering the currently loaded titles.
 Search covers all channels; **Show background** controls the Gateway's cron
 and system membership filters before its 25-message limit. Select a result's
@@ -86,7 +86,7 @@ published Gateway compatibility. `GatewayFixtureProtocolTests.Search` separately
 exercises strict parameter validation, permission denial, unsupported methods,
 index readiness, membership-before-limit, archival and message provenance.
 `GatewayFixtureUiTests.TranscriptSearch_ShowsVisibleMatchesAndOpensTheMatchingConversation`
-checks visible matches and navigation through the real native query button.
+checks visible matches and navigation through the real native Search button.
 
 ## Run the application smoke
 

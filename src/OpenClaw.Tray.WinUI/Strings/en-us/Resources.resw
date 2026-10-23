@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="SessionsPage_SearchButton.Content" xml:space="preserve"><value>Search</value></data>
   <data name="SessionsPage_TranscriptQuery.PlaceholderText" xml:space="preserve"><value>Search active conversation messages. Press Enter.</value></data>
   <data name="SessionsPage_TranscriptQuery.AutomationProperties.Name" xml:space="preserve"><value>Search active conversation messages</value></data>
   <data name="SessionsPage_SearchLoading" xml:space="preserve"><value>Searching conversation messages...</value></data>

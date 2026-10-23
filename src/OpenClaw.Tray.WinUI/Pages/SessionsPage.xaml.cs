@@ -350,9 +350,15 @@ public sealed partial class SessionsPage : Page
         => _transcriptSearch?.Clear();
 
     private void OnTranscriptQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+        => RunTranscriptSearch(args.QueryText);
+
+    private void OnTranscriptSearchClick(object sender, RoutedEventArgs args)
+        => RunTranscriptSearch(TranscriptQuery.Text);
+
+    private void RunTranscriptSearch(string query)
         => AsyncEventHandlerGuard.Run(() => _transcriptSearch.SearchAsync(CurrentApp.GatewayClient,
-            () => _unloaded ? null : CurrentApp.GatewayClient, args.QueryText, _showBackgroundSessions),
-            new AppLogger(), nameof(OnTranscriptQuerySubmitted));
+            () => _unloaded ? null : CurrentApp.GatewayClient, query, _showBackgroundSessions),
+            new AppLogger(), nameof(RunTranscriptSearch));
 
     private void ApplyTranscriptSearch()
     {

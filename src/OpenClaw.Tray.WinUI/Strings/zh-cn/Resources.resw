@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <root xmlns:ns1="urn:schemas-microsoft-com:xml-msdata" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <data name="SessionsPage_SearchButton.Content" xml:space="preserve"><value>搜索</value></data>
   <data name="SessionsPage_TranscriptQuery.PlaceholderText" xml:space="preserve"><value>搜索活跃会话消息。按 Enter 键搜索。</value></data>
   <data name="SessionsPage_TranscriptQuery.AutomationProperties.Name" xml:space="preserve"><value>搜索活跃会话消息</value></data>
   <data name="SessionsPage_SearchLoading" xml:space="preserve"><value>正在搜索会话消息...</value></data>
