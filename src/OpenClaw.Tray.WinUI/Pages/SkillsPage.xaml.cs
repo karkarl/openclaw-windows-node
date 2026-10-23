@@ -65,9 +65,10 @@ public sealed partial class SkillsPage : Page
         };
     }
 
-    public void Initialize()
+    public void Initialize(SetupNativeNavigationRequest? request)
     {
-        if (_nativeSetupRequest is { } request)
+        _nativeSetupRequest = request;
+        if (request is not null)
         {
             _nativeLifetime?.Cancel();
             _nativeLifetime?.Dispose();

@@ -1,5 +1,6 @@
 using OpenClaw.TestSupport.Gateway;
 using OpenClaw.SetupEngine;
+using System.Windows.Automation;
 
 namespace OpenClaw.Tray.UITests;
 
@@ -34,7 +35,8 @@ public sealed partial class GatewayFixtureUiTests
             Assert.NotNull(FindText(run, "Disabled (2)"));
             Assert.Single(run.Gateway.Requests, request => request.Method == "skills.update" && request.Outcome == "ok");
             Assert.True(run.Gateway.Requests.Count(request => request.Method == "skills.status") >= 2);
-            await CaptureIfRequestedAsync(run, nativeSetup ? "skills-native-accepted.png" : "skills-accepted.png");
+            CaptureSkillsIfRequested(run, nativeSetup ? "skills-native-accepted.png" : "skills-accepted.png",
+                FindText(run, "Enabled (0)")!, FindText(run, "Disabled (2)")!);
         }, scenario: scenario, prepareSetupHandoff: nativeSetup
             ? profile => IssueSyntheticHandoff(profile, SetupNativeDestination.Skills)
             : null);
@@ -49,7 +51,7 @@ public sealed partial class GatewayFixtureUiTests
             await run.InvokeAsync("app.navigate", new { page = "skills" });
             await WaitUiAsync(run, () => FindById(run, "SkillsPageToggle:fixture-calendar") is not null,
                 "populated native Skills page");
-            await CaptureIfRequestedAsync(run, "skills-before-rejection.png");
+            CaptureSkillsIfRequested(run, "skills-before-rejection.png", FindText(run, "Enabled (1)")!);
             var toggle = FindById(run, "SkillsPageToggle:fixture-calendar")!;
             Invoke(toggle);
 
@@ -59,7 +61,19 @@ public sealed partial class GatewayFixtureUiTests
             Assert.NotNull(FindText(run, "Enabled (1)"));
             Assert.True(FindById(run, "SkillsPageToggle:fixture-calendar")!.Current.IsEnabled);
             Assert.Single(run.Gateway.Requests, request => request.Method == "skills.update" && request.Outcome == "error:FIXTURE_READ_ONLY");
-            await CaptureIfRequestedAsync(run, "skills-rejected-state-preserved.png");
+            CaptureSkillsIfRequested(run, "skills-rejected-state-preserved.png",
+                FindText(run, error)!, FindText(run, "Enabled (1)")!);
         }, scenario: GatewayScenario.CreateBrowse());
+    }
+
+    private static void CaptureSkillsIfRequested(OpenClaw.GatewayFixtureHost.GatewayFixtureRun run,
+        string name, params AutomationElement[] assertions)
+    {
+        if (Environment.GetEnvironmentVariable("OPENCLAW_GATEWAY_FIXTURE_SCREENSHOTS") != "1")
+            return;
+        var window = AppWindows(run).Single(candidate => candidate.FindFirst(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty,
+                "SkillsPageToggle:fixture-calendar")) is not null);
+        OwnedWindowCapture.Save(run, window, name, assertions);
     }
 }

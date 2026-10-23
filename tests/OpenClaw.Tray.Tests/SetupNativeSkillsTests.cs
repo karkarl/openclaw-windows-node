@@ -86,11 +86,16 @@ public sealed class SetupNativeSkillsTests
     public async Task CancelledReadDoesNotWaitForGatewayOrInstallAnything()
     {
         var client = DispatchProxy.Create<IOperatorGatewayClient, SkillsClient>();
-        ((SkillsClient)client).Response = new TaskCompletionSource<JsonElement>().Task;
+        var reply = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ((SkillsClient)client).Response = reply.Task;
         using var cancel = new CancellationTokenSource();
-        var load = SetupNativeSkills.LoadAsync(Request, () => client, cancel.Token);
+        var ownerChecks = 0;
+        var load = SetupNativeSkills.LoadAsync(Request, () => { ownerChecks++; return client; }, cancel.Token);
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load);
+        reply.SetResult(JsonDocument.Parse("{\"skills\":[]}").RootElement.Clone());
+        Assert.True(load.IsCanceled);
+        Assert.Equal(1, ownerChecks);
         Assert.Equal(1, ((SkillsClient)client).Calls);
     }
 

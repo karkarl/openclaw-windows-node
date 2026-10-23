@@ -19,6 +19,9 @@ This does not install skills or prove a live Gateway's installation policy.
 The opt-in `skills-editing` scenario accepts only enabled-state changes to its
 two synthetic entries in memory. Acceptance tests refresh both ordinary and
 setup-bound Skills pages from Gateway reports, without executing recipes.
+The setup-bound case uses the production handoff and waits for its verified
+agent's page to load before mutating. Skills screenshots target the owned
+Settings window and assert the captured state, not the larger Chat window.
 
 ## Build and explore
 
