@@ -6,6 +6,17 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const policy = require("./gateway-capability-policy.json");
 const REPORT_EXAMPLE_LIMIT = 3;
+const PROTOCOL_HANDLER_OWNERS = {
+  "src/OpenClaw.Shared/OpenClawGatewayClient.cs": [
+    ["HandleKnownResponse", "method", "method"],
+    ["HandleRequestError", "method", "method"],
+    ["HandleEventForConnection", "eventType", "event"],
+  ],
+  "src/OpenClaw.Shared/WindowsNodeClient.cs": [
+    ["HandleRequestAsync", "method", "method"],
+    ["HandleEventForConnectionAsync", "eventType", "event"],
+  ],
+};
 
 function digest(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -23,7 +34,7 @@ function sourceViews(text) {
   const blank = (target, start, end) => {
     for (let i = start; i < end; i++) if (!/[\r\n]/.test(target[i])) target[i] = " ";
   };
-  const tokens = /\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|\$*"{3,}[\s\S]*?"{3,}|(?:\$@|@\$|@)"(?:""|[^"])*"|\$?"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g;
+  const tokens = /\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|\$*("{3,})[\s\S]*?\1|(?:\$@|@\$|@)"(?:""|[^"])*"|\$?"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g;
   for (const match of text.matchAll(tokens)) {
     blank(masked, match.index, match.index + match[0].length);
     if (match[0].startsWith("//") || match[0].startsWith("/*"))
@@ -32,16 +43,62 @@ function sourceViews(text) {
   return { code: code.join(""), masked: masked.join("") };
 }
 
+function closingBrace(masked, open) {
+  let depth = 0;
+  for (let index = open; index < masked.length; index++) {
+    if (masked[index] === "{") depth++;
+    if (masked[index] === "}" && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function handlerCandidates(file, views) {
+  const candidates = [];
+  // A case label is protocol evidence only in a known router's discriminant switch.
+  // Keep events distinct from RPCs even when they share an exact wire name.
+  for (const [owner, discriminant, surfaceKind] of PROTOCOL_HANDLER_OWNERS[file] ?? []) {
+    const declaration = new RegExp(`\\b(?:private|internal)\\s+(?:async\\s+)?(?:bool|void|Task)\\s+${owner}\\s*\\([^{};]*\\)\\s*\\{`, "g");
+    for (const match of views.masked.matchAll(declaration)) {
+      const open = match.index + match[0].length - 1;
+      const close = closingBrace(views.masked, open);
+      check(close >= 0, `Unbalanced protocol handler: ${file}:${owner}`);
+      const body = views.masked.slice(open + 1, close);
+      const switches = new RegExp(`\\bswitch\\s*\\(\\s*${discriminant}\\s*\\)\\s*\\{`, "g");
+      for (const statement of body.matchAll(switches)) {
+        const switchOpen = open + 1 + statement.index + statement[0].length - 1;
+        const switchClose = closingBrace(views.masked, switchOpen);
+        check(switchClose >= 0, `Unbalanced protocol switch: ${file}:${owner}`);
+        let depth = 0;
+        const labels = /\bcase\s*"([A-Za-z][A-Za-z0-9_.-]*)"\s*:|[{}]/g;
+        for (const label of views.code.slice(switchOpen + 1, switchClose).matchAll(labels)) {
+          const index = switchOpen + 1 + label.index;
+          if (label[1]) {
+            if (depth === 0 && views.masked.slice(index, index + 4) === "case")
+              candidates.push({ kind: "handler", name: label[1], index, surfaceKind });
+          } else if (views.masked[index] === "{") depth++;
+          else if (views.masked[index] === "}") depth--;
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
 function wiringCandidates(files) {
   const evidence = [];
   for (const [file, text] of Object.entries(files)) {
     if (!file.startsWith("src/") || !file.endsWith(".cs")) continue;
     const views = sourceViews(text);
     const patterns = [
-      ["dispatch", /\b(?:SendTrackedRequestAsync|TrySendTrackedRequestAsync|TryRequestPayloadAsync|RequestPayloadAsync|MutateCompactionAsync)\s*\(\s*"([A-Za-z][A-Za-z0-9_.]*)"/g],
-      ["handler", /\bcase\s*"([A-Za-z][A-Za-z0-9_.]*)"\s*:/g],
-      ["construction", /\bmethod\s*=\s*"([A-Za-z][A-Za-z0-9_.]*)"/g],
+      ["dispatch", /\b(?:SendTrackedRequestAsync|TrySendTrackedRequestAsync|TryRequestPayloadAsync|RequestPayloadAsync|MutateCompactionAsync|SendWizardRequestAsync)\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g],
+      ["construction", /\bmethod\s*=\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g],
     ];
+    if (file === "src/OpenClaw.Shared/Sessions/ChatPlacement.cs")
+      patterns.push(["dispatch", /(?<![\w.])RequestAsync\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
+    if (file === "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs")
+      patterns.push(["dispatch", /(?<![\w.])ExecuteAsync\s*<\s*[A-Za-z_][\w.]*\s*>\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
+    if (file === "src/OpenClaw.Shared/OpenClawGatewayClient.cs")
+      patterns.push(["construction", /(?<![\w.])SerializeRequest\s*\(\s*[A-Za-z_]\w*\s*,\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
     for (const [kind, regex] of patterns) {
       for (const match of views.code.matchAll(regex)) {
         // An apparent call embedded inside a literal is not executable syntax.
@@ -50,6 +107,8 @@ function wiringCandidates(files) {
           line: text.slice(0, match.index).split("\n").length, sha256: digest(text) });
       }
     }
+    for (const { index, ...candidate } of handlerCandidates(file, views))
+      evidence.push({ ...candidate, file, line: text.slice(0, index).split("\n").length, sha256: digest(text) });
   }
   return evidence;
 }
@@ -130,7 +189,8 @@ function assess({ schema, local, upstreamHash, hash, supportPolicy = policy }) {
   }
   const assessments = surfaces.map((surface) => {
     const decision = supportPolicy.decisions.find((entry) => entry.surface === surface.id);
-    const evidence = candidates.filter((entry) => entry.name === surface.name);
+    const evidence = candidates.filter((entry) => entry.name === surface.name
+      && (entry.surfaceKind ?? "method") === surface.kind);
     let status = "pending";
     let reason = evidence.length
       ? "Wiring candidates found. Reachability, payload semantics, authorization and behavioral tests still require review."

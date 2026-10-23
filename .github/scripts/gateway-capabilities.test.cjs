@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -127,6 +128,216 @@ test("comments, dead strings, DTOs and even call candidates cannot establish sup
   assert.deepEqual(evidence.map((item) => item.name), ["question.resolve"]);
   assert.ok(assess({ local: { ...local, files: { "src/Client.cs": file } } }).assessments
     .every((item) => item.status !== "supported"));
+});
+
+for (const newline of ["\n", "\r\n"]) {
+  test(`recognized Gateway request helpers retain dispatch evidence (${JSON.stringify(newline)})`, () => {
+    const wizard = [
+      "class Client {",
+      '  Task Start() => client.SendWizardRequestAsync(',
+      '    "channels.start", new { channel = "test" });',
+      '  // SendWizardRequestAsync("fake.comment");',
+      '  string example = """ SendWizardRequestAsync("fake.literal") """;',
+      "}",
+    ].join(newline);
+    const placement = [
+      "class Placement {",
+      '  Task Create() => RequestAsync("sessions.create", new { });',
+      '  Task Projects() => RequestAsync("projects.list", new { });',
+      '  Task Http() => unrelated.RequestAsync("fake.http", new { });',
+      "}",
+    ].join(newline);
+    const evidence = capability.wiringCandidates({
+      "src/Client.cs": wizard,
+      "src/OpenClaw.Shared/Sessions/ChatPlacement.cs": placement,
+      "src/Unrelated.cs": placement,
+      "tests/ClientTests.cs": wizard,
+    });
+    assert.deepEqual(evidence.map(({ name, kind, file, line }) => ({ name, kind, file, line })), [
+      { name: "channels.start", kind: "dispatch", file: "src/Client.cs", line: 2 },
+      { name: "sessions.create", kind: "dispatch", file: "src/OpenClaw.Shared/Sessions/ChatPlacement.cs", line: 2 },
+      { name: "projects.list", kind: "dispatch", file: "src/OpenClaw.Shared/Sessions/ChatPlacement.cs", line: 3 },
+    ]);
+    assert.ok(evidence.every((item) => /^[a-f0-9]{64}$/.test(item.sha256)));
+  });
+}
+
+for (const newline of ["\n", "\r\n"]) {
+  test(`owner-scoped setup requests and serialized approval frames retain evidence (${JSON.stringify(newline)})`, () => {
+    const setup = [
+      "class Setup {",
+      "  Task Detect() => ExecuteAsync<SetupDetection>(",
+      '    "openclaw.setup.detect", route, timeout, ct);',
+      '  Task Verify() => ExecuteAsync<SetupVerification>("openclaw.setup.verify", route, timeout, ct);',
+      '  Task Poll() => ExecuteAsync<WizardResult>("wizard.next", route, timeout, ct);',
+      '  bool Advertised() => HasMethod("fake.advertised");',
+      '  Task Http() => other.ExecuteAsync<SetupDetection>("fake.http", route, timeout, ct);',
+      '  // ExecuteAsync<SetupDetection>("fake.comment", route, timeout, ct);',
+      '  string example = """ ExecuteAsync<SetupDetection>("fake.literal", route, timeout, ct) """;',
+      '  string quotedExample = """"',
+      '    """ ExecuteAsync<SetupDetection>("fake.longDelimiter", route, timeout, ct) """',
+      '    """";',
+      "}",
+    ].join(newline);
+    const approval = [
+      "class Client {",
+      "  Task Resolve() => SendRawAsync(",
+      "    SerializeRequest(",
+      "      requestId,",
+      '      "exec.approval.resolve", payload), generation, ct);',
+      '  string Other() => other.SerializeRequest(requestId, "fake.receiver", payload);',
+      '  // SerializeRequest(requestId, "fake.comment", payload);',
+      '  string example = """ SerializeRequest(requestId, "fake.literal", payload) """;',
+      "}",
+    ].join(newline);
+    const files = {
+      "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs": setup,
+      "src/OpenClaw.Shared/OpenClawGatewayClient.cs": approval,
+      "src/UnrelatedSetup.cs": setup,
+      "src/UnrelatedClient.cs": approval,
+      "tests/GatewayAiSetupClientTests.cs": setup,
+      "tests/ApprovalTests.cs": approval,
+    };
+    const evidence = capability.wiringCandidates(files);
+    assert.deepEqual(evidence.map(({ name, kind, file, line }) => ({ name, kind, file, line })), [
+      { name: "openclaw.setup.detect", kind: "dispatch", file: "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs", line: 2 },
+      { name: "openclaw.setup.verify", kind: "dispatch", file: "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs", line: 4 },
+      { name: "wizard.next", kind: "dispatch", file: "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs", line: 5 },
+      { name: "exec.approval.resolve", kind: "construction", file: "src/OpenClaw.Shared/OpenClawGatewayClient.cs", line: 3 },
+    ]);
+    for (const item of evidence)
+      assert.equal(item.sha256, crypto.createHash("sha256").update(files[item.file]).digest("hex"));
+    const report = assess({ local: { ...local, files } });
+    assert.ok(report.assessments.every((item) => item.status !== "supported"));
+  });
+}
+
+for (const newline of ["\n", "\r\n"]) {
+  test(`handler evidence requires the recognized protocol owner and switch context (${JSON.stringify(newline)})`, () => {
+    const file = [
+      "class Client {",
+      "  private bool HandleKnownResponse(string method, JsonElement payload) {",
+      '    var braces = "} switch (method) { case \\"fake.string\\":";',
+      '    // switch (method) { case "fake.comment": }',
+      "    switch (method) {",
+      '      case "sessions.list":',
+      "      {",
+      '        switch (action) { case "status": break; }',
+      '        return true;',
+      "      }",
+      '      case "config.get":',
+      '      case "config.schema": return true;',
+      "    }",
+      '    switch (action) { case "fake.action": break; }',
+      "    return false;",
+      "  }",
+      "  private void HandleRequestError(string? method, JsonElement root, long generation) {",
+      "    if (IsUnknownMethodError()) {",
+      '      switch (method) { case "usage.status": break; }',
+      "    }",
+      "  }",
+      '  private void OnTrayAction(string method) { switch (method) { case "status": break; } }',
+      "}",
+    ].join(newline);
+    const evidence = capability.wiringCandidates({
+      "src/OpenClaw.Shared/OpenClawGatewayClient.cs": file,
+      "src/Unrelated.cs": file,
+      "tests/OpenClawGatewayClient.cs": file,
+    });
+    assert.deepEqual(evidence.map(({ name, kind, surfaceKind, file, line }) => ({ name, kind, surfaceKind, file, line })), [
+      ["sessions.list", 6], ["config.get", 11], ["config.schema", 12], ["usage.status", 19],
+    ].map(([name, line]) => ({
+      name, line, kind: "handler", surfaceKind: "method", file: "src/OpenClaw.Shared/OpenClawGatewayClient.cs",
+    })));
+    assert.ok(evidence.every((item) => /^[a-f0-9]{64}$/.test(item.sha256)));
+  });
+}
+
+test("event handlers cannot supply evidence to same-named RPCs or definitions", () => {
+  const file = [
+    "class Client {",
+    '  public Task Health() { return SendTrackedRequestAsync("health"); }',
+    "  private void HandleEventForConnection(JsonElement root, int size, long generation) {",
+    "    switch (eventType) {",
+    '      case "agent": break;',
+    '      case "health": break;',
+    '      case "question.requested": break;',
+    '      case "FutureEvent": break;',
+    "    }",
+    "  }",
+    '  private void OnAction(string action) { switch (action) { case "status": break; } }',
+    "}",
+  ].join("\n");
+  const supportPolicy = structuredClone(capability.policy);
+  supportPolicy.families[0].events = ["agent", "health", "question.requested"];
+  const report = assess({
+    schema: {
+      methods: { agent: {}, status: {}, health: {}, "question.list": {}, "question.requested": {} },
+      definitions: { FutureEvent: {} },
+    },
+    local: { ...local, files: { "src/OpenClaw.Shared/OpenClawGatewayClient.cs": file } },
+    supportPolicy,
+  });
+  for (const id of ["method:agent", "method:status", "method:question.requested", "definition:FutureEvent"])
+    assert.deepEqual(report.assessments.find((item) => item.id === id).evidence, [], id);
+  assert.deepEqual(report.assessments.find((item) => item.id === "method:health").evidence.map((item) => item.kind), ["dispatch"]);
+  for (const name of ["agent", "health", "question.requested"]) {
+    const evidence = report.assessments.find((item) => item.id === `event:${name}`).evidence;
+    assert.equal(evidence.length, 1);
+    assert.equal(evidence[0].kind, "handler");
+    assert.equal(evidence[0].surfaceKind, "event");
+  }
+  assert.ok(report.assessments.every((item) => item.status === "pending"));
+});
+
+test("hyphenated Gateway method names retain dispatch, construction and handler evidence", () => {
+  const file = [
+    "class Client {",
+    '  Task Read() => SendTrackedRequestAsync("last-heartbeat");',
+    '  Task Enable() => SendWizardRequestAsync("set-heartbeats", new { });',
+    '  Task Wake() => SendRawAsync(SerializeRequest(id, "system-event", payload), generation, ct);',
+    '  object Frame() => new { method = "system-event" };',
+    "  private bool HandleKnownResponse(string method, JsonElement payload) {",
+    '    switch (method) { case "system-presence": return true; }',
+    "    return false;",
+    "  }",
+    "}",
+  ].join("\n");
+  const evidence = capability.wiringCandidates({ "src/OpenClaw.Shared/OpenClawGatewayClient.cs": file });
+  assert.deepEqual(evidence.map(({ name, kind, line }) => ({ name, kind, line })), [
+    { name: "last-heartbeat", kind: "dispatch", line: 2 },
+    { name: "set-heartbeats", kind: "dispatch", line: 3 },
+    { name: "system-event", kind: "construction", line: 5 },
+    { name: "system-event", kind: "construction", line: 4 },
+    { name: "system-presence", kind: "handler", line: 7 },
+  ]);
+});
+
+test("current protocol owners retain RPC and event handlers without tray or deep-link collisions", () => {
+  const files = Object.fromEntries([
+    "src/OpenClaw.Shared/OpenClawGatewayClient.cs",
+    "src/OpenClaw.Shared/OpenClawGatewayClient.Protocol.cs",
+    "src/OpenClaw.Shared/Sessions/ChatPlacement.cs",
+    "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs",
+    "src/OpenClaw.Shared/WindowsNodeClient.cs",
+    "src/OpenClaw.Tray.WinUI/App.xaml.cs",
+    "src/OpenClaw.Tray.WinUI/Services/DeepLinkHandler.cs",
+  ].map((file) => [file, fs.readFileSync(path.join(__dirname, "../..", file), "utf8")]));
+  const evidence = capability.wiringCandidates(files);
+  const handlers = evidence.filter((item) => item.kind === "handler");
+  for (const name of ["sessions.list", "config.get", "cron.add", "node.invoke", "usage.status"])
+    assert.ok(handlers.some((item) => item.name === name && item.surfaceKind === "method"), name);
+  for (const name of ["agent", "health", "node.invoke.request"])
+    assert.ok(handlers.some((item) => item.name === name && item.surfaceKind === "event"), name);
+  assert.ok(!handlers.some((item) => item.name === "agent" && item.surfaceKind === "method"));
+  assert.ok(!evidence.some((item) => item.name === "status"));
+  assert.ok(!handlers.some((item) => item.file.includes("OpenClaw.Tray.WinUI")));
+  assert.ok(evidence.some((item) => item.name === "chat.send" && item.kind === "construction"));
+  for (const name of ["channels.start", "chat.abort", "sessions.create", "sessions.dispatch", "projects.list", "fs.listDir"])
+    assert.ok(evidence.some((item) => item.name === name && item.kind === "dispatch"), name);
+  for (const name of ["openclaw.setup.detect", "openclaw.setup.verify"])
+    assert.ok(evidence.some((item) => item.name === name && item.kind === "dispatch"), name);
+  assert.ok(evidence.some((item) => item.name === "exec.approval.resolve" && item.kind === "construction"));
 });
 
 test("reviewed source/test evidence resolves a surface, and any evidence change invalidates support", () => {

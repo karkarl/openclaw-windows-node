@@ -265,6 +265,31 @@ Examples are bounded; `report.json` contains every entry under
 Event definitions are data shapes, not separate missing features, and explicit
 lifecycle events cover tracked families rather than every upstream event.
 
+Dispatch scanning includes the response-backed `SendWizardRequestAsync` helper,
+which also carries non-wizard RPCs. Unqualified `RequestAsync` calls in
+[`ChatPlacement.cs`](../src/OpenClaw.Shared/Sessions/ChatPlacement.cs) are
+recognized because that owner's helper forwards to the Gateway transport.
+Literal-method `ExecuteAsync<T>` calls in
+[`GatewayAiSetupClient.cs`](../src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs)
+also forward to that owner's Gateway transport. Unqualified `SerializeRequest`
+calls in `OpenClawGatewayClient.cs` supply frame-construction evidence when the
+second argument is a literal method name and the first is a request-ID variable.
+Arbitrary request, execution or serialization helpers elsewhere are not Gateway
+evidence. Capability-advertisement checks and variable-selected methods are not
+resolved by these patterns. Method names can contain dots, underscores and
+hyphens, including upstream names such as `last-heartbeat`.
+
+Handler evidence is limited to the named Gateway response/error and Windows node
+request routers in `PROTOCOL_HANDLER_OWNERS` in
+[`gateway-capabilities.cjs`](../.github/scripts/gateway-capabilities.cjs).
+Only direct case labels in their method-dispatch switches count as RPC handlers.
+Event-dispatch switches produce event evidence, never evidence for a same-named
+RPC. Tray actions, deep links, unrelated switches, nested non-protocol cases,
+comments and string literals do not count as protocol handlers. Evidence retains
+the source file, line and hash; handlers also record `surfaceKind` as `method`
+or `event`. Renamed or new routers require an explicit scanner update and tests;
+this is a conservative source scan, not a full C# semantic analyzer.
+
 Recognized wiring is not proof of reachable, authorized, correctly tested
 behavior. No recognized wiring can mean missing support, an irrelevant API, or
 a scanner limitation. Neither bucket is automatically safe or supported.
