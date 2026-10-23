@@ -263,8 +263,29 @@ function renderAssessment(value) {
     `Examples without recognized wiring: ${examples(unwired)}.`,
     `Examples are limited to ${REPORT_EXAMPLE_LIMIT} per evidence bucket; every entry, reason and evidence location is in report.json under capabilities.assessments.`,
     "Recognized wiring is not proof of reachable or correct behavior. No recognized wiring can mean missing support, irrelevant functionality, or a scanner limitation; relevance remains unassessed.",
-    "Event schema definitions are data shapes, not additional feature counts. Explicit lifecycle events come from tracked families, not a complete upstream event inventory.",
+    "Event schema definitions are data shapes, not additional feature counts. Explicit lifecycle events come from tracked families, not a complete upstream event inventory.");
+  const namespaces = new Map();
+  for (const item of value.assessments.filter((item) => item.kind === "method")) {
+    const namespace = item.name.includes(".") ? item.name.split(".")[0] : "top-level";
+    if (!namespaces.has(namespace)) namespaces.set(namespace, { supported: 0, unsupported: 0, wired: 0, unwired: 0, total: 0 });
+    const row = namespaces.get(namespace);
+    row.total++;
+    if (item.status === "supported") row.supported++;
+    else if (item.status === "intentionally-unsupported") row.unsupported++;
+    else if (item.evidence.length) row.wired++;
+    else row.unwired++;
+  }
+  lines.push("", "### RPC namespace breakdown", "",
+    `${namespaces.size} RPC namespaces, including reviewed decisions. These are wire-name prefixes, not feature-completion claims. Names without a dot are grouped under \`top-level\`.`,
+    "Supported means current reviewed evidence, not just a recognized call. Lifecycle events and event definitions are excluded from this table.",
     "",
+    "| RPC namespace | Supported, reviewed | Intentionally unsupported, reviewed | Recognized wiring, unreviewed | No recognized wiring, unreviewed | Total RPC methods |",
+    "| --- | ---: | ---: | ---: | ---: | ---: |");
+  for (const namespace of [...namespaces.keys()].sort()) {
+    const row = namespaces.get(namespace);
+    lines.push(`| \`${safe(namespace)}\` | ${row.supported} | ${row.unsupported} | ${row.wired} | ${row.unwired} | ${row.total} |`);
+  }
+  lines.push("",
     "### Tracked capability candidates",
     "Families are explicitly selected by gateway-capability-policy.json, not discovered by ranking the pending inventory. A pending family is an investigation candidate, not a confirmed missing feature.",
     `Tracked gap candidates: ${value.pendingGaps.length}. Unassessed surfaces are review backlog, not automatic implementation tasks.`,

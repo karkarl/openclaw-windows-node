@@ -265,6 +265,13 @@ Examples are bounded; `report.json` contains every entry under
 Event definitions are data shapes, not separate missing features, and explicit
 lifecycle events cover tracked families rather than every upstream event.
 
+The RPC namespace table lists categories alphabetically by the wire-name prefix
+before the first dot. Dotless methods, including `last-heartbeat`, share the
+`top-level` category. Each row separates reviewed support and intentional
+exclusions from unreviewed RPCs with or without recognized wiring. Reviewed
+methods remain in the category totals; events and data-shape definitions do not.
+These are namespace groups, not feature-completion or implementation claims.
+
 Dispatch scanning includes the response-backed `SendWizardRequestAsync` helper,
 which also carries non-wizard RPCs. Unqualified `RequestAsync` calls in
 [`ChatPlacement.cs`](../src/OpenClaw.Shared/Sessions/ChatPlacement.cs) are

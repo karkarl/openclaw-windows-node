@@ -90,6 +90,39 @@ test("report separates pending surface types and wiring evidence without claimin
   assert.deepEqual(report, before, "presentation must not change evidence hashes, decisions or candidate identity");
 });
 
+test("RPC namespace table includes reviewed decisions and pending wiring without counting events", () => {
+  const doc = structuredClone(schema);
+  Object.assign(doc.methods, {
+    health: {}, connect: {}, "last-heartbeat": {}, "health.check": {},
+    "sessions.list": {}, "sessions.groups.list": {},
+  });
+  doc.definitions.HealthEvent = {};
+  const report = assess({ schema: doc, local: { ...local, files: {
+    ...local.files,
+    "src/SessionClient.cs": 'Task Groups() => SendTrackedRequestAsync("sessions.groups.list");',
+  } } });
+  const before = structuredClone(report);
+  const text = capability.renderAssessment(report);
+  assert.match(text, /### RPC namespace breakdown/);
+  assert.match(text, /4 RPC namespaces/);
+  assert.match(text, /\| `health` \| 0 \| 0 \| 0 \| 1 \| 1 \|/);
+  assert.match(text, /\| `question` \| 0 \| 2 \| 0 \| 3 \| 5 \|/);
+  assert.match(text, /\| `sessions` \| 0 \| 0 \| 1 \| 1 \| 2 \|/);
+  assert.match(text, /\| `top-level` \| 0 \| 0 \| 1 \| 2 \| 3 \|/);
+  assert.ok(text.indexOf("| `health` |") < text.indexOf("| `question` |"));
+  assert.ok(text.indexOf("| `question` |") < text.indexOf("| `sessions` |"));
+  assert.ok(text.indexOf("| `sessions` |") < text.indexOf("| `top-level` |"));
+  assert.match(text, /wire-name prefixes, not feature-completion claims/);
+  assert.deepEqual(report, before, "namespace presentation cannot change support or candidate identity");
+});
+
+test("RPC namespace labels cannot inject Markdown columns, HTML or mentions", () => {
+  const report = assess({ schema: { methods: { "bad|<@team>.get": {} }, definitions: {} } });
+  const text = capability.renderAssessment(report);
+  assert.match(text, /\| `bad  \(at\)team ` \| 0 \| 0 \| 0 \| 1 \| 1 \|/);
+  assert.doesNotMatch(text, /bad\|<@team>/);
+});
+
 test("untracked unknowns remain a visible coverage gap, including when no family is selected", () => {
   const report = assess({ schema: { methods: { "future.answer": {} }, definitions: { FutureEvent: {} } } });
   const text = capability.renderAssessment(report);
@@ -356,6 +389,7 @@ test("reviewed source/test evidence resolves a surface, and any evidence change 
   assert.equal(resolved.families[0].status, "pending", "one reviewed RPC cannot imply full feature support");
   assert.match(capability.renderAssessment(resolved), /Reviewed decisions: supported: 1; intentionally unsupported: 2/);
   assert.match(capability.renderAssessment(resolved), /\| method:question.resolve \| supported \| Reviewed reachable/);
+  assert.match(capability.renderAssessment(resolved), /\| `question` \| 1 \| 2 \| 0 \| 2 \| 5 \|/);
   for (const change of [
     { local: { ...local, files: { ...local.files, "src/Client.cs": "changed" } } },
     { local: { ...local, files: { ...local.files, "tests/ClientTests.cs": "changed" } } },
@@ -366,6 +400,7 @@ test("reviewed source/test evidence resolves a surface, and any evidence change 
   assert.equal(stale.assessments.find((item) => item.name === "question.resolve").status, "pending");
   assert.match(capability.renderAssessment(stale), /Reviewed decisions: supported: 0; intentionally unsupported: 2/);
   assert.match(capability.renderAssessment(stale), /Awaiting assessment: \*\*6 protocol entries\*\*/);
+  assert.match(capability.renderAssessment(stale), /\| `question` \| 0 \| 2 \| 0 \| 3 \| 5 \|/);
 });
 
 test("publication payload rejects moving tags, unsafe versions, unknown fields, repositories and digests", () => {
