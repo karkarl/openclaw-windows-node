@@ -69,6 +69,7 @@ public sealed class ModelSignInProofTests(UIThreadFixture ui)
                 await WaitForRenderedConditionAsync(() => OpenElements<ContentDialog>(surface).Any(),
                     "native sign-in dialog");
                 dialog = OpenElements<ContentDialog>(surface).Single();
+                Assert.Equal(theme, dialog.ActualTheme);
                 await WaitForRenderedConditionAsync(() => FindDescendants<Button>(dialog).Any(button =>
                     AutomationProperties.GetAutomationId(button) == "ModelSignInOption_" + ModelSignInFixture.Choice &&
                     button.IsEnabled), "server-provided sign-in option");

@@ -92,7 +92,7 @@ public static class ReactorChatHostExtensions
                 var signIn = native.CreateModelSignInSession(agentId, IsCurrent);
                 if (signIn is not null)
                 {
-                    await using var dialog = new ModelSignInDialog(signIn, target.XamlRoot);
+                    await using var dialog = new ModelSignInDialog(signIn, target);
                     await dialog.Dialog.ShowAsync();
                 }
             }

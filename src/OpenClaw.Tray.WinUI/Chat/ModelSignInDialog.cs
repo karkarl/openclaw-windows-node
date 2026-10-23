@@ -22,13 +22,14 @@ internal sealed class ModelSignInDialog : IAsyncDisposable
     private bool _closed;
     private bool _retiring;
 
-    internal ModelSignInDialog(ModelSignInSession session, XamlRoot root)
+    internal ModelSignInDialog(ModelSignInSession session, FrameworkElement owner)
     {
         _session = session;
         _session.Changed += OnChanged;
         _dialog = new ContentDialog
         {
-            XamlRoot = root, Title = Text("Title"), CloseButtonText = Text("Close"),
+            XamlRoot = owner.XamlRoot, RequestedTheme = owner.ActualTheme,
+            Title = Text("Title"), CloseButtonText = Text("Close"),
             Content = new ScrollViewer { Content = _body, MaxHeight = 480 },
             DefaultButton = ContentDialogButton.None
         };
