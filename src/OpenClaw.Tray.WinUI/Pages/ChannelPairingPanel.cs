@@ -13,6 +13,7 @@ public sealed class ChannelPairingPanel : UserControl
     private readonly InfoBar _message = new() { IsClosable = false, Visibility = Visibility.Collapsed };
     private readonly Button _refresh = new() { Content = Text("Refresh") };
     private Func<IOperatorGatewayClient?>? _currentClient;
+    private Func<ContentDialog, Task<ContentDialogResult>>? _showDialog;
     private IOperatorGatewayClient? _client;
     private ChannelPairingSession? _session;
     private long? _epoch;
@@ -45,9 +46,12 @@ public sealed class ChannelPairingPanel : UserControl
         };
     }
 
-    public void Initialize(Func<IOperatorGatewayClient?> currentClient)
+    public void Initialize(
+        Func<IOperatorGatewayClient?> currentClient,
+        Func<ContentDialog, Task<ContentDialogResult>> showDialog)
     {
         _currentClient = currentClient;
+        _showDialog = showDialog;
         _active = true;
         ObserveContext();
         _ = RefreshAsync();
@@ -153,7 +157,8 @@ public sealed class ChannelPairingPanel : UserControl
 
     private async Task ResolveAsync(ChannelPairingSession session, ChannelPairingRequest request, bool approve)
     {
-        if (!session.CanResolve(request)) { ShowMessage("Changed"); return; }
+        if (!session.CanResolve(request) || _showDialog is not { } showDialog)
+        { ShowMessage("Changed"); return; }
         SetBusy(true);
         try
         {
@@ -171,7 +176,7 @@ public sealed class ChannelPairingPanel : UserControl
                 DefaultButton = ContentDialogButton.Close
             };
             AutomationProperties.SetAutomationId(dialog, "ChannelPairingConfirmation");
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            if (await showDialog(dialog) != ContentDialogResult.Primary) return;
             // The dialog is only consent for this exact observed request and authenticated context.
             if (!session.CanResolve(request)) { if (_active) ShowMessage("Changed"); return; }
             await session.ResolveAsync(request, approve);

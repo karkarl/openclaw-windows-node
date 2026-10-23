@@ -223,7 +223,7 @@ public sealed partial class ChannelsPage : Page
     /// </summary>
     public void Initialize()
     {
-        PairingPanel.Initialize(() => BoundClient);
+        PairingPanel.Initialize(() => BoundClient, async dialog => await dialog.ShowAsync());
         _appState = CurrentApp.AppState!;
         if (_appState != null)
             _appState.PropertyChanged += OnAppStateChanged;
