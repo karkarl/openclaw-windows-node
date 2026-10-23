@@ -12,7 +12,9 @@ public sealed class DiagnosticsPageContractTests
         Assert.Contains("AutomationProperties.AutomationId=\"GatewayHeartbeatStatus\"", xaml);
         Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", xaml);
         Assert.Contains("Click=\"OnRefreshHeartbeat\"", xaml);
-        Assert.Contains("=> await _heartbeat.RefreshAsync()", page);
+        Assert.Matches(@"void OnRefreshHeartbeat\(object sender, RoutedEventArgs e\)\s*=>\s*" +
+            @"AsyncEventHandlerGuard\.Run\(\s*_heartbeat\.RefreshAsync,\s*" +
+            @"new OpenClawTray\.AppLogger\(\),\s*nameof\(OnRefreshHeartbeat\)\)", page);
         Assert.Contains("_heartbeatConnection.StateChanged += OnHeartbeatConnectionChanged", page);
         Assert.Contains("_heartbeatConnection.OperatorClientChanged += OnHeartbeatClientChanged", page);
         Assert.Contains("_heartbeatConnection.StateChanged -= OnHeartbeatConnectionChanged", page);

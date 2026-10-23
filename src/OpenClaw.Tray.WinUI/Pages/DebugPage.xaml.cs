@@ -184,8 +184,11 @@ public sealed partial class DebugPage : Page
         _heartbeat.Dispose();
     }
 
-    private async void OnRefreshHeartbeat(object sender, RoutedEventArgs e)
-        => await _heartbeat.RefreshAsync();
+    private void OnRefreshHeartbeat(object sender, RoutedEventArgs e) =>
+        AsyncEventHandlerGuard.Run(
+            _heartbeat.RefreshAsync,
+            new OpenClawTray.AppLogger(),
+            nameof(OnRefreshHeartbeat));
 
     private void RenderHeartbeat()
     {
