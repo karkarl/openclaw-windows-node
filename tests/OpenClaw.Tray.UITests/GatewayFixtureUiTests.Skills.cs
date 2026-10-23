@@ -28,7 +28,12 @@ public sealed partial class GatewayFixtureUiTests
             await WaitUiAsync(run, () => FindById(run, "SkillsPageToggle:fixture-calendar") is not null,
                 "populated Skills destination");
             if (nativeSetup)
+            {
                 Assert.Contains(run.Gateway.Requests, request => request.Method == "openclaw.setup.verify");
+                await run.WaitForAsync(() => Task.FromResult(
+                    !File.Exists(Path.Combine(run.Profile.DataDirectory, "setup-dashboard-handoff", "pending.json"))),
+                    "verified Skills handoff consumed after bound page readiness");
+            }
             Invoke(FindById(run, "SkillsPageToggle:fixture-calendar")!);
             await WaitUiAsync(run, () => FindText(run, "Enabled (0)") is { Current.IsOffscreen: false },
                 "Gateway-acknowledged disable reflected by refreshed report");
