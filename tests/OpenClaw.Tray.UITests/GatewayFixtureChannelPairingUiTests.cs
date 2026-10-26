@@ -20,7 +20,7 @@ public sealed partial class GatewayFixtureUiTests
                 "visible pending sender approval");
             Assert.Contains("sender-approve", FindPairingIdentity(run, "approve").Current.Name, StringComparison.Ordinal);
             Assert.Contains("work", FindPairingIdentity(run, "approve").Current.Name, StringComparison.Ordinal);
-            OwnedWindowCapture.Save(run, FindHub(run), "channels-pairing-pending.png", expander);
+            OwnedWindowCapture.Save(run, FindPairingWindow(run), "channels-pairing-pending.png", expander);
 
             Invoke(FindById(run, "ChannelPairingApprove:0")!);
             await WaitUiAsync(run, () => FindById(run, "ChannelPairingConfirmation") is not null, "approval confirmation");
@@ -29,7 +29,7 @@ public sealed partial class GatewayFixtureUiTests
                     new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
                 .Cast<AutomationElement>().Select(row => row.Current.Name).Aggregate("", (a, b) => a + b),
                 StringComparison.Ordinal);
-            OwnedWindowCapture.Save(run, FindHub(run), "channels-pairing-confirm.png", dialog);
+            OwnedWindowCapture.Save(run, FindPairingWindow(run), "channels-pairing-confirm.png", dialog);
             Invoke(DialogButton(run, "Cancel"));
             await WaitUiAsync(run, () => FindById(run, "ChannelPairingConfirmation") is null, "cancelled consent");
             Assert.DoesNotContain(run.Gateway.Requests, request => request.Method == "channels.pairing.approve");
@@ -43,7 +43,7 @@ public sealed partial class GatewayFixtureUiTests
             await WaitUiAsync(run, () => FindById(run, "ChannelPairingConfirmation") is not null, "dismiss confirmation");
             Invoke(DialogButton(run, "Dismiss request"));
             await WaitUiAsync(run, () => FindText(run, "No pending DM access requests.") is not null, "reconciled empty list");
-            OwnedWindowCapture.Save(run, FindHub(run), "channels-pairing-completed.png", FindById(run, "ChannelPairingExpander")!);
+            OwnedWindowCapture.Save(run, FindPairingWindow(run), "channels-pairing-completed.png", FindById(run, "ChannelPairingExpander")!);
             Assert.Single(run.Gateway.Requests, request => request.Method == "channels.pairing.approve" && request.Outcome == "ok");
             Assert.Single(run.Gateway.Requests, request => request.Method == "channels.pairing.dismiss" && request.Outcome == "ok");
         }, scenario: GatewayScenario.CreateChannelPairing());
@@ -55,7 +55,11 @@ public sealed partial class GatewayFixtureUiTests
                 new PropertyCondition(AutomationElement.NameProperty, label)));
 
     private static AutomationElement FindPairingIdentity(GatewayFixtureRun run, string requestId) =>
-        FindHub(run).FindAll(TreeScope.Descendants,
+        FindById(run, "ChannelPairingPanel")!.FindAll(TreeScope.Descendants,
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
             .Cast<AutomationElement>().Single(row => row.Current.Name.Contains($"Request: {requestId}", StringComparison.Ordinal));
+
+    private static AutomationElement FindPairingWindow(GatewayFixtureRun run) =>
+        AppWindows(run).Single(window => window.FindFirst(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, "ChannelPairingPanel")) is not null);
 }
