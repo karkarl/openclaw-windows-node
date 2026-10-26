@@ -78,7 +78,17 @@ public static class ReactorChatHostExtensions
 
         ChatComposerSession? session = null;
         var signInOpen = false;
-        async void SignIn(string threadId, string? agentId)
+        void ShowSignInFailure() =>
+            (Application.Current as App)?.AppNotifications?.Show(new AppNotification
+            {
+                Title = LocalizationHelper.GetString("ModelSignIn_Title"),
+                Message = LocalizationHelper.GetString("ModelSignIn_Failure"),
+                Source = "chat", Severity = AppNotificationSeverity.Error
+            });
+        void SignIn(string threadId, string? agentId) =>
+            AsyncEventHandlerGuard.Run(() => SignInAsync(threadId, agentId),
+                operationName: nameof(SignInAsync), onError: _ => ShowSignInFailure());
+        async Task SignInAsync(string threadId, string? agentId)
         {
             if (signInOpen || target.XamlRoot is null || provider is not OpenClawChatDataProvider native ||
                 string.IsNullOrWhiteSpace(agentId) || session is null)
@@ -98,12 +108,7 @@ public static class ReactorChatHostExtensions
             }
             catch (InvalidOperationException)
             {
-                (Application.Current as App)?.AppNotifications?.Show(new AppNotification
-                {
-                    Title = LocalizationHelper.GetString("ModelSignIn_Title"),
-                    Message = LocalizationHelper.GetString("ModelSignIn_Failure"),
-                    Source = "chat", Severity = AppNotificationSeverity.Error
-                });
+                ShowSignInFailure();
             }
             finally { signInOpen = false; }
         }
