@@ -276,6 +276,22 @@ Dispatch scanning includes the response-backed `SendWizardRequestAsync` helper,
 which also carries non-wizard RPCs. Unqualified `RequestAsync` calls in
 [`ChatPlacement.cs`](../src/OpenClaw.Shared/Sessions/ChatPlacement.cs) are
 recognized because that owner's helper forwards to the Gateway transport.
+The `PROTOCOL_DISPATCH_HELPERS` file/helper allowlist also covers the response,
+pairing-decision and Cron forwarders on the Gateway client, Cron details,
+model sign-in's captured transport, and the channel-pairing request delegate.
+These patterns recognize literal first arguments in unqualified calls only.
+The same helper name in another file or on an unrelated receiver is not
+Gateway evidence. New owner/helper pairs require an explicit scanner update
+after tracing their transport, with positive and negative regression cases.
+Some allowlist pairs recognize already-authored, **unmerged category drafts**:
+[Cron details and mutations](https://github.com/openclaw/openclaw-windows-node/blob/cd445e0e88a20da0b36a255f0a7ae048b3552f21/src/OpenClaw.Shared/CronDetails.cs),
+[model sign-in](https://github.com/openclaw/openclaw-windows-node/blob/6fe6dcb8b2deab48bf1a6468eb536bef8a6ad850/src/OpenClaw.Shared/Models/ModelSignInSession.cs),
+[channel pairing](https://github.com/openclaw/openclaw-windows-node/blob/91f378ee624a3a6ba5f706e8c08655ab97a4f57e/src/OpenClaw.Shared/ChannelPairing.cs),
+and [node](https://github.com/openclaw/openclaw-windows-node/blob/6c2991defd6e89063ef0b640534cd17de691f037/src/OpenClaw.Shared/OpenClawGatewayClient.cs)
+and [device pairing decisions](https://github.com/openclaw/openclaw-windows-node/blob/b86206ea2f04d460561884ee4dc9ea56150cf0b7/src/OpenClaw.Shared/OpenClawGatewayClient.cs).
+These source pins identify the traced implementations, not merged support.
+Only files actually present in the scanned tree contribute candidates; an
+allowlist entry alone cannot change main's wiring count or support status.
 Literal-method `ExecuteAsync<T>` calls in
 [`GatewayAiSetupClient.cs`](../src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs)
 also forward to that owner's Gateway transport. Unqualified `SerializeRequest`

@@ -196,6 +196,94 @@ for (const newline of ["\n", "\r\n"]) {
 }
 
 for (const newline of ["\n", "\r\n"]) {
+  test(`owner-scoped response, category and captured-transport helpers retain dispatch evidence (${JSON.stringify(newline)})`, () => {
+    const owners = [
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.cs", [
+        ["SendResponseRequestAsync", "config.apply"],
+        ["SendPairingDecisionAsync", "device.pair.reject"],
+        ["SendPairingDecisionAsync", "node.pair.reject"],
+        ["SendCronMutationAsync", "cron.add"],
+      ]],
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.Protocol.cs", [
+        ["SendResponseRequestAsync", "sessions.delete"],
+      ]],
+      ["src/OpenClaw.Shared/CronDetails.cs", [
+        ["SendCronDetailsRequestAsync", "cron.get"],
+        ["SendCronDetailsRequestAsync", "cron.scratch.get"],
+        ["SendCronDetailsRequestAsync", "cron.scratch.set"],
+        ["SendCronDetailsRequestAsync", "cron.history"],
+      ]],
+      ["src/OpenClaw.Shared/Models/ModelSignInSession.cs", [
+        ["RequestAsync", "models.authStatus"],
+        ["RequestAsync", "models.authLogin"],
+        ["RequestAsync", "wizard.next"],
+        ["RequestAsync", "wizard.cancel"],
+      ]],
+      ["src/OpenClaw.Shared/ChannelPairing.cs", [
+        ["_request", "channels.pairing.list"],
+      ]],
+    ];
+    const files = {};
+    const expected = [];
+    for (const [file, calls] of owners) {
+      const body = ["class Client {"];
+      for (const [index, [helper, name]] of calls.entries()) {
+        body.push(`  Task Call${index}() => ${helper}(`, `    "${name}", parameters);`);
+        expected.push({ name, kind: "dispatch", file, line: 2 + index * 2 });
+      }
+      body.push("}");
+      files[file] = body.join(newline);
+    }
+    const evidence = capability.wiringCandidates(files);
+    assert.deepEqual(evidence.map(({ name, kind, file, line }) => ({ name, kind, file, line })), expected);
+    for (const item of evidence)
+      assert.equal(item.sha256, crypto.createHash("sha256").update(files[item.file]).digest("hex"));
+    const report = assess({
+      schema: { methods: { ...schema.methods, ...Object.fromEntries(expected.map(({ name }) => [name, {}])) },
+        definitions: {} },
+      local: { ...local, files },
+    });
+    for (const { name } of expected)
+      assert.equal(report.assessments.find((item) => item.name === name).status, "pending");
+    assert.deepEqual(report.pendingGaps, ["question-answer"], "recognition must not add policy-selected candidates");
+  });
+
+  test(`owner-specific helpers reject wrong files, receivers and non-code decoys (${JSON.stringify(newline)})`, () => {
+    const owners = [
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.cs", "SendResponseRequestAsync", "RequestAsync"],
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.cs", "SendPairingDecisionAsync", "RequestAsync"],
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.cs", "SendCronMutationAsync", "RequestAsync"],
+      ["src/OpenClaw.Shared/OpenClawGatewayClient.Protocol.cs", "SendResponseRequestAsync", "RequestAsync"],
+      ["src/OpenClaw.Shared/CronDetails.cs", "SendCronDetailsRequestAsync", "RequestAsync"],
+      ["src/OpenClaw.Shared/Models/ModelSignInSession.cs", "RequestAsync", "SendCronDetailsRequestAsync"],
+      ["src/OpenClaw.Shared/ChannelPairing.cs", "_request", "SendCronDetailsRequestAsync"],
+    ];
+    for (const [file, helper, foreignHelper] of owners) {
+      const decoys = [
+        "class Client {",
+        `  Task Receiver() => other.${helper}("fake.receiver", parameters);`,
+        "  Task SpacedReceiver() => other.",
+        `    /* receiver */ ${helper}("fake.spacedReceiver", parameters);`,
+        `  Task WrongOwner() => ${foreignHelper}("fake.owner", parameters);`,
+        `  Task UnknownHelper() => UntracedRequestAsync("fake.untraced", parameters);`,
+        `  Task Variable() => ${helper}(method, parameters);`,
+        '  bool Advertised() => Supports("fake.advertised");',
+        `  // ${helper}("fake.comment", parameters);`,
+        `  /* ${helper}("fake.blockComment", parameters); */`,
+        `  string example = """ ${helper}("fake.literal", parameters) """;`,
+        "}",
+      ].join(newline);
+      assert.deepEqual(capability.wiringCandidates({ [file]: decoys }), [], `${file}: ${helper}`);
+      const realCall = `class Client { Task Call() => ${helper}("fake.wrongFile", parameters); }`;
+      assert.deepEqual(capability.wiringCandidates({
+        [`src/Unrelated/${path.posix.basename(file)}`]: realCall,
+        [`tests/${file}`]: realCall,
+      }), [], `${helper} must not become a global Gateway helper`);
+    }
+  });
+}
+
+for (const newline of ["\n", "\r\n"]) {
   test(`owner-scoped setup requests and serialized approval frames retain evidence (${JSON.stringify(newline)})`, () => {
     const setup = [
       "class Setup {",

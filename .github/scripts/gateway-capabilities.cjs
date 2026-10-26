@@ -6,6 +6,16 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const policy = require("./gateway-capability-policy.json");
 const REPORT_EXAMPLE_LIMIT = 3;
+const PROTOCOL_DISPATCH_HELPERS = {
+  "src/OpenClaw.Shared/OpenClawGatewayClient.cs": [
+    "SendResponseRequestAsync", "SendPairingDecisionAsync", "SendCronMutationAsync",
+  ],
+  "src/OpenClaw.Shared/OpenClawGatewayClient.Protocol.cs": ["SendResponseRequestAsync"],
+  "src/OpenClaw.Shared/CronDetails.cs": ["SendCronDetailsRequestAsync"],
+  "src/OpenClaw.Shared/Models/ModelSignInSession.cs": ["RequestAsync"],
+  "src/OpenClaw.Shared/ChannelPairing.cs": ["_request"],
+  "src/OpenClaw.Shared/Sessions/ChatPlacement.cs": ["RequestAsync"],
+};
 const PROTOCOL_HANDLER_OWNERS = {
   "src/OpenClaw.Shared/OpenClawGatewayClient.cs": [
     ["HandleKnownResponse", "method", "method"],
@@ -93,14 +103,16 @@ function wiringCandidates(files) {
       ["dispatch", /\b(?:SendTrackedRequestAsync|TrySendTrackedRequestAsync|TryRequestPayloadAsync|RequestPayloadAsync|MutateCompactionAsync|SendWizardRequestAsync)\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g],
       ["construction", /\bmethod\s*=\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g],
     ];
-    if (file === "src/OpenClaw.Shared/Sessions/ChatPlacement.cs")
-      patterns.push(["dispatch", /(?<![\w.])RequestAsync\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
+    const helpers = PROTOCOL_DISPATCH_HELPERS[file];
+    if (helpers)
+      patterns.push(["dispatch", new RegExp(`(?<![\\w.])(?:${helpers.join("|")})\\s*\\(\\s*"([A-Za-z][A-Za-z0-9_.-]*)"`, "g"), true]);
     if (file === "src/OpenClaw.SetupEngine/GatewayAiSetupClient.cs")
-      patterns.push(["dispatch", /(?<![\w.])ExecuteAsync\s*<\s*[A-Za-z_][\w.]*\s*>\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
+      patterns.push(["dispatch", /(?<![\w.])ExecuteAsync\s*<\s*[A-Za-z_][\w.]*\s*>\s*\(\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g, true]);
     if (file === "src/OpenClaw.Shared/OpenClawGatewayClient.cs")
-      patterns.push(["construction", /(?<![\w.])SerializeRequest\s*\(\s*[A-Za-z_]\w*\s*,\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g]);
-    for (const [kind, regex] of patterns) {
+      patterns.push(["construction", /(?<![\w.])SerializeRequest\s*\(\s*[A-Za-z_]\w*\s*,\s*"([A-Za-z][A-Za-z0-9_.-]*)"/g, true]);
+    for (const [kind, regex, unqualified] of patterns) {
       for (const match of views.code.matchAll(regex)) {
+        if (unqualified && /\.\s*$/.test(views.masked.slice(0, match.index))) continue;
         // An apparent call embedded inside a literal is not executable syntax.
         if (!/\S/.test(views.masked.slice(match.index, match.index + match[0].indexOf('"')))) continue;
         evidence.push({ kind, name: match[1], file,
