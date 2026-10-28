@@ -98,6 +98,18 @@ under `GatewayFixture`, including on failure. Other keyboard/compositor proof
 opt-ins, production-shaped Release proof, real Gateway, WSL and MXC validation
 remain separate; this hosted smoke does not replace them.
 
+To browse screenshots without downloading a ZIP, open the workflow run's
+**Summary** and find **Mock Gateway screenshots** in the UI job summary.
+The index groups captures by test, shows the scenario and outcome, and puts failed
+tests and their failure captures first. Click a capture filename to open its PNG
+in the browser. GitHub sign-in is required. Each PNG also appears individually
+under **Artifacts**, with a test/capture name and unique fixture run ID.
+These previews use unarchived GitHub artifacts, retain the repository's normal
+artifact retention, and are published even when a fixture test fails.
+The `test-results-ui` ZIP remains the complete diagnostic download, including
+TRX, request logs, run receipts and original screenshot paths. If no capture was
+produced, the summary says so; inspect the fixture step for a build/startup failure.
+
 The browse fixture also supplies placement discovery reads: empty projects and
 recents, each agent's synthetic workspace, and one available local Gateway
 environment. Composer-created empty conversations can load their location
