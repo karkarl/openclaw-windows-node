@@ -107,6 +107,11 @@ screen/work-area receipt is retained at `Desktop\geometry.json` in `test-results
 The original two-width and visible-content assertions remain unchanged. The local
 fixture runner does not change your desktop resolution.
 
+Fixture scenarios still execute if an earlier test suite fails, provided the UI
+build, runtime installation and desktop preflight succeeded and the job was not
+cancelled. The earlier failure remains a job failure; it cannot hide the fixture
+result or prevent its screenshots from being collected.
+
 To browse screenshots without downloading a ZIP, open the workflow run's
 **Summary** and find **Mock Gateway screenshots** in the UI job summary.
 The index groups captures by test, shows the scenario and outcome, and puts failed

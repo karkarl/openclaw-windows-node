@@ -694,6 +694,7 @@ jobs:
       run: dotnet tool install --global dotnet-coverage
 
     - name: Build UI test projects
+      id: ui-build
       run: |
         dotnet build tests/OpenClaw.Tray.UITests -c Debug -r win-x64 --no-restore
         dotnet build tests/OpenClawTray.FunctionalUI.Tests -c Debug -r win-x64 --no-restore
@@ -702,6 +703,7 @@ jobs:
     # framework MSIX. The hosted runner image does not preinstall it, so install
     # the runtime matching the repo-level WindowsAppSDK version.
     - name: Install WindowsAppRuntime
+      id: ui-runtime
       shell: pwsh
       run: |
         [xml]$props = Get-Content (Join-Path $env:GITHUB_WORKSPACE "Directory.Build.props")
@@ -724,6 +726,7 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw "WindowsAppRuntimeInstall failed with exit code $LASTEXITCODE" }
 
     - name: Configure UI desktop
+      id: ui-desktop
       shell: pwsh
       run: ./scripts/Set-CiDesktopResolution.ps1
 
@@ -748,6 +751,7 @@ jobs:
 
     - name: Run mock Gateway application scenarios
       id: gateway-fixture
+      if: ${{ !cancelled() && steps.ui-build.outcome == 'success' && steps.ui-runtime.outcome == 'success' && steps.ui-desktop.outcome == 'success' }}
       timeout-minutes: 30
       shell: pwsh
       run: >

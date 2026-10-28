@@ -583,7 +583,7 @@ foreach ($token in @(
     )) {
     Assert-Contains -Text $fixtureStep -Expected $token -Message "Mock Gateway CI step is missing '$token'."
 }
-foreach ($token in @('if:', 'continue-on-error:', 'OPENCLAW_RUN_MXC_E2E', 'OPENCLAW_RUN_E2E')) {
+foreach ($token in @('continue-on-error:', 'OPENCLAW_RUN_MXC_E2E', 'OPENCLAW_RUN_E2E')) {
     Assert-NotContains -Text $fixtureStep -Unexpected $token -Message "Mock Gateway CI must run by default without real Gateway opt-ins: '$token'."
 }
 Assert-Contains -Text $uiJob -Expected 'runs-on: windows-latest' `
@@ -606,6 +606,17 @@ Assert-NotContains -Text $desktopStep -Unexpected 'continue-on-error:' `
 if ($uiJob.IndexOf('name: Configure UI desktop', [StringComparison]::Ordinal) -ge
     $uiJob.IndexOf('name: Run Functional UI Tests', [StringComparison]::Ordinal)) {
     throw 'Hosted desktop geometry must be configured before any UI tests run.'
+}
+Assert-Contains -Text $fixtureStep `
+    -Expected "if: `${{ !cancelled() && steps.ui-build.outcome == 'success' && steps.ui-runtime.outcome == 'success' && steps.ui-desktop.outcome == 'success' }}" `
+    -Message 'Fixture evidence must run after unrelated test failures, but require every launch prerequisite.'
+foreach ($entry in @(
+    @{ name = 'Build UI test projects'; id = 'ui-build' },
+    @{ name = 'Install WindowsAppRuntime'; id = 'ui-runtime' },
+    @{ name = 'Configure UI desktop'; id = 'ui-desktop' }
+)) {
+    Assert-Contains -Text (Get-StepBlock -Text $uiJob -Name $entry.name) -Expected "id: $($entry.id)" `
+        -Message "Fixture launch prerequisite must expose its real step outcome: '$($entry.id)'."
 }
 $screenshotPreparation = Get-StepBlock -Text $uiJob -Name 'Prepare mock Gateway screenshot publisher'
 foreach ($token in @('always()', "steps.gateway-fixture.outcome == 'failure'", 'npm ci', '--ignore-scripts')) {
