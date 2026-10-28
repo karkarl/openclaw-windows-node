@@ -192,6 +192,16 @@ Build Companion once from its task-owned **openclaw-windows-node** worktree
 before launching tests. In a separate shell at that worktree root, select one
 patch and a fresh task/instance-specific data directory:
 
+**Setup-local boundary:** `-DataDir` separates Companion's app profile, but
+does not redirect setup-local or Local AI state. Without separate overrides,
+those paths still resolve under the user's normal `%LOCALAPPDATA%\OpenClawTray`.
+The recipe below covers Gateway setup and client behavior, not isolated Local
+AI acquisition, removal or concurrent Local AI setup. Before any such operation,
+configure and verify a task-owned `OPENCLAW_TRAY_LOCALAPPDATA_DIR` root;
+setup appends `OpenClawTray`. If the legacy `OPENCLAW_TRAY_LOCAL_DATA_DIR` is
+also set, align it with that effective directory. Do not use the normal user's
+Local AI manifest or runtime state as test-owned data.
+
 ```powershell
 $env:OPENCLAW_NATIVE_GATEWAY_DEV_PATCH = 't42-alpha'
 .\run-app-local.ps1 -NoBuild -Isolated -DataDir "$env:TEMP\oc-t42-alpha"
@@ -215,11 +225,18 @@ matching packaging shell:
 
 ```powershell
 & $clawctl gateway-service status --json
-if ($LASTEXITCODE -ne 0) { throw 'Owned Gateway status failed.' }
 ```
 
+This command is a status sample, not a readiness assertion. It can return a
+nonzero exit code while still `starting`, and failure JSON can omit `gateway`.
+Conversely, `not-started` can return zero. Do not put an immediate throw on every
+nonzero exit into a readiness loop. Retry pending startup within the scenario's
+configured startup timeout, inspect each JSON result, and fail explicitly with
+the last status/error if readiness is not reached. Malformed JSON or an explicit
+configuration/ownership error is a blocker, not a pending state to ignore.
+
 Require `integration.kind = isolated-session`, `gateway.state = running`, the
-actual `gateway.port` and verified listener ownership for each instance. Match
+actual `gateway.port` and non-null `gateway.ownership` for each instance. Match
 the port/family to that Companion profile and require distinct ports before
 parallel tests. `start` may exit zero with `state = starting`; use bounded status
 polling, not a successful exit alone. Status can probe/start an already-recorded
