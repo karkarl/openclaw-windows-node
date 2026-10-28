@@ -101,6 +101,12 @@ under `GatewayFixture`, including on failure. Other keyboard/compositor proof
 opt-ins, production-shaped Release proof, real Gateway, WSL and MXC validation
 remain separate; this hosted smoke does not replace them.
 
+The disposable hosted runner configures a 1920x1080 desktop before UI tests and
+verifies a work area large enough for the 1300x950 wide-window proof. Its actual
+screen/work-area receipt is retained at `Desktop\geometry.json` in `test-results-ui`.
+The original two-width and visible-content assertions remain unchanged. The local
+fixture runner does not change your desktop resolution.
+
 To browse screenshots without downloading a ZIP, open the workflow run's
 **Summary** and find **Mock Gateway screenshots** in the UI job summary.
 The index groups captures by test, shows the scenario and outcome, and puts failed
@@ -119,6 +125,11 @@ environment. Composer-created empty conversations can load their location
 choices without an unsupported-RPC error. These are synthetic catalog reads,
 not host filesystem discovery, remote worker capacity or placement mutation
 proof. Unsupported methods and parameters still fail explicitly.
+
+Ordinary browse/setup/context scenarios answer `question.list` with an empty
+question collection, so the real client's question recovery can complete without
+an unsupported-RPC error. This does not enable question creation or mutation:
+interactive question lifecycles remain owned by the explicit interactive scenario.
 
 `GatewayFixtureStartupTests` exercise parent and foreign browser-control startup
 without launching the app. Cancellation and readiness failures must reap the

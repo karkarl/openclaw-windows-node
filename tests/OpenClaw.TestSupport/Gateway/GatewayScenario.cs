@@ -260,6 +260,7 @@ public sealed partial class GatewayScenario
                 }
             }),
             ["node.list"] = JsonSerializer.SerializeToElement(new { ts = Epoch.ToUnixTimeMilliseconds(), nodes = Array.Empty<object>() }),
+            ["question.list"] = JsonSerializer.SerializeToElement(new { questions = Array.Empty<object>() }),
             ["projects.list"] = JsonSerializer.SerializeToElement(new { projects = Array.Empty<object>(), recents = Array.Empty<object>() }),
             ["environments.list"] = JsonSerializer.SerializeToElement(new
             {

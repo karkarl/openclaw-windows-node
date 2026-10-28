@@ -157,6 +157,10 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         node --test .github/scripts/gateway-fixture-report/report.test.mjs
 
+    - name: Test hosted desktop preflight
+      shell: pwsh
+      run: ./scripts/test-ci-desktop-resolution.ps1
+
     - name: Validate documentation
       shell: pwsh
       run: ./scripts/validate-docs.ps1
@@ -718,6 +722,10 @@ jobs:
         Invoke-WebRequest -Uri $url -OutFile $exe
         & $exe --quiet
         if ($LASTEXITCODE -ne 0) { throw "WindowsAppRuntimeInstall failed with exit code $LASTEXITCODE" }
+
+    - name: Configure UI desktop
+      shell: pwsh
+      run: ./scripts/Set-CiDesktopResolution.ps1
 
     - name: Run Functional UI Tests
       run: >

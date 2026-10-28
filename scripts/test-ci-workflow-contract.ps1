@@ -598,6 +598,15 @@ $runtimeStep = Get-StepBlock -Text $uiJob -Name 'Install WindowsAppRuntime'
 foreach ($token in @('Directory.Build.props', 'MicrosoftWindowsAppSDKVersion', '$channel/$version/windowsappruntimeinstall-x64.exe', '$LASTEXITCODE -ne 0')) {
     Assert-Contains -Text $runtimeStep -Expected $token -Message "UI runtime installation must match the candidate SDK and fail closed: '$token'."
 }
+$desktopStep = Get-StepBlock -Text $uiJob -Name 'Configure UI desktop'
+Assert-Contains -Text $desktopStep -Expected './scripts/Set-CiDesktopResolution.ps1' `
+    -Message 'Hosted UI proof must configure and verify the desktop before launching tests.'
+Assert-NotContains -Text $desktopStep -Unexpected 'continue-on-error:' `
+    -Message 'Unsupported hosted desktop geometry must fail explicitly.'
+if ($uiJob.IndexOf('name: Configure UI desktop', [StringComparison]::Ordinal) -ge
+    $uiJob.IndexOf('name: Run Functional UI Tests', [StringComparison]::Ordinal)) {
+    throw 'Hosted desktop geometry must be configured before any UI tests run.'
+}
 $screenshotPreparation = Get-StepBlock -Text $uiJob -Name 'Prepare mock Gateway screenshot publisher'
 foreach ($token in @('always()', "steps.gateway-fixture.outcome == 'failure'", 'npm ci', '--ignore-scripts')) {
     Assert-Contains -Text $screenshotPreparation -Expected $token -Message "Screenshot uploader preparation must run after failed fixtures and use locked dependencies: '$token'."

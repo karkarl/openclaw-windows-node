@@ -14,6 +14,24 @@ public sealed partial class GatewayFixtureProtocolTests
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(20);
 
+    [Fact]
+    public async Task BrowseQuestionDiscovery_ReturnsNoQuestionsWithoutEnablingInteractiveMutations()
+    {
+        var token = CreateToken();
+        await using var server = await FixtureGatewayServer.StartAsync(GatewayScenario.CreateBrowse(), token);
+        await using var connected = await ConnectedClient.OpenAsync(server, token);
+
+        var result = await connected.Client.ListQuestionsAsync();
+
+        Assert.True(result.IsSupported);
+        Assert.Empty(result.Questions);
+        Assert.Contains(server.Requests, request => request.Method == "question.list" && request.Outcome == "ok");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            connected.Client.SendWizardRequestAsync("question.request", new { title = "Not an interactive fixture" }));
+        Assert.Contains("Unknown fixture Gateway method", error.Message);
+        Assert.Equal("question.request", Assert.Single(server.UnexpectedRequests).Method);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -620,6 +638,7 @@ public sealed partial class GatewayFixtureProtocolTests
     [InlineData("sessions.preview", """{"keys":[7]}""", "session key strings")]
     [InlineData("models.list", """{"view":"invented"}""", "configured or all")]
     [InlineData("usage.cost", """{"days":-1}""", "positive integer")]
+    [InlineData("question.list", """{"sessionKey":"agent:main:main"}""", "Unsupported fixture request parameter")]
     [InlineData("projects.list", """{"unexpected":true}""", "Unsupported fixture request parameter")]
     [InlineData("environments.list", """{"unexpected":true}""", "Unsupported fixture request parameter")]
     public async Task RealClient_InvalidOrUnknownParametersFailExplicitly(string method, string json, string message)
