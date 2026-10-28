@@ -17,6 +17,35 @@ public sealed partial class GatewayFixtureProtocolTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task PlacementCatalog_RealClientLoadsSyntheticLocalEnvironmentWithoutEnablingWrites(bool allowSessionMutations)
+    {
+        var token = CreateToken();
+        await using var server = await FixtureGatewayServer.StartAsync(
+            GatewayScenario.CreateBrowse(allowSessionMutations: allowSessionMutations), token);
+        await using var connected = await ConnectedClient.OpenAsync(server, token);
+        using var deadline = new CancellationTokenSource(Deadline);
+        var catalog = await connected.Client.CreateChatPlacementGateway().LoadAsync("main", deadline.Token);
+
+        Assert.Equal("main", catalog.AgentId);
+        Assert.Equal("Fixture Main", catalog.AgentName);
+        Assert.Equal("/fixture/workspace", catalog.DefaultWorkspace.Path);
+        var environment = Assert.Single(catalog.Environments);
+        Assert.Equal("local", environment.Id);
+        Assert.True(environment.IsLocal);
+        Assert.True(environment.IsSelectable);
+        Assert.Empty(catalog.Workspaces);
+        foreach (var method in new[] { "projects.list", "agents.list", "environments.list" })
+            Assert.Contains(server.Requests, request => request.Method == method && request.Outcome == "ok");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            connected.Client.SendWizardRequestAsync("projects.add", new { gitUrl = "https://example.test/fixture.git" }));
+        Assert.Contains("Unknown fixture Gateway method", error.Message);
+        Assert.Single(server.UnexpectedRequests);
+        Assert.Equal("projects.add", server.UnexpectedRequests.Single().Method);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SessionCreation_IsOptInResponseBoundAndPreservesParent(bool allow)
     {
         var token = CreateToken();
@@ -579,6 +608,8 @@ public sealed partial class GatewayFixtureProtocolTests
     [InlineData("sessions.preview", """{"keys":[7]}""", "session key strings")]
     [InlineData("models.list", """{"view":"invented"}""", "configured or all")]
     [InlineData("usage.cost", """{"days":-1}""", "positive integer")]
+    [InlineData("projects.list", """{"path":"/fixture/workspace"}""", "Unsupported fixture request parameter")]
+    [InlineData("environments.list", """{"runtimeId":"unmodeled-runtime"}""", "Unsupported fixture request parameter")]
     public async Task RealClient_InvalidOrUnknownParametersFailExplicitly(string method, string json, string message)
     {
         var token = CreateToken();

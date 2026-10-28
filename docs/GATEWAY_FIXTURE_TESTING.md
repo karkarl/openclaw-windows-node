@@ -87,6 +87,24 @@ tests. It rejects failed, skipped, missing-report and zero-test runs. It needs
 a Windows desktop and the same WinUI prerequisites as the existing UI suite.
 There is no skip-as-success fallback when the desktop is unavailable.
 
+The ordinary `windows-latest` CI UI job runs this script against its explicitly
+built Debug x64 app after installing the Windows App Runtime selected by
+`Directory.Build.props`. Its dedicated step enables the fixture opt-in only for
+the child test processes and selects `Category=GatewayFixture`, including the
+context-usage and chat-run correlation scenarios. The general UI test step
+excludes that category so each scenario runs once. TRX, synthetic request logs,
+run receipts and owned-window screenshots are uploaded in `test-results-ui`
+under `GatewayFixture`, including on failure. Other keyboard/compositor proof
+opt-ins, production-shaped Release proof, real Gateway, WSL and MXC validation
+remain separate; this hosted smoke does not replace them.
+
+The browse fixture also supplies placement discovery reads: empty projects and
+recents, each agent's synthetic workspace, and one available local Gateway
+environment. Composer-created empty conversations can load their location
+choices without an unsupported-RPC error. These are synthetic catalog reads,
+not host filesystem discovery, remote worker capacity or placement mutation
+proof. Unsupported methods and parameters still fail explicitly.
+
 `GatewayFixtureStartupTests` exercise parent and foreign browser-control startup
 without launching the app. Cancellation and readiness failures must reap the
 owned child, remove its readiness file, and release both listener ports.
