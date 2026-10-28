@@ -36,10 +36,11 @@ Check before building; the script fails fast on most of these:
 
 ## Default multi-instance native Gateway testing
 
-For local and future cloud native-Gateway E2E, prefer named side-by-side patches
-on one authorized, capability-qualified Windows 11 client host instead of one
-Hyper-V VM per Gateway. Each patch owns a package family, app data, isolated
-session and sign-in recovery task. They still share host CPU/RAM, networking and
+For isolated test builds that need a real native Gateway, use task-owned named
+side-by-side patches by default, including single-instance tests, local E2E and
+future cloud E2E. Use one authorized, capability-qualified Windows 11 client
+host instead of one Hyper-V VM per Gateway. Each patch owns a package family,
+app data, isolated session and sign-in recovery task. They still share host CPU/RAM, networking and
 desktop resources; cap concurrent work to the host's available capacity.
 This is test-target guidance, not a CI migration or evidence that a cloud lane ran.
 Developer Mode and actual isolated-session/listener-ownership support are required;
@@ -53,7 +54,53 @@ Store/MSIX installation or upgrade behavior. Keep required real MXC containment,
 Gateway-to-node invocation and WSL proof; do not substitute patch startup for
 `.\scripts\validate-mxc-e2e.ps1` when that suite is required.
 
-### Deploy the owned instances serially
+### Prepare an isolated test build
+
+Build Companion in the task-owned **openclaw-windows-node** worktree, not the
+main/shared checkout. Prepare the real Gateway with the helper's explicit
+`-Patch` and `-WorkRoot` before launching Companion. This is the recommended
+path for test instances; the direct packaging workflow below is an alternative
+when testing packaging itself.
+
+After obtaining runtime authority and checking the prerequisites above, run
+from that worktree root. Replace `t42` consistently with a unique task ID:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$patch = 't42-alpha'
+$workRoot = 'C:\OpenClawDev\t42\native-gateway'
+if (Get-AppxPackage -Name "OpenClawFoundation.OpenClawGateway-$patch") {
+    throw 'Choose an unused patch, or verify ownership before reusing this instance.'
+}
+.\build.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Companion build failed.' }
+.\scripts\Build-NativeGatewayFromSource.ps1 -GatewayChannel Latest -Patch $patch -WorkRoot $workRoot
+```
+
+Expected: Companion output belongs to this worktree and the helper registers
+`OpenClawFoundation.OpenClawGateway-t42-alpha` from the task-owned work root.
+Use `-GatewayChannel Packaged` for released-payload compatibility, or
+`-OpenClawRef <full-sha>` / `-OpenClawSourceDirectory <task-owned-checkout>`
+instead of `-GatewayChannel` for explicit source changes. Keep the same unique
+patch and work root for each instance's rebuild and ownership-checked removal.
+
+Follow [selection, startup and verification](#select-start-and-verify-each-instance)
+before running tests. For helper-built instances, `$packagingRoot` is
+`Join-Path $workRoot 'openclaw-windows-packaging'`; use the build's architecture
+for the registration/layout checks. Set `OPENCLAW_NATIVE_GATEWAY_DEV_PATCH`
+before launching with `-NoBuild -Isolated -DataDir <task-instance-directory>`.
+That variable reuses the prepared patch without rebuilding it.
+
+`-Isolated` / `-DataDir` isolates Companion's profile, not its build output or
+Gateway package. An unqualified `.\run-app-local.ps1 -Isolated` still selects
+the shared `npm-latest` patch (or an inherited patch), not a new task instance.
+Do not use it as the isolated real-Gateway test recipe. Build Companion once;
+for a second Gateway, prepare `t42-beta` serially with the helper, then launch
+it with its own profile after alpha is verified listening. Remove helper-built
+instances with [the ownership-checking wrapper](#remove-it), passing the same
+`-WorkRoot`.
+
+### Alternative: deploy directly from the packaging repository
 
 The direct command belongs to **openclaw/openclaw-windows-packaging**, not this
 repository. Start with a clean task-owned clone outside the user profile, under
@@ -215,6 +262,9 @@ Source inspection is not exercised local/cloud E2E proof.
 
 Use one Companion branch for both Gateway compatibility targets. Do not create or
 continually synchronize a `release/extended-stable` fork.
+The shorthand commands below describe the launcher's channel defaults for
+single-developer compatibility work. For isolated test instances, use
+[unique task-owned builds and patches](#prepare-an-isolated-test-build) instead.
 
 ```powershell
 .\run-app-local.ps1 -Isolated
