@@ -38,9 +38,9 @@ public sealed partial class GatewayFixtureProtocolTests
             Assert.Contains(server.Requests, request => request.Method == method && request.Outcome == "ok");
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             connected.Client.SendWizardRequestAsync("projects.add", new { gitUrl = "https://example.test/fixture.git" }));
-        Assert.Contains("Unknown fixture Gateway method", error.Message);
-        Assert.Single(server.UnexpectedRequests);
-        Assert.Equal("projects.add", server.UnexpectedRequests.Single().Method);
+        Assert.Contains("read-only", error.Message);
+        Assert.Contains(server.Requests, request => request.Method == "projects.add" && request.Outcome == "error:FIXTURE_READ_ONLY");
+        Assert.Empty(server.UnexpectedRequests);
     }
 
     [Theory]
