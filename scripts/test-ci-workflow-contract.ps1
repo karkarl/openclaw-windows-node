@@ -622,6 +622,8 @@ $screenshotPreparation = Get-StepBlock -Text $uiJob -Name 'Prepare mock Gateway 
 foreach ($token in @('always()', "steps.gateway-fixture.outcome == 'failure'", 'npm ci', '--ignore-scripts')) {
     Assert-Contains -Text $screenshotPreparation -Expected $token -Message "Screenshot uploader preparation must run after failed fixtures and use locked dependencies: '$token'."
 }
+Assert-NotContains -Text $screenshotPreparation -Unexpected "steps.gateway-fixture.outcome == 'success'" `
+    -Message 'Successful fixture runs must keep screenshots only in the complete diagnostic archive.'
 $screenshotPublication = Get-StepBlock -Text $uiJob -Name 'Publish browsable mock Gateway screenshots'
 foreach ($token in @('always()', "steps.screenshot-publisher.outcome == 'success'", 'actions/github-script@v9', 'await report.run({ core, context })')) {
     Assert-Contains -Text $screenshotPublication -Expected $token -Message "Screenshot previews must publish after test failures through the Actions artifact runtime: '$token'."

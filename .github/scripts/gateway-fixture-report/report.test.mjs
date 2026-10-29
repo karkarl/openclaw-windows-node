@@ -59,10 +59,10 @@ test("indexes actual test names, failed runs first, then failure capture; exclud
   ]);
 });
 
-test("uploads each image unarchived with a unique descriptive basename and clickable summary", async (t) => {
+test("publishes only failed-test images, leaving passed captures in the diagnostic archive", async (t) => {
   const root = await fixture(t);
   await capture(root, passedRun, ["failure.png"]);
-  await capture(root, failedRun, ["failure.png"], "failed");
+  await capture(root, failedRun, ["connected.png", "failure.png"], "failed");
   await trx(root);
   const report = summary();
   const uploads = [];
@@ -81,16 +81,30 @@ test("uploads each image unarchived with a unique descriptive basename and click
   assert.match(uploads[0].name, /^001-Failed-case-.*-failure\.png$/);
   assert.match(report.body, /### Fixture\.Failed\\<case\\>/);
   assert.ok(report.body.includes(`[failure.png](${runUrl}/artifacts/101)`));
-  assert.ok(report.body.includes(`[failure.png](${runUrl}/artifacts/102)`));
+  assert.ok(report.body.includes(`[connected.png](${runUrl}/artifacts/102)`));
+  assert.ok(!report.body.includes("Fixture.Success"));
+  assert.deepEqual(await readFile(path.join(root, passedRun, "failure.png")), png);
   assert.ok(report.body.includes("test-results-ui"));
   assert.ok(!report.body.includes("must-not-be-published"));
   assert.equal(report.written, true);
   await assert.rejects(readdir(uploads[0].directory), { code: "ENOENT" });
 });
 
+test("successful runs produce no preview summary or uploads, even above the preview budget", async (t) => {
+  const root = await fixture(t);
+  await capture(root, passedRun, Array.from({ length: 451 }, (_, index) => `${index}.png`));
+  const report = summary();
+  await publishScreenshots({ root, runUrl, summary: report, artifactClient: {
+    async uploadArtifact() { assert.fail("Successful screenshots belong only in test-results-ui"); },
+  } });
+  assert.equal(report.body, "");
+  assert.equal(report.written, false);
+  assert.equal((await readdir(path.join(root, passedRun))).filter((name) => name.endsWith(".png")).length, 451);
+});
+
 test("retains successfully published navigation and propagates upload failures", async (t) => {
   const root = await fixture(t);
-  await capture(root, passedRun, ["a.png", "b.png"]);
+  await capture(root, failedRun, ["a.png", "b.png"], "failed");
   const report = summary();
   let count = 0;
   let staging;
@@ -126,6 +140,13 @@ test("an interrupted test without a receipt or TRX still publishes its failure c
   assert.equal(image.runId, failedRun);
   assert.equal(image.capture, "failure.png");
   assert.equal(image.outcome, "Not reported");
+  const report = summary();
+  let uploaded = false;
+  await publishScreenshots({ root, runUrl, summary: report, artifactClient: {
+    async uploadArtifact() { uploaded = true; return { id: 301 }; },
+  } });
+  assert.equal(uploaded, true);
+  assert.ok(report.body.includes(`${runUrl}/artifacts/301`));
 });
 
 test("malformed evidence is not silently treated as a successful empty report", async (t) => {
@@ -136,7 +157,7 @@ test("malformed evidence is not silently treated as a successful empty report", 
 
 test("fails explicitly before uploading when the per-job image budget is exceeded", async (t) => {
   const root = await fixture(t);
-  await capture(root, failedRun, Array.from({ length: 451 }, (_, index) => `${index}.png`));
+  await capture(root, failedRun, Array.from({ length: 451 }, (_, index) => `${index}.png`), "failed");
   await assert.rejects(publishScreenshots({ root, runUrl, summary: summary(), artifactClient: {
     async uploadArtifact() { assert.fail("Budget must be checked before upload"); },
   } }), /Too many screenshots.*451/);

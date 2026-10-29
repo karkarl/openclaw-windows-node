@@ -75,6 +75,7 @@ export async function publishScreenshots({ root, artifactClient, runUrl, summary
   const lines = [
     "## Mock Gateway screenshots",
     "",
+    "Only failed-test captures are previewed. Successful captures remain in **test-results-ui**.",
     "Click a capture to view the PNG in your browser (GitHub sign-in required).",
     "These show the real Companion app connected to the synthetic mock Gateway, not a production Gateway.",
     "The complete TRX, logs and receipts remain in **test-results-ui** under Artifacts.",
@@ -88,8 +89,14 @@ export async function publishScreenshots({ root, artifactClient, runUrl, summary
     if (error.code !== "ENOENT" || error.path !== root) throw error;
     screenshots = [];
   }
+  const failedRuns = new Set(screenshots.filter((image) =>
+    image.outcome.toLowerCase() === "failed"
+    || (image.outcome === "Not reported" && image.capture === "failure.png"))
+    .map((image) => image.runId));
+  if (screenshots.length > 0 && failedRuns.size === 0) return;
+  screenshots = screenshots.filter((image) => failedRuns.has(image.runId));
   if (screenshots.length === 0) {
-    await summary.addRaw(`${lines.join("\n")}\nNo screenshots were captured. Check the mock Gateway test step for startup/build failures.\n`).write();
+    await summary.addRaw(`${lines.join("\n")}\nNo screenshots were captured for failed tests. Check the mock Gateway test step for startup/build failures.\n`).write();
     return;
   }
   // This job also uploads diagnostic artifacts. Never silently omit images at GitHub's 500-artifact limit.

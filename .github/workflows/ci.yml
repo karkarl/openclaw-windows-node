@@ -823,7 +823,7 @@ jobs:
 
     - name: Prepare mock Gateway screenshot publisher
       id: screenshot-publisher
-      if: always() && (steps.gateway-fixture.outcome == 'success' || steps.gateway-fixture.outcome == 'failure')
+      if: always() && steps.gateway-fixture.outcome == 'failure'
       shell: pwsh
       run: npm ci --prefix .github/scripts/gateway-fixture-report --ignore-scripts --no-audit --no-fund
 
