@@ -533,16 +533,18 @@ reload setting intact. Stopping either runtime does not delete its configuration
 
 ### Isolated listener proof and legacy process ownership
 
-After a successful package start acknowledgement, `IsolatedGatewayRuntime`
-allows up to three minutes by default, including the start command, for its own start to
-become ready. `OPENCLAW_NATIVE_GATEWAY_START_TIMEOUT` (whole seconds, 30 to 3600,
-read once per process) overrides that budget; the package command timeout never drops
-below three minutes, and the derived credential handoff and setup connection phase
-budgets grow with a longer override. A late successful acknowledgement retains ten seconds for status
-confirmation, extending the start/status ceiling to at most 190 seconds at the default. This
-allowance remains subordinate to caller deadlines; the outer 210-second default connection
-budget also includes preflight, inspection and handshake work. It polls status
-every two seconds without issuing another start.
+`IsolatedGatewayRuntime` applies one absolute startup budget from before the start
+command through readiness. It is three minutes by default. `OPENCLAW_NATIVE_GATEWAY_START_TIMEOUT`
+(whole seconds, 30 to 3600, read once per process) overrides that budget; the package
+command timeout never drops below three minutes, and the derived credential handoff
+and setup connection phase budgets grow with a longer override. A late successful
+acknowledgement retains ten seconds for status confirmation, extending the start/status
+ceiling to at most 190 seconds at the default. This allowance remains subordinate to
+caller deadlines. Native setup configuration validation has its own two-minute command
+budget and must return successfully before the admission budget begins; its elapsed time
+does not reduce the 210-second default admission window. Setup logs distinguish
+configuration-validation, admission, and startup timeout failures. Runtime status is
+polled every two seconds without issuing another start.
 A timeout raises `NativeGatewayStartupTimeoutException` with its phase (start request or
 readiness), budget and last package status. Its message uses only validated lifecycle
 states and token-shaped readiness reason codes, never package prose.
@@ -557,17 +559,24 @@ for the older package's ambiguous failed-start response, which is not admitted.
 The pending-start fixtures are conditional client-contract tests, not proof that
 the installed package can acknowledge a pending launch.
 
-`NativeGatewaySetupSession` starts one monotonic admission budget before its
-initial runtime preparation. `NativeGatewaySetupConnection` consumes the remainder
-through preparation, challenge authorization, startup-sidecar retries, pairing and
-operator hello. The default is the existing 210-second native allowance
-(180-second start, ten-second confirmation, twenty-second admission margin).
+`NativeGatewaySetupSession` starts one monotonic admission budget after successful
+configuration validation and before initial runtime authorization.
+`NativeGatewaySetupConnection` consumes the remainder through preparation, challenge
+authorization, startup-sidecar retries, pairing and operator hello. The default is
+the existing 210-second native allowance (180-second start, ten-second confirmation,
+twenty-second admission margin).
 Reconnects, failed connections and credential recovery do not renew it.
 Successful admission ends that operation. Exhausted unadmitted sessions require
 new setup preparation, not another connection retry. Terminal handshake errors still fail immediately, caller/session
 cancellation stays cancellation, and deadline expiry reports timeout with the
 current typed startup rejection when available. `/startupz` is not a universal
 preconnect gate: supported Gateways can admit operators before sidecars finish.
+
+The current package status contract has no attempt-bound startup-phase progress
+signal. Repeated `starting` or `startup-eligible` snapshots and unverified Gateway
+log lines do not renew or extend either budget. A future progress-aware wait requires
+a package contract that reports validated progress for the owned launch attempt;
+until then, the absolute startup ceiling and ownership checks remain authoritative.
 
 The optional package advertisement `integration.gatewayLaunch={version:1}`
 enables attempt-owned cleanup. `NativeGatewayPackageClient` validates the
